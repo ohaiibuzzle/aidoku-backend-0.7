@@ -239,3 +239,194 @@ func TestWebViewEvalCircularCompletionValue(t *testing.T) {
 		}
 	}
 }
+
+// Regression coverage for the three comix.to gaps found by dumping its
+// actual page scripts: a bare reference to HTMLCanvasElement.prototype
+// (fingerprint-token capture), setting arbitrary style.* properties (the
+// Cloudflare __CF$cv$params injector), and a <script type="application/json">
+// hydration-data island that must never be executed as JS.
+func TestWebViewHTMLCanvasElementStub(t *testing.T) {
+	wv := newTestWebView(t)
+	wv.loadHTML(`<!doctype html><html><body></body></html>`, nil)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		v, err := vm.Eval(`typeof HTMLCanvasElement.prototype.toDataURL`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+		result = stringify(v)
+	})
+	if result != "function" {
+		t.Fatalf("expected HTMLCanvasElement.prototype.toDataURL to be a function, got %q", result)
+	}
+}
+
+func TestWebViewElementStyleAcceptsArbitraryProperties(t *testing.T) {
+	wv := newTestWebView(t)
+	wv.loadHTML(`<!doctype html><html><body></body></html>`, nil)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		v, err := vm.Eval(`
+			const el = document.createElement('iframe');
+			el.style.position = 'absolute';
+			el.style.top = 0;
+			el.style.position + "/" + el.style.top;
+		`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+		result = stringify(v)
+	})
+	if result != "absolute/0" {
+		t.Fatalf("expected \"absolute/0\", got %q", result)
+	}
+}
+
+func TestWebViewNonExecutableScriptTypesAreSkipped(t *testing.T) {
+	wv := newTestWebView(t)
+	html := `<!doctype html><html><body>
+		<script type="application/json">{"page":"home","broken": [1,2,</script>
+		<script>window.classicRan = true;</script>
+	</body></html>`
+
+	var loggedErrors []string
+	wv.printHandler = func(s string) { loggedErrors = append(loggedErrors, s) }
+	wv.loadHTML(html, nil)
+
+	var classicRan string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		classicRan = globalString(t, vm, "classicRan")
+	})
+	if classicRan != "true" {
+		t.Fatalf("expected the classic <script> to run, got classicRan=%q", classicRan)
+	}
+	for _, msg := range loggedErrors {
+		t.Errorf("expected no JS errors from a non-executable script type, got: %s", msg)
+	}
+}
+
+// ES module support: an inline <script type="module"> runs directly under
+// module grammar, and a src= module fetches through the same HTTP client/
+// rule list as everything else, following relative imports (deduped and
+// resolved against the importing module's URL) via registerModuleLoader.
+func TestWebViewInlineModuleScript(t *testing.T) {
+	wv := newTestWebView(t)
+	html := `<!doctype html><html><body>
+		<script type="module">
+			const double = (x) => x * 2;
+			globalThis.moduleResult = double(21);
+		</script>
+	</body></html>`
+
+	var loggedErrors []string
+	wv.printHandler = func(s string) { loggedErrors = append(loggedErrors, s) }
+	wv.loadHTML(html, nil)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		result = globalString(t, vm, "moduleResult")
+	})
+	if result != "42" {
+		t.Fatalf("expected \"42\", got %q", result)
+	}
+	for _, msg := range loggedErrors {
+		t.Errorf("expected no JS errors, got: %s", msg)
+	}
+}
+
+func TestWebViewExternalModuleGraph(t *testing.T) {
+	var helperHits, shoutHits int
+	files := map[string]string{
+		"/helper.js": `
+			import {shout} from "./shout.js";
+			export function greet(name) { return shout(name); }
+		`,
+		"/shout.js": `export function shout(s) { return s.toUpperCase(); }`,
+		"/entry.js": `
+			import {greet} from "./helper.js";
+			import {greet as greetAgain} from "./helper.js";
+			globalThis.entryResult = greet("world") + "/" + greetAgain("again");
+		`,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/helper.js":
+			helperHits++
+		case "/shout.js":
+			shoutHits++
+		}
+		body, ok := files[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	pageURL, _ := url.Parse(srv.URL + "/")
+	wv := newTestWebView(t)
+	wv.pageURL = pageURL
+
+	var loggedErrors []string
+	wv.printHandler = func(s string) { loggedErrors = append(loggedErrors, s) }
+	wv.loadHTML(`<!doctype html><html><body>
+		<script type="module" src="/entry.js"></script>
+	</body></html>`, pageURL)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		result = globalString(t, vm, "entryResult")
+	})
+	if result != "WORLD/AGAIN" {
+		t.Fatalf("expected \"WORLD/AGAIN\", got %q", result)
+	}
+	// helper.js is imported twice (with different local bindings) but the
+	// ES module spec evaluates each resolved specifier exactly once; the
+	// engine's own module registry is what's responsible for that, not any
+	// caching on our side.
+	if helperHits != 1 {
+		t.Fatalf("expected helper.js to be fetched exactly once, got %d", helperHits)
+	}
+	if shoutHits != 1 {
+		t.Fatalf("expected shout.js to be fetched exactly once, got %d", shoutHits)
+	}
+	for _, msg := range loggedErrors {
+		t.Errorf("expected no JS errors, got: %s", msg)
+	}
+}
+
+func TestWebViewModuleRuleListBlocking(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`globalThis.moduleRan = true;`))
+	}))
+	defer srv.Close()
+
+	pageURL, _ := url.Parse(srv.URL + "/")
+	wv := newTestWebView(t)
+	wv.pageURL = pageURL
+	rules, err := parseContentRuleList(`[
+		{"trigger": {"url-filter": ".*blocked\\.js.*", "resource-type": ["script"]}, "action": {"type": "block"}}
+	]`)
+	if err != nil {
+		t.Fatalf("parseContentRuleList: %v", err)
+	}
+	wv.ruleList = rules
+
+	var loggedErrors []string
+	wv.printHandler = func(s string) { loggedErrors = append(loggedErrors, s) }
+	wv.loadHTML(`<!doctype html><html><body>
+		<script type="module" src="/blocked.js"></script>
+	</body></html>`, pageURL)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		result = globalString(t, vm, "moduleRan")
+	})
+	if result == "true" {
+		t.Fatalf("expected the rule-list-blocked module to never run")
+	}
+}

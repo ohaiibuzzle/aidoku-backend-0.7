@@ -21,7 +21,7 @@ import (
 // default "Go-http-client" UA as a bot signal; Context (set by the source
 // itself, e.g. for Referer/UA-sensitive hosts) always takes precedence
 // since it's applied after this default.
-const defaultPageUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+const defaultPageUserAgent = "Mozilla/5.0 (iPad; CPU iPad OS 26_5_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/605.1.15"
 
 // DownloadPage resolves a single Page's content to its raw image bytes,
 // handling all three PageContent kinds: URL (HTTP GET, with Context

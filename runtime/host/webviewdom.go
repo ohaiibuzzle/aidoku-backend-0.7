@@ -111,6 +111,14 @@ const domPrelude = `
 
   class Element {
     #h;
+    // Plain object, not a Go-backed accessor: CSS property names are
+    // arbitrary and real pages only ever read back what they themselves
+    // set (never rendering-derived values), so a bare {} already gives
+    // correct set/get behavior for style.whatever = v. Like every other
+    // per-instance field here, this doesn't survive getting a *fresh*
+    // wrapper for the same node (see the file-level node-identity note) —
+    // fine for the single-reference style-mutation scripts this covers.
+    style = {};
     constructor(h) { this.#h = h; }
     static wrap(h) { return (h === null || h === undefined || h === 0) ? null : new Element(h); }
     static wrapAll(hs) { return (hs || []).map(Element.wrap); }
@@ -222,10 +230,21 @@ const domPrelude = `
     }
   }
 
+  // Stub: real canvas rendering is out of scope for this headless DOM (see
+  // the file-level WebView doc comment), but some sources/pages merely
+  // reference HTMLCanvasElement.prototype.toDataURL as a value (e.g. to
+  // save off the "real" implementation before patching it for a
+  // fingerprinting workaround) without ever calling it — that only needs
+  // the global and the method to *exist*, not to produce real pixel data.
+  class HTMLCanvasElement {
+    toDataURL() { return "data:,"; }
+  }
+
   globalThis.Element = Element;
   globalThis.Document = Document;
   globalThis.Image = Image;
   globalThis.XMLHttpRequest = XMLHttpRequest;
+  globalThis.HTMLCanvasElement = HTMLCanvasElement;
   globalThis.__wrapDocument = (h) => new Document(h);
 
   globalThis.console = {

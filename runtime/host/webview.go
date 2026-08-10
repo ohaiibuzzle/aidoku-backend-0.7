@@ -263,24 +263,36 @@ func (wv *webviewContext) loadHTML(htmlStr string, pageURL *url.URL) {
 		}
 
 		for _, scriptNode := range findScriptNodes(root) {
-			src, hasSrc := attrOf(scriptNode, "src")
-			if hasSrc && src != "" {
-				resolved := resolveURL(wv.pageURL, src)
-				if wv.ruleList.Blocks(resolved, resourceTypeScript) {
-					continue
+			switch classifyScript(scriptNode) {
+			case scriptKindClassic:
+				src, hasSrc := attrOf(scriptNode, "src")
+				if hasSrc && src != "" {
+					resolved := resolveURL(wv.pageURL, src)
+					if wv.ruleList.Blocks(resolved, resourceTypeScript) {
+						continue
+					}
+					_, body, err := wv.fetchBody(resolved)
+					if err != nil {
+						continue
+					}
+					wv.runScript(vm, string(body))
+				} else if text, ok := dataOf(scriptNode); ok {
+					// dataOf, not nodeText: nodeText deliberately skips
+					// descending into <script>/<style> content when called
+					// on some *other* element that merely contains one,
+					// which would make this always see an empty string
+					// when called directly on the script node itself.
+					wv.runScript(vm, text)
 				}
-				_, body, err := wv.fetchBody(resolved)
-				if err != nil {
-					continue
-				}
-				wv.runScript(vm, string(body))
-			} else if text, ok := dataOf(scriptNode); ok {
-				// dataOf, not nodeText: nodeText deliberately skips
-				// descending into <script>/<style> content when called on
-				// some *other* element that merely contains one, which
-				// would make this always see an empty string when called
-				// directly on the script node itself.
-				wv.runScript(vm, text)
+			case scriptKindModule:
+				wv.runModuleScript(vm, scriptNode)
+			default:
+				// A real browser only executes a <script> whose type is
+				// absent or a recognized JS MIME type — everything else
+				// (type="application/json" hydration-data islands,
+				// type="text/x-*" client-template blobs, an unknown
+				// value, ...) is inert markup a page reads back via
+				// textContent, never runs.
 			}
 		}
 
@@ -291,12 +303,38 @@ func (wv *webviewContext) loadHTML(htmlStr string, pageURL *url.URL) {
 }
 
 func (wv *webviewContext) runScript(vm *quickjs.VM, script string) {
-	// EvalValue, not Eval: page/user scripts often end in an expression
-	// whose value nobody uses (e.g. a bare DOM call), and Eval's eager
-	// JSON-based any-conversion would misreport a circular completion value
-	// (window, document, ...) as "JS Error" even though the script ran
-	// fine. The result itself is discarded either way.
-	v, err := vm.EvalValue(script, quickjs.EvalGlobal)
+	wv.evalForSideEffect(vm, script, quickjs.EvalGlobal)
+}
+
+// runModuleScript handles a <script type="module">: an inline module is
+// eval'd as-is (it *is* the module), while a src= module is turned into a
+// side-effect-only `import "url";` — the loader/normalizer registered by
+// registerModuleLoader (see ensureGlobals) does the rest, including
+// fetching and resolving whatever it in turn imports.
+func (wv *webviewContext) runModuleScript(vm *quickjs.VM, scriptNode *nethtml.Node) {
+	if src, hasSrc := attrOf(scriptNode, "src"); hasSrc && src != "" {
+		resolved := resolveURL(wv.pageURL, src)
+		if wv.ruleList.Blocks(resolved, resourceTypeScript) {
+			return
+		}
+		wv.evalForSideEffect(vm, fmt.Sprintf("import %q;", resolved), quickjs.EvalModule)
+		return
+	}
+	if text, ok := dataOf(scriptNode); ok {
+		wv.evalForSideEffect(vm, text, quickjs.EvalModule)
+	}
+}
+
+// evalForSideEffect runs script for whatever it does to global state —
+// nobody wants its completion value — and logs a non-nil error the same way
+// for both classic and module scripts.
+//
+// EvalValue, not Eval: page/user scripts often end in an expression whose
+// value nobody uses (e.g. a bare DOM call), and Eval's eager JSON-based
+// any-conversion would misreport a circular completion value (window,
+// document, ...) as "JS Error" even though the script ran fine.
+func (wv *webviewContext) evalForSideEffect(vm *quickjs.VM, script string, flags int) {
+	v, err := vm.EvalValue(script, flags)
 	if err == nil {
 		v.Free()
 	}
@@ -322,6 +360,47 @@ func findScriptNodes(root *nethtml.Node) []*nethtml.Node {
 	}
 	walk(root)
 	return out
+}
+
+// classicScriptTypes are the "type" attribute values (per the WHATWG HTML
+// spec's JavaScript MIME type list, minus long-dead legacy aliases) a real
+// browser treats as classic JS and executes with script (not module)
+// grammar. Anything not in here and not "module" — "application/json",
+// "text/x-handlebars-template", an unknown value, ... — is inert markup the
+// browser never runs.
+var classicScriptTypes = map[string]bool{
+	"":                         true,
+	"text/javascript":          true,
+	"text/ecmascript":          true,
+	"application/javascript":   true,
+	"application/ecmascript":   true,
+	"application/x-javascript": true,
+	"text/x-javascript":        true,
+}
+
+type scriptKind int
+
+const (
+	scriptKindNone scriptKind = iota
+	scriptKindClassic
+	scriptKindModule
+)
+
+// classifyScript reports how, if at all, scriptNode should be run, based on
+// its type attribute — matching how a real browser decides between classic-
+// script grammar (EvalGlobal), module grammar (EvalModule), and not
+// executing it at all.
+func classifyScript(scriptNode *nethtml.Node) scriptKind {
+	t, _ := attrOf(scriptNode, "type")
+	t = strings.ToLower(strings.TrimSpace(t))
+	switch {
+	case t == "module":
+		return scriptKindModule
+	case classicScriptTypes[t]:
+		return scriptKindClassic
+	default:
+		return scriptKindNone
+	}
 }
 
 func resolveURL(base *url.URL, ref string) string {
@@ -362,9 +441,11 @@ func (wv *webviewContext) ensureGlobals(vm *quickjs.VM) {
 		return
 	}
 
+	wv.registerModuleLoader(vm)
+
 	navAtom, _ := vm.NewAtom("navigator")
 	_ = vm.SetProperty(global, navAtom, map[string]any{
-		"userAgent": "Mozilla/5.0 (X11; U; Linux armv71 like Android; en-us) AppleWebKit/531.2+ (KHTML; like Gecko) Version/5.0 Safari/533.2+ Kindle/3.0+",
+		"userAgent": "Mozilla/5.0 (iPad; CPU iPad OS 26_5_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/605.1.15",
 	})
 }
 
@@ -389,6 +470,48 @@ func (wv *webviewContext) newDOMBinder() *domBinder {
 		},
 		handles: wv.handles,
 	}
+}
+
+// registerModuleLoader wires quickjs's ES module loader/normalizer to wv's
+// HTTP client and rule list, so `<script type="module">` (and whatever it
+// transitively imports) fetches the same way `<script src=...>` already
+// does. Registered once per VM, in ensureGlobals — the loader/normalizer
+// closures read wv's fields live, same as everything else set up there, so
+// they stay correct across reloads.
+//
+// The engine calls normalize(base, name) for every import specifier before
+// loader(resolvedName): base is the *importing* module's already-normalized
+// name, or the literal string "<eval>" for the top-level Eval(EvalModule)
+// call itself. Resolving "<eval>" against wv.pageURL handles both shapes
+// runModuleScript produces — an inline module's relative imports resolve
+// against the page URL, and a src= module's entry specifier (already
+// absolute, from resolveURL in runModuleScript) is unaffected by resolving
+// it again against any base.
+func (wv *webviewContext) registerModuleLoader(vm *quickjs.VM) {
+	vm.SetModuleLoader(
+		func(vm *quickjs.VM, moduleName string) (string, error) {
+			if wv.ruleList.Blocks(moduleName, resourceTypeScript) {
+				return "", fmt.Errorf("blocked by content rule list: %s", moduleName)
+			}
+			status, body, err := wv.doRequest(http.MethodGet, moduleName)
+			if err != nil {
+				return "", err
+			}
+			if status < 200 || status >= 300 {
+				return "", fmt.Errorf("module fetch failed: HTTP %d", status)
+			}
+			return string(body), nil
+		},
+		func(vm *quickjs.VM, base, name string) (string, error) {
+			baseURL := wv.pageURL
+			if base != "<eval>" {
+				if u, err := url.Parse(base); err == nil {
+					baseURL = u
+				}
+			}
+			return resolveURL(baseURL, name), nil
+		},
+	)
 }
 
 // bindDocument (re)binds `document`/`window.document` and `window.location`
