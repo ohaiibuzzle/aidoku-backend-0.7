@@ -130,7 +130,36 @@ type Net struct {
 	// up once the html namespace exists.
 	ParseHTML func(data []byte, baseURL string) (descriptor int32, err error)
 
+	// FlareSolverr, set when FLARESOLVERR_HOST is configured, is used as a
+	// second-line retry when a GET request comes back as a Cloudflare
+	// challenge (see isCloudflareChallenge): it drives a real browser to
+	// solve the challenge, then the resulting cookies and browser
+	// User-Agent are used to retry the request. Settings/SourceKey persist
+	// the solved User-Agent (see flareSolverrUAKey) in the same settings
+	// store defaults.get/set uses, namespaced the same way
+	// ("<SourceKey>.<key>") — so once a source's UA is solved, every future
+	// request (including after a process restart, and including the
+	// webview's own fetches — see WebView.FlareSolverr) keeps presenting
+	// it, which matters because Cloudflare ties clearance to a specific UA.
+	// OnFlareSolverrCookies, if set, is called with the cookies FlareSolverr
+	// returned after a successful solve, letting the caller persist them
+	// somewhere durable across process restarts (they're always injected
+	// into the client Jar for the current process regardless).
+	FlareSolverr          *FlareSolverrClient
+	Settings              SettingsStore
+	SourceKey             string
+	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
+
 	rateLimit RateLimit
+}
+
+func (n *Net) flareSolverr() *flareSolverrRetryer {
+	return &flareSolverrRetryer{
+		Client:    n.FlareSolverr,
+		Settings:  n.Settings,
+		SourceKey: n.SourceKey,
+		OnCookies: n.OnFlareSolverrCookies,
+	}
 }
 
 func (n *Net) client() *http.Client {
@@ -398,6 +427,12 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 	if err != nil || httpReq == nil {
 		return netMissingURL
 	}
+	fs := n.flareSolverr()
+	if httpReq.Header.Get("User-Agent") == "" {
+		if ua := fs.persistedUserAgent(); ua != "" {
+			httpReq.Header.Set("User-Agent", ua)
+		}
+	}
 
 	n.rateLimit.Wait()
 
@@ -408,17 +443,13 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 		client = &c
 	}
 
-	resp, err := client.Do(httpReq)
+	resp, data, err := doHTTPRequest(client, httpReq)
 	if err != nil {
 		req.ResponseError = err
 		return netRequestError
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		req.ResponseError = err
-		return netRequestError
-	}
+	resp, data = fs.maybeRetry(ctx, client, httpReq, resp, data)
+
 	req.Response = resp
 	req.ResponseData = data
 	return netSuccess

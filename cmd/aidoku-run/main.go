@@ -71,25 +71,34 @@ func run(dir, command string, args []string) error {
 		return fmt.Errorf("opening settings store: %w", err)
 	}
 
+	cookiePath := filepath.Join(os.TempDir(), "aidoku-run-cookies.json")
+
+	// If command is "cookie", handle it before loading the source (which is
+	// otherwise only needed so its base URLs are known for display/command
+	// dispatch).
+	if command == "cookie" {
+		return handleCookie(cookiePath, args)
+	}
+
 	src, err := source.LoadPath(ctx, dir, runtime.Config{
 		PrintHandler: func(s string) { fmt.Fprintln(os.Stderr, "[print]", s) },
 		Settings:     settings,
+		// When FLARESOLVERR_HOST is set and a source's request hits a
+		// Cloudflare challenge, the resulting cookies get persisted here
+		// too (in addition to the in-memory jar), same as `cookie load`.
+		OnFlareSolverrCookies: func(u *url.URL, cookies []*http.Cookie) {
+			persistCookies(cookiePath, cookies)
+		},
 	}, settings)
 	if err != nil {
 		return fmt.Errorf("loading source: %w", err)
 	}
 	defer src.Runner.Close(ctx)
 
-	// If command is "cookie", handle it before injecting (the source is
-	// loaded only so its base URLs are known for display/command dispatch).
-	if command == "cookie" {
-		return handleCookie(filepath.Join(os.TempDir(), "aidoku-run-cookies.json"), args)
-	}
-
 	// Inject stored cookies (e.g. a browser's cf_clearance) into the source's
 	// jar for any of its base-url domains before running the requested
 	// command.
-	injectCookies(src, filepath.Join(os.TempDir(), "aidoku-run-cookies.json"))
+	injectCookies(src, cookiePath)
 
 	switch command {
 	case "info", "":
@@ -302,6 +311,44 @@ func entriesFromNetscape(cs []*http.Cookie) []cookieEntry {
 		out = append(out, e)
 	}
 	return out
+}
+
+// persistCookies merges cookies (e.g. a solved cf_clearance from
+// FlareSolverr) into the cookie store at path, so they're injected again on
+// the next invocation. Per domain, incoming cookies replace any existing
+// entry of the same name (a fresh solve supersedes a stale one) while
+// leaving other cookies for that domain untouched.
+func persistCookies(path string, cookies []*http.Cookie) {
+	if len(cookies) == 0 {
+		return
+	}
+	f := readCookieFile(path)
+	byDomain := map[string][]cookieEntry{}
+	for _, e := range entriesFromNetscape(cookies) {
+		if e.Domain == "" {
+			continue
+		}
+		byDomain[e.Domain] = append(byDomain[e.Domain], e)
+	}
+	for domain, incoming := range byDomain {
+		merged := make([]cookieEntry, 0, len(f[domain])+len(incoming))
+		for _, e := range f[domain] {
+			if !cookieEntriesContainName(incoming, e.Name) {
+				merged = append(merged, e)
+			}
+		}
+		f[domain] = append(merged, incoming...)
+	}
+	_ = writeCookieFile(path, f)
+}
+
+func cookieEntriesContainName(entries []cookieEntry, name string) bool {
+	for _, e := range entries {
+		if e.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func handleCookie(path string, args []string) error {

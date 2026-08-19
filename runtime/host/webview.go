@@ -32,6 +32,26 @@ type WebView struct {
 	Store        *Store
 	Client       *http.Client
 	PrintHandler func(string)
+
+	// FlareSolverr, Settings, SourceKey, and OnFlareSolverrCookies mirror
+	// Net's fields of the same name (see net.go): a Cloudflare challenge
+	// hit while the webview fetches a page's scripts/modules (e.g. a
+	// source that loads a site's homepage HTML into the DOM sandbox and
+	// runs its bundle) gets the same solve-and-retry treatment as a plain
+	// net.* request, and shares the same persisted per-source User-Agent.
+	FlareSolverr          *FlareSolverrClient
+	Settings              SettingsStore
+	SourceKey             string
+	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
+}
+
+func (w *WebView) flareSolverr() *flareSolverrRetryer {
+	return &flareSolverrRetryer{
+		Client:    w.FlareSolverr,
+		Settings:  w.Settings,
+		SourceKey: w.SourceKey,
+		OnCookies: w.OnFlareSolverrCookies,
+	}
 }
 
 func (w *WebView) client() *http.Client {
@@ -56,6 +76,7 @@ type webviewContext struct {
 
 	client       *http.Client
 	printHandler func(string)
+	flareSolverr *flareSolverrRetryer
 }
 
 // LinkWebView registers webview_* onto the same host module builder as
@@ -72,6 +93,7 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 				client:       w.client(),
 				printHandler: w.PrintHandler,
 				handles:      newNodeRegistry(),
+				flareSolverr: w.flareSolverr(),
 			}
 			return w.Store.Store(wv)
 		}).
@@ -592,7 +614,10 @@ type webviewRequest struct {
 }
 
 // doRequest performs a webviewRequest. When r.Body is nil a GET is sent
-// with no body; HEAD/POST/etc. use the given method and optional body.
+// with no body; HEAD/POST/etc. use the given method and optional body. A
+// GET that comes back as a Cloudflare challenge gets the same
+// solve-via-FlareSolverr-and-retry treatment as a net.* request — see
+// flareSolverrRetryer.
 func (wv *webviewContext) doRequest(r webviewRequest) (int, []byte, error) {
 	method := r.Method
 	if method == "" {
@@ -609,13 +634,18 @@ func (wv *webviewContext) doRequest(r webviewRequest) (int, []byte, error) {
 	for _, h := range r.Headers {
 		req.Header.Add(h[0], h[1])
 	}
-	resp, err := wv.client.Do(req)
+	if req.Header.Get("User-Agent") == "" {
+		if ua := wv.flareSolverr.persistedUserAgent(); ua != "" {
+			req.Header.Set("User-Agent", ua)
+		}
+	}
+
+	resp, data, err := doHTTPRequest(wv.client, req)
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	return resp.StatusCode, b, err
+	resp, data = wv.flareSolverr.maybeRetry(req.Context(), wv.client, req, resp, data)
+	return resp.StatusCode, data, nil
 }
 
 // eventLoop hand-rolls the piece goja_nodejs/eventloop gave us for free:

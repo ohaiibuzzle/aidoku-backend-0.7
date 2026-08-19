@@ -35,8 +35,17 @@ type Config struct {
 	// callers should likewise construct one settingsstore.Store and share
 	// it across every source they load. If nil, defaults.get/set becomes a
 	// no-op (reads return "no value", writes are dropped) rather than
-	// failing Interpreter construction.
+	// failing Interpreter construction. It also backs the persisted
+	// per-source FlareSolverr User-Agent (see host.Net.Settings).
 	Settings host.SettingsStore
+
+	// OnFlareSolverrCookies, if set, is called after FlareSolverr solves a
+	// Cloudflare challenge for a source's request, with the cookies it
+	// returned. The cookies are always injected into this Interpreter's
+	// cookie jar for the current process regardless; this hook lets the
+	// caller additionally persist them somewhere durable (e.g. a cookie
+	// store on disk) across process restarts.
+	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
 }
 
 // Interpreter loads and runs a single compiled Aidoku source .wasm module.
@@ -121,7 +130,19 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 	i.httpClient = httpClient
 	i.cookieJar = httpClient.Jar
 
-	i.net = &host.Net{Store: i.store, Client: httpClient}
+	// Shared by both the net.* namespace and the webview's own fetches, so a
+	// Cloudflare challenge hit via either path gets solved and its
+	// User-Agent persisted consistently across both.
+	flareSolverr := host.NewFlareSolverrClient(host.FlareSolverrHostFromEnv())
+
+	i.net = &host.Net{
+		Store:                 i.store,
+		Client:                httpClient,
+		Settings:              settings,
+		SourceKey:             sourceKey,
+		FlareSolverr:          flareSolverr,
+		OnFlareSolverrCookies: config.OnFlareSolverrCookies,
+	}
 
 	htmlLib := host.NewHtml(i.store)
 	i.net.ParseHTML = htmlLib.ParseHTML
@@ -140,7 +161,15 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 	}
 
 	js := &host.JS{Store: i.store}
-	webview := &host.WebView{Store: i.store, Client: httpClient, PrintHandler: printHandler}
+	webview := &host.WebView{
+		Store:                 i.store,
+		Client:                httpClient,
+		PrintHandler:          printHandler,
+		Settings:              settings,
+		SourceKey:             sourceKey,
+		FlareSolverr:          flareSolverr,
+		OnFlareSolverrCookies: config.OnFlareSolverrCookies,
+	}
 	jsBuilder := host.LinkJS(rt.NewHostModuleBuilder("js"), js)
 	jsBuilder = host.LinkWebView(jsBuilder, webview)
 	if _, err := jsBuilder.Instantiate(ctx); err != nil {
