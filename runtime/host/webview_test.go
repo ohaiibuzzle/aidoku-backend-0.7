@@ -1,10 +1,12 @@
 package host
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"modernc.org/quickjs"
 )
@@ -428,5 +430,138 @@ func TestWebViewModuleRuleListBlocking(t *testing.T) {
 	})
 	if result == "true" {
 		t.Fatalf("expected the rule-list-blocked module to never run")
+	}
+}
+
+// Node identity: two references to "the same" element must be the same JS
+// object (===), and per-node state set through one wrapper survives reading
+// through another — the fix for the historical fresh-handle-per-traversal
+// behavior.
+func TestWebViewNodeIdentity(t *testing.T) {
+	wv := newTestWebView(t)
+	wv.loadHTML(`<!doctype html><html><body><div id="x" class="a">hi</div></body></html>`, nil)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		v, err := vm.Eval(`
+			const a = document.getElementById('x');
+			const b = document.getElementById('x');
+			const same = (a === b) ? "same" : "diff";
+			a.style.color = "red";
+			const stylePersists = (b.style.color === "red") ? "persist" : "lost";
+			window.clicks = 0;
+			const listener = () => window.clicks++;
+			a.addEventListener('click', listener);
+			b.click();
+			same + "/" + stylePersists + "/" + window.clicks;
+		`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+		result = stringify(v)
+	})
+	if result != "same/persist/1" {
+		t.Fatalf("expected \"same/persist/1\", got %q", result)
+	}
+}
+
+// Real timers: a setTimeout scheduled inside a webview must actually fire
+// (after the wall-clock delay) when webview_wait_for_load (RunUntilQuiescent)
+// drains the loop — the previous zero-delay-only FIFO never would.
+func TestWebViewSetTimeoutFires(t *testing.T) {
+	wv := newTestWebView(t)
+	wv.loadHTML(`<!doctype html><html><body></body></html>`, nil)
+
+	start := time.Now()
+	wv.loop.Run(func(vm *quickjs.VM) {
+		_, err := vm.Eval(`globalThis.timerResult = 0; setTimeout(function(){ globalThis.timerResult = 42; }, 40);`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+	})
+	wv.loop.RunUntilQuiescent(2 * time.Second)
+	elapsed := time.Since(start)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		result = globalString(t, vm, "timerResult")
+	})
+	if result != "42" {
+		t.Fatalf("expected timerResult to be 42, got %q", result)
+	}
+	if elapsed < 40*time.Millisecond {
+		t.Fatalf("timer fired too early (elapsed %v): RunUntilQuiescent didn't actually wait", elapsed)
+	}
+}
+
+// setInterval keeps firing until cleared.
+func TestWebViewSetIntervalThenClear(t *testing.T) {
+	wv := newTestWebView(t)
+	wv.loadHTML(`<!doctype html><html><body></body></html>`, nil)
+
+	wv.loop.Run(func(vm *quickjs.VM) {
+		_, err := vm.Eval(`
+			globalThis.count = 0;
+			const id = setInterval(function(){
+				globalThis.count++;
+				if (globalThis.count === 3) clearInterval(id);
+			}, 15);
+		`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+	})
+	wv.loop.RunUntilQuiescent(2 * time.Second)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		result = globalString(t, vm, "count")
+	})
+	if result != "3" {
+		t.Fatalf("expected count to be 3, got %q", result)
+	}
+}
+
+// fetch() with a POST method, custom headers, and a body must reach the
+// server intact.
+func TestWebViewFetchPostHeadersBody(t *testing.T) {
+	var gotMethod, gotHeader, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotMethod = r.Method
+		gotHeader = r.Header.Get("X-Test")
+		gotBody = string(b)
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	pageURL, _ := url.Parse(srv.URL + "/")
+	wv := newTestWebView(t)
+	wv.pageURL = pageURL
+	wv.loadHTML(`<!doctype html><html><body></body></html>`, pageURL)
+
+	wv.loop.Run(func(vm *quickjs.VM) {
+		v, err := vm.EvalValue(`
+			fetch('/echo', {
+				method: 'POST',
+				headers: { 'X-Test': 'hello' },
+				body: 'payload'
+			}).then(r => r.text()).then(t => { globalThis.fetchResult = t; });
+		`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+		v.Free()
+	})
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		result = globalString(t, vm, "fetchResult")
+	})
+	if result != "ok" {
+		t.Fatalf("expected fetchResult \"ok\", got %q", result)
+	}
+	if gotMethod != "POST" || gotHeader != "hello" || gotBody != "payload" {
+		t.Fatalf("unexpected request: method=%q header=%q body=%q", gotMethod, gotHeader, gotBody)
 	}
 }

@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	stdhtml "html"
+	"net/url"
 	"strings"
 
 	"github.com/andybalholm/cascadia"
@@ -522,13 +523,13 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 			switch v := item.(type) {
 			case elementList:
 				for _, n := range v {
-					if val, ok := attrOf(n, key); ok {
+					if val, ok := resolveAbsAttr(h, n, key); ok {
 						return h.Store.Store(val)
 					}
 				}
 				return int32(htmlNoResult)
 			case *nethtml.Node:
-				if val, ok := attrOf(v, key); ok {
+				if val, ok := resolveAbsAttr(h, v, key); ok {
 					return h.Store.Store(val)
 				}
 				return int32(htmlNoResult)
@@ -727,4 +728,37 @@ func elementOf(store *Store, descriptor int32) (*nethtml.Node, bool) {
 		return nil, false
 	}
 	return n, true
+}
+
+// absAttrPrefix is the SwiftSoup/Aidoku "absolute URL" pseudo-attribute
+// prefix. `.attr("abs:href")` returns the href resolved against the
+// document's base URL — used heavily by sources for absolute URLs.
+const absAttrPrefix = "abs:"
+
+// resolveAbsAttr reads node's attribute. For a key prefixed with "abs:" it
+// strips the prefix, reads the underlying attribute, and resolves it against
+// the node's parsed base URL (recorded by ParseHTML bases.set) — nil/false
+// when there's no base or the value isn't a resolvable URL.
+func resolveAbsAttr(h *Html, n *nethtml.Node, key string) (string, bool) {
+	if !strings.HasPrefix(key, absAttrPrefix) {
+		return attrOf(n, key)
+	}
+	realKey := key[len(absAttrPrefix):]
+	v, ok := attrOf(n, realKey)
+	if !ok || v == "" {
+		return "", false
+	}
+	base := h.bases.get(n)
+	if base == "" {
+		return "", false
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return "", false
+	}
+	refURL, err := url.Parse(v)
+	if err != nil {
+		return "", false
+	}
+	return baseURL.ResolveReference(refURL).String(), true
 }

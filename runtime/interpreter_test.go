@@ -3,6 +3,8 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,4 +78,58 @@ func TestFixtureGetSearchMangaList(t *testing.T) {
 	if result == nil {
 		t.Fatalf("expected non-nil result")
 	}
+}
+
+// Cookie injection lets a host app paste browser cookies (e.g. a CF
+// cf_clearance) into the jar that backs the source's net.* requests. Verifies
+// the Interpreter.SetCookieHeader/SetCookie/Cookies wiring against the shared
+// client's jar.
+func TestFixtureCookieInjection(t *testing.T) {
+	ctx := context.Background()
+	wasmBytes, info := loadFixture(t)
+	interp, err := New(ctx, info.Info.ID, wasmBytes, Config{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer interp.Close(ctx)
+
+	// WebView/net use the shared client by default; confirm the jar is live.
+	jar := interp.CookieJar()
+	if jar == nil {
+		t.Fatalf("expected a non-nil cookie jar on the shared client")
+	}
+
+	u, err := url.Parse("https://example.com/path")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Header-string injection (the user-facing path for pasting cookies).
+	interp.SetCookieHeader(u, "cf_clearance=abc123; __cf_bm=xyz")
+	got := interp.Cookies(u)
+	if !hasCookie(got, "cf_clearance", "abc123") || !hasCookie(got, "__cf_bm", "xyz") {
+		t.Fatalf("SetCookieHeader not reflected in Cookies: %v", got)
+	}
+
+	// Single-cookie injection.
+	interp.SetCookie(u, "custom", "val")
+	got = interp.Cookies(u)
+	if !hasCookie(got, "custom", "val") {
+		t.Fatalf("SetCookie not reflected in Cookies: %v", got)
+	}
+
+	// A cookie added for example.com must not leak to another host.
+	other, _ := url.Parse("https://other.com/")
+	if c := interp.Cookies(other); len(c) != 0 {
+		t.Fatalf("cookie leaked to unrelated host: %v", c)
+	}
+}
+
+func hasCookie(cs []*http.Cookie, name, value string) bool {
+	for _, c := range cs {
+		if c.Name == name && c.Value == value {
+			return true
+		}
+	}
+	return false
 }

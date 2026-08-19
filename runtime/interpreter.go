@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/tetratelabs/wazero"
@@ -49,6 +52,12 @@ type Interpreter struct {
 	store     *host.Store
 	env       *host.Env
 	net       *host.Net
+
+	// httpClient is the client wired into the net/webview namespaces, and
+	// cookieJar is the http.CookieJar backing it — by default the
+	// process-wide shared jar (matching AidokuRunner's URLSession.shared).
+	httpClient *http.Client
+	cookieJar  http.CookieJar
 
 	Features models.SourceFeatures
 }
@@ -109,6 +118,8 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 		// webview-cleared cookie ends up visible to plain net.* calls.
 		httpClient = host.SharedHTTPClient()
 	}
+	i.httpClient = httpClient
+	i.cookieJar = httpClient.Jar
 
 	i.net = &host.Net{Store: i.store, Client: httpClient}
 
@@ -188,6 +199,99 @@ func (i *Interpreter) hasExport(name string) bool {
 func (i *Interpreter) Close(ctx context.Context) error {
 	_ = i.store.Close()
 	return i.rt.Close(ctx)
+}
+
+// --- Cookie injection ---
+//
+// These let the host application (or a CLI user) insert cookies into the
+// cookie jar backing this source's net.* and webview requests — e.g. a
+// Cloudflare cf_clearance/__cf_bm taken from a real browser, so requests to
+// a CF-protected domain carry it instead of bouncing off the challenge
+// page. Because the jar is shared process-wide (URLSession.shared semantics)
+// but scoped per-domain, injecting a cookie for a host only affects that
+// host, across every source that talks to it.
+
+// CookieJar returns the http.CookieJar backing this Interpreter's net/
+// webview requests. It is nil only when the caller supplied an HTTPClient
+// with no jar.
+func (i *Interpreter) CookieJar() http.CookieJar {
+	return i.cookieJar
+}
+
+// SetCookie adds a single name=value cookie scoped to u, applied to every
+// path on u's host (Path="/").
+func (i *Interpreter) SetCookie(u *url.URL, name, value string) {
+	i.setCookies(u, []*http.Cookie{{Name: name, Value: value, Path: "/"}})
+}
+
+// SetCookieHeader parses a raw "a=1; b=2" Cookie header and injects each
+// cookie into the jar for u, scoped to every path on u's host. This is the
+// convenient entry point for pasting cookies copied from another tool.
+func (i *Interpreter) SetCookieHeader(u *url.URL, header string) {
+	if u == nil || i.cookieJar == nil || header == "" {
+		return
+	}
+	req := &http.Request{Header: http.Header{"Cookie": {header}}}
+	if cookies := req.Cookies(); len(cookies) > 0 {
+		for _, c := range cookies {
+			c.Path = "/"
+		}
+		i.cookieJar.SetCookies(u, cookies)
+	}
+}
+
+// SetCookies injects the given cookies into the jar for u.
+func (i *Interpreter) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	i.setCookies(u, cookies)
+}
+
+func (i *Interpreter) setCookies(u *url.URL, cookies []*http.Cookie) {
+	if u == nil || i.cookieJar == nil || len(cookies) == 0 {
+		return
+	}
+	i.cookieJar.SetCookies(u, cookies)
+}
+
+// Cookies returns the cookies the source's jar would send for u.
+func (i *Interpreter) Cookies(u *url.URL) []*http.Cookie {
+	if u == nil || i.cookieJar == nil {
+		return nil
+	}
+	return i.cookieJar.Cookies(u)
+}
+
+// LoadCookiesFile reads a Netscape cookies.txt file and injects every
+// non-expired cookie into this source's jar. It returns the number of cookies
+// injected.
+func (i *Interpreter) LoadCookiesFile(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	return i.LoadNetscapeCookies(data)
+}
+
+// LoadNetscapeCookies parses Netscape cookies.txt bytes and injects every
+// non-expired cookie into this source's jar. Cookie domain/subdomain/path/
+// secure attributes are preserved (unlike SetCookieHeader, which only has the
+// raw name/value pairs). It returns the number of cookies injected.
+func (i *Interpreter) LoadNetscapeCookies(data []byte) (int, error) {
+	if i.cookieJar == nil {
+		return 0, nil
+	}
+	cookies, err := host.ParseNetscapeCookies(data)
+	if err != nil {
+		return 0, err
+	}
+	for _, c := range cookies {
+		hostName := strings.TrimPrefix(c.Domain, ".")
+		if hostName == "" {
+			continue
+		}
+		u := &url.URL{Scheme: "https", Host: hostName, Path: "/"}
+		i.cookieJar.SetCookies(u, []*http.Cookie{c})
+	}
+	return len(cookies), nil
 }
 
 // withPartialHandler temporarily installs fn as the env.send_partial_result

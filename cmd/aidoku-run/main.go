@@ -8,11 +8,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime"
+	"github.com/ohaiibuzzle/aidokurunner-go/runtime/host"
 	"github.com/ohaiibuzzle/aidokurunner-go/settingsstore"
 	"github.com/ohaiibuzzle/aidokurunner-go/source"
 )
@@ -49,7 +55,11 @@ commands:
   manga <key>                       call get_manga_update (details + chapters)
   pages <manga-key> <chapter-key>   call get_manga_update then get_page_list for the matching chapter
   download <manga-key> <chapter-key> [output.cbz]
-                                     download every page of a chapter and combine them into a CBZ archive`)
+                                     download every page of a chapter and combine them into a CBZ archive
+  cookie load <cookies.txt>          load cookies from a Netscape cookies.txt file (cf_clearance etc.)
+  cookie list                        show stored cookie domains
+Cookies stored with `+"`cookie load`"+` are injected into a source's requests
+for the matching domain on every command, helping get past Cloudflare.`)
 }
 
 func run(dir, command string, args []string) error {
@@ -69,6 +79,17 @@ func run(dir, command string, args []string) error {
 		return fmt.Errorf("loading source: %w", err)
 	}
 	defer src.Runner.Close(ctx)
+
+	// If command is "cookie", handle it before injecting (the source is
+	// loaded only so its base URLs are known for display/command dispatch).
+	if command == "cookie" {
+		return handleCookie(filepath.Join(os.TempDir(), "aidoku-run-cookies.json"), args)
+	}
+
+	// Inject stored cookies (e.g. a browser's cf_clearance) into the source's
+	// jar for any of its base-url domains before running the requested
+	// command.
+	injectCookies(src, filepath.Join(os.TempDir(), "aidoku-run-cookies.json"))
 
 	switch command {
 	case "info", "":
@@ -205,4 +226,167 @@ func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// cookieEntry is one stored cookie. Domain is the bare host (no scheme, no
+// leading ".", no "www."); IncludeSubdomains=true makes it a domain cookie
+// (sent to the host and its subdomains), false makes it host-only.
+type cookieEntry struct {
+	Domain            string `json:"domain"`
+	IncludeSubdomains bool   `json:"include_subdomains"`
+	Path              string `json:"path,omitempty"`
+	Secure            bool   `json:"secure"`
+	Expires           int64  `json:"expires,omitempty"` // unix seconds; 0 = no expiry
+	Name              string `json:"name"`
+	Value             string `json:"value"`
+}
+
+// cookie maps a normalized domain to its stored cookies. Persisted so cookies
+// added in one invocation are injected on the next.
+type cookieFile map[string][]cookieEntry
+
+func readCookieFile(path string) cookieFile {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return cookieFile{}
+	}
+	var f cookieFile
+	if err := json.Unmarshal(b, &f); err != nil {
+		return cookieFile{}
+	}
+	if f == nil {
+		f = cookieFile{}
+	}
+	return f
+}
+
+func writeCookieFile(path string, f cookieFile) error {
+	b, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
+}
+
+// cookie returns the *http.Cookie corresponding to this stored entry.
+func (e cookieEntry) cookie() *http.Cookie {
+	c := &http.Cookie{Name: e.Name, Value: e.Value, Path: e.Path}
+	if c.Path == "" {
+		c.Path = "/"
+	}
+	c.Secure = e.Secure
+	if e.Expires > 0 {
+		c.Expires = time.Unix(e.Expires, 0)
+	}
+	if e.IncludeSubdomains {
+		c.Domain = "." + e.Domain
+	} else {
+		c.Domain = e.Domain
+	}
+	return c
+}
+
+// entriesFromNetscape converts parsed cookies.txt cookies into storage
+// entries, preserving domain/subdomain/path/secure/expiry.
+func entriesFromNetscape(cs []*http.Cookie) []cookieEntry {
+	var out []cookieEntry
+	for _, c := range cs {
+		e := cookieEntry{Name: c.Name, Value: c.Value, Path: c.Path, Secure: c.Secure}
+		if c.Domain != "" {
+			e.IncludeSubdomains = strings.HasPrefix(c.Domain, ".")
+			e.Domain = strings.TrimPrefix(c.Domain, ".")
+		}
+		if !c.Expires.IsZero() {
+			e.Expires = c.Expires.Unix()
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func handleCookie(path string, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: cookie load <cookies.txt> | cookie list")
+	}
+	f := readCookieFile(path)
+	switch args[0] {
+	case "load":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: cookie load <cookies.txt>")
+		}
+		data, err := os.ReadFile(args[1])
+		if err != nil {
+			return err
+		}
+		cookies, err := host.ParseNetscapeCookies(data)
+		if err != nil {
+			return err
+		}
+		entries := entriesFromNetscape(cookies)
+		if len(entries) == 0 {
+			fmt.Println("no usable (non-expired) cookies in that file")
+			return nil
+		}
+		byDomain := map[string][]cookieEntry{}
+		for _, e := range entries {
+			byDomain[e.Domain] = append(byDomain[e.Domain], e)
+		}
+		for d, es := range byDomain {
+			f[d] = es
+		}
+		if err := writeCookieFile(path, f); err != nil {
+			return err
+		}
+		fmt.Printf("loaded %d cookie(s) from %s\n", len(entries), args[1])
+		return nil
+
+	case "list":
+		if len(f) == 0 {
+			fmt.Println("(no cookies stored)")
+			return nil
+		}
+		domains := make([]string, 0, len(f))
+		for d := range f {
+			domains = append(domains, d)
+		}
+		sort.Strings(domains)
+		for _, d := range domains {
+			for _, e := range f[d] {
+				scoped := e.Domain
+				if e.IncludeSubdomains {
+					scoped = "." + scoped
+				}
+				fmt.Printf("%s\t%s\n", scoped, e.Name+"="+e.Value)
+			}
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unknown cookie command %q", args[0])
+	}
+}
+
+// injectCookies pushes every stored cookie into src's shared jar. Because the
+// jar is shared process-wide but scoped per-domain, each cookie goes in under
+// its own domain URL and is then sent on any request to that host (from any
+// source), which is exactly the URLSession.shared behavior upstream relies on.
+func injectCookies(src *source.Source, path string) {
+	f := readCookieFile(path)
+	if len(f) == 0 {
+		return
+	}
+	jar := src.Runner.CookieJar()
+	if jar == nil {
+		return
+	}
+	for domain, entries := range f {
+		if domain == "" {
+			continue
+		}
+		cookies := make([]*http.Cookie, 0, len(entries))
+		for _, e := range entries {
+			cookies = append(cookies, e.cookie())
+		}
+		jar.SetCookies(&url.URL{Scheme: "https", Host: domain, Path: "/"}, cookies)
+	}
 }

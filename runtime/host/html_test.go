@@ -167,3 +167,33 @@ func TestBaseURIWalksAncestors(t *testing.T) {
 		t.Fatalf("baseURI: got %q", got)
 	}
 }
+
+// The `abs:` pseudo-attribute resolves a raw relative attribute against the
+// document's recorded base URL (SwiftSoup/Aidoku behavior). Sources like
+// WeebCentral rely on it for absolute cover/url fields; without it every
+// entry is dropped.
+func TestHtmlAbsAttr(t *testing.T) {
+	doc := parseTestDoc(t, `<html><body><a id="l" href="/series/abc/X">X</a>
+		<img id="c" src="/cover/x.jpg"></body></html>`)
+	h := NewHtml(nil)
+	h.bases.set(doc, "https://weebcentral.com/search?q=hi")
+
+	a := selectTestNodes(t, doc, "#l")[0]
+	if v, ok := resolveAbsAttr(h, a, "abs:href"); !ok || v != "https://weebcentral.com/series/abc/X" {
+		t.Fatalf("abs:href: got %q ok=%v", v, ok)
+	}
+	img := selectTestNodes(t, doc, "#c")[0]
+	if v, ok := resolveAbsAttr(h, img, "abs:src"); !ok || v != "https://weebcentral.com/cover/x.jpg" {
+		t.Fatalf("abs:src: got %q ok=%v", v, ok)
+	}
+	// plain attr is unaffected.
+	if v, ok := resolveAbsAttr(h, a, "href"); !ok || v != "/series/abc/X" {
+		t.Fatalf("href: got %q ok=%v", v, ok)
+	}
+	// no base URL recorded => abs: fails.
+	doc2 := parseTestDoc(t, `<html><body><a href="/x">x</a></body></html>`)
+	a2 := selectTestNodes(t, doc2, "a")[0]
+	if _, ok := resolveAbsAttr(h, a2, "abs:href"); ok {
+		t.Fatalf("abs:href with no base should fail")
+	}
+}

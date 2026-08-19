@@ -1,7 +1,12 @@
 package host
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/url"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/andybalholm/cascadia"
 	nethtml "golang.org/x/net/html"
@@ -23,27 +28,27 @@ import (
 // agnostic helpers html.go/htmlnode.go already have (attrOf/setAttr/
 // nodeText/elementChildren/...) — no duplicated HTML logic.
 //
-// Node identity is not preserved across JS references: each DOM traversal
-// call (querySelector, children, parentElement, ...) hands out a *fresh*
-// handle for the same underlying *nethtml.Node. `===` between two
-// references to "the same" element will be false. This is a known,
-// documented simplification, carried over unchanged from the goja version —
-// acceptable for the JS/DOM-manipulation and simple timed-challenge scripts
-// this tier targets; not for anything doing identity-sensitive DOM
-// bookkeeping.
+// Node identity is preserved: nodeRegistry hands each *nethtml.Node a stable
+// handle, and Element.wrap (below) caches one JS wrapper per handle — so two
+// references to "the same" element return the *same* wrapper object, making
+// `===` true and per-node state (style, listeners) persist across
+// references, as in a real browser. The handle/identity map is reset on each
+// load (see webview.go's loadHTML).
 type domBinder struct {
-	// rules/fetch/print/schedule/cookies are live getters, not snapshots:
+	// rules/request/print/schedule/cookies are live getters, not snapshots:
 	// webview_set_rule_list, the HTTP client's cookie jar, and the current
 	// page URL can all change between when these dispatchers are registered
 	// (once, in ensureGlobals) and any later call, so each reads the owning
 	// webviewContext's current state rather than a value captured at
 	// registration time.
 	rules func() *contentRuleList
-	fetch func(rawURL string) (status int, body []byte, err error)
-	// request is like fetch but for fetch()/XMLHttpRequest, which need an
-	// arbitrary method (Image only ever GETs).
-	request func(method, rawURL string) (status int, body []byte, err error)
+	// request performs an arbitrary-methoded fetch with optional headers and
+	// body, used by fetch()/XMLHttpRequest/Image (Image only ever GETs).
+	request func(req webviewRequest) (status int, body []byte, err error)
 	print   func(string)
+	// pageURL returns the currently loaded page's URL (nil if none) so
+	// fetch()/XMLHttpRequest can resolve relative URLs, like a real browser.
+	pageURL func() *url.URL
 	// schedule defers fn to run on the owning event loop after the current
 	// synchronous script finishes, matching real async image loading
 	// (loop.Run drains it before returning, so it still fires within the
@@ -52,33 +57,52 @@ type domBinder struct {
 	cookies  func() cookieAccessor // nil if no cookie jar is available
 
 	handles *nodeRegistry
+	loop    *eventLoop
 }
 
-// nodeRegistry hands out small integer handles for *nethtml.Node values.
-// The JS-side prelude round-trips these through RegisterHostFunc calls in
-// place of goja's Object.DefineAccessorProperty/exported-Go-value approach.
-// Handles are never released: the tree behind a single webview session is
-// small and short-lived, so this is the same "acceptable, documented
-// simplification" tier as the node-identity note above, not a real leak
-// risk.
+// nodeRegistry hands out stable integer handles for *nethtml.Node values:
+// each node keeps the same handle for the life of the registry (so the
+// JS-side wrapper cache — see Element.wrap in domPrelude — can key identity
+// on it, which is what makes `el === el2` and per-node state persist across
+// references). The JS-side prelude round-trips these handles through
+// RegisterHostFunc calls in place of goja's Object.DefineAccessorProperty/
+// exported-Go-value approach. Reset() is called on every load to drop a
+// replaced document's handles.
 type nodeRegistry struct {
-	nodes map[int]*nethtml.Node
-	next  int
+	nodes  map[int]*nethtml.Node
+	byNode map[*nethtml.Node]int
+	next   int
 }
 
 func newNodeRegistry() *nodeRegistry {
-	return &nodeRegistry{nodes: make(map[int]*nethtml.Node)}
+	return &nodeRegistry{
+		nodes:  make(map[int]*nethtml.Node),
+		byNode: make(map[*nethtml.Node]int),
+	}
+}
+
+// Reset drops all known nodes/next-id. Called when a webview loads a fresh
+// document, whose nodes are all new identities.
+func (r *nodeRegistry) Reset() {
+	r.nodes = make(map[int]*nethtml.Node)
+	r.byNode = make(map[*nethtml.Node]int)
+	r.next = 0
 }
 
 // handle returns 0 (JS null on the other side of __elGetProp et al.) for a
 // nil node, so callers can pass traversal results straight through without
-// a separate nil check.
+// a separate nil check. For a live node it returns the node's existing
+// handle, minting one only the first time it's seen.
 func (r *nodeRegistry) handle(n *nethtml.Node) int {
 	if n == nil {
 		return 0
 	}
+	if h, ok := r.byNode[n]; ok {
+		return h
+	}
 	r.next++
 	r.nodes[r.next] = n
+	r.byNode[n] = r.next
 	return r.next
 }
 
@@ -100,6 +124,13 @@ func (r *nodeRegistry) node(h int) (*nethtml.Node, bool) {
 // instance without going through Go.
 const domPrelude = `
 (function () {
+  // One cached wrapper per handle, so two references to "the same" element
+  // are the same JS object (=== is true) and per-node state (style,
+  // listeners) persists across references. __resetNodeCache is called by
+  // the host on every load, in lockstep with the Go-side registry reset.
+  let __nodeCache = new Map();
+  globalThis.__resetNodeCache = () => { __nodeCache = new Map(); };
+
   class ClassList {
     #h;
     constructor(h) { this.#h = h; }
@@ -111,16 +142,21 @@ const domPrelude = `
 
   class Element {
     #h;
+    #listeners = new Map();
     // Plain object, not a Go-backed accessor: CSS property names are
     // arbitrary and real pages only ever read back what they themselves
     // set (never rendering-derived values), so a bare {} already gives
-    // correct set/get behavior for style.whatever = v. Like every other
-    // per-instance field here, this doesn't survive getting a *fresh*
-    // wrapper for the same node (see the file-level node-identity note) —
-    // fine for the single-reference style-mutation scripts this covers.
+    // correct set/get behavior for style.whatever = v. Because this wrapper
+    // is cached per handle (see __nodeCache), style survives re-wrapping.
     style = {};
     constructor(h) { this.#h = h; }
-    static wrap(h) { return (h === null || h === undefined || h === 0) ? null : new Element(h); }
+    static wrap(h) {
+      if (h === null || h === undefined || h === 0) return null;
+      if (__nodeCache.has(h)) return __nodeCache.get(h);
+      const el = new Element(h);
+      __nodeCache.set(h, el);
+      return el;
+    }
     static wrapAll(hs) { return (hs || []).map(Element.wrap); }
     static handleOf(el) { return el instanceof Element ? el.#h : 0; }
 
@@ -156,11 +192,30 @@ const domPrelude = `
     remove() { __elRemoveChild(this.#h); }
     querySelector(sel) { return Element.wrap(__elQuery(this.#h, sel)); }
     querySelectorAll(sel) { return Element.wrapAll(__elQueryAll(this.#h, sel)); }
-    addEventListener() {
-      // No real event dispatch beyond Image's synthetic load/error (handled
-      // via its onload/onerror fields, not through this generic path).
-      // Accepted as a no-op so scripts that call it don't throw.
+    addEventListener(type, fn) {
+      if (typeof fn !== "function") return;
+      if (!this.#listeners.has(type)) this.#listeners.set(type, []);
+      this.#listeners.get(type).push(fn);
     }
+    removeEventListener(type, fn) {
+      const arr = this.#listeners.get(type);
+      if (!arr) return;
+      this.#listeners.set(type, arr.filter((f) => f !== fn));
+    }
+    // dispatchEvent runs every listener registered for ev.type bound to this
+    // element, passing a synthetic event object (type/target/preventDefault).
+    dispatchEvent(ev) {
+      const type = ev && ev.type;
+      const arr = this.#listeners.get(type);
+      if (!arr) return true;
+      const synthetic = Object.assign({}, ev, {
+        type, target: this, currentTarget: this,
+        preventDefault() { this.defaultPrevented = true; }
+      });
+      for (const fn of arr.slice()) fn.call(this, synthetic);
+      return true;
+    }
+    click() { this.dispatchEvent({ type: "click" }); }
   }
 
   class Document {
@@ -203,15 +258,24 @@ const domPrelude = `
     responseText = "";
     #method = "GET";
     #url = "";
+    #headers = {};
     open(method, url) {
       this.#method = String(method).toUpperCase();
       this.#url = url;
+      this.#headers = {};
       this.readyState = 1;
       if (this.onreadystatechange) this.onreadystatechange();
     }
-    setRequestHeader() {}
-    send() {
-      __xhrSend(this.#method, this.#url).then(
+    setRequestHeader(name, value) {
+      this.#headers[String(name)] = String(value);
+    }
+    send(body) {
+      __xhrSend(JSON.stringify({
+        method: this.#method,
+        url: this.#url,
+        headers: this.#headers,
+        body: body == null ? "" : String(body)
+      })).then(
         (r) => {
           this.status = r.status;
           this.responseText = r.body;
@@ -230,6 +294,16 @@ const domPrelude = `
     }
   }
 
+  // Minimal Event for addEventListener/dispatchEvent; no bubbling or capture.
+  class Event {
+    constructor(type, opts) {
+      this.type = String(type);
+      this.defaultPrevented = false;
+      if (opts && opts.cancelable != null) this.cancelable = opts.cancelable;
+    }
+    preventDefault() { this.defaultPrevented = true; }
+  }
+
   // Stub: real canvas rendering is out of scope for this headless DOM (see
   // the file-level WebView doc comment), but some sources/pages merely
   // reference HTMLCanvasElement.prototype.toDataURL as a value (e.g. to
@@ -245,7 +319,32 @@ const domPrelude = `
   globalThis.Image = Image;
   globalThis.XMLHttpRequest = XMLHttpRequest;
   globalThis.HTMLCanvasElement = HTMLCanvasElement;
+  globalThis.Event = Event;
   globalThis.__wrapDocument = (h) => new Document(h);
+
+  // Real page/challenge scripts call these; the host schedules ids on a timer
+  // wheel and __fireTimer(id) runs the registered callback. The callbacks
+  // live in JS-side Maps, so Go never holds a quickjs.Value across the wait.
+  const __timeouts = new Map();
+  const __intervals = new Map();
+  globalThis.__fireTimer = (id) => {
+    const t = __timeouts.get(id);
+    if (t) { __timeouts.delete(id); t(); return; }
+    const iv = __intervals.get(id);
+    if (iv) { iv(); }
+  };
+  globalThis.setTimeout = (fn, ms) => {
+    const id = __setTimeout(ms | 0);
+    if (typeof fn === "function") __timeouts.set(id, fn);
+    return id;
+  };
+  globalThis.setInterval = (fn, ms) => {
+    const id = __setInterval(ms | 0);
+    if (typeof fn === "function") __intervals.set(id, fn);
+    return id;
+  };
+  globalThis.clearTimeout = (id) => { __timeouts.delete(id); __clearTimer(id); };
+  globalThis.clearInterval = (id) => { __intervals.delete(id); __clearTimer(id); };
 
   globalThis.console = {
     log: (...a) => __print(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" ")),
@@ -254,8 +353,14 @@ const domPrelude = `
   };
 
   globalThis.fetch = (url, opts) => {
-    const method = opts && opts.method ? String(opts.method).toUpperCase() : "GET";
-    return __fetchOp(url, method).then((r) => ({
+    opts = opts || {};
+    const method = opts.method ? String(opts.method).toUpperCase() : "GET";
+    return __fetchOp(JSON.stringify({
+      method,
+      url: String(url),
+      headers: opts.headers || {},
+      body: opts.body == null ? "" : String(opts.body),
+    })).then((r) => ({
       status: r.status,
       ok: r.status >= 200 && r.status < 300,
       text: () => Promise.resolve(r.body),
@@ -567,11 +672,11 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		}
 		settle := func(vm2 *quickjs.VM) {
 			defer pc.Free()
-			if d.rules().Blocks(src, resourceTypeImage) || d.fetch == nil {
+			if d.rules().Blocks(src, resourceTypeImage) || d.request == nil {
 				pc.Reject.Call(quickjs.UndefinedValue, "blocked or unavailable")
 				return
 			}
-			status, _, err := d.fetch(src)
+			status, _, err := d.request(webviewRequest{Method: http.MethodGet, URL: src})
 			if err != nil || status >= 400 {
 				pc.Reject.Call(quickjs.UndefinedValue, "load failed")
 				return
@@ -588,18 +693,20 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		return err
 	}
 
-	if err := must(vm.RegisterFunc("__xhrSend", func(method, rawURL string) quickjs.Value {
+	if err := must(vm.RegisterFunc("__xhrSend", func(reqJSON string) quickjs.Value {
+		r := parseRequestJSON(reqJSON)
+		r.URL = resolveFromBase(d.pageURL, r.URL)
 		pc, err := vm.NewPromiseCapability()
 		if err != nil {
 			panic(err)
 		}
 		settle := func(vm2 *quickjs.VM) {
 			defer pc.Free()
-			if d.rules().Blocks(rawURL, resourceTypeFetch) {
-				pc.Reject.Call(quickjs.UndefinedValue, "blocked by content rule list: "+rawURL)
+			if d.rules().Blocks(r.URL, resourceTypeFetch) {
+				pc.Reject.Call(quickjs.UndefinedValue, "blocked by content rule list: "+r.URL)
 				return
 			}
-			status, body, err := d.request(method, rawURL)
+			status, body, err := d.request(r)
 			if err != nil {
 				pc.Reject.Call(quickjs.UndefinedValue, err.Error())
 				return
@@ -625,21 +732,25 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		return err
 	}
 
-	if err := must(vm.RegisterFunc("__fetchOp", func(rawURL, method string) quickjs.Value {
+	if err := must(vm.RegisterFunc("__fetchOp", func(reqJSON string) quickjs.Value {
+		r := parseRequestJSON(reqJSON)
+		r.URL = resolveFromBase(d.pageURL, r.URL)
 		pc, err := vm.NewPromiseCapability()
 		if err != nil {
 			panic(err)
 		}
-		if d.rules().Blocks(rawURL, resourceTypeFetch) {
-			pc.Reject.Call(quickjs.UndefinedValue, "blocked by content rule list: "+rawURL)
+		if d.rules().Blocks(r.URL, resourceTypeFetch) {
+			pc.Reject.Call(quickjs.UndefinedValue, "blocked by content rule list: "+r.URL)
+			promise := pc.Promise.Dup()
 			pc.Free()
-			return pc.Promise
+			return promise
 		}
-		status, body, err := d.request(method, rawURL)
+		status, body, err := d.request(r)
 		if err != nil {
 			pc.Reject.Call(quickjs.UndefinedValue, err.Error())
+			promise := pc.Promise.Dup()
 			pc.Free()
-			return pc.Promise
+			return promise
 		}
 		obj, err := vm.NewObjectValue()
 		if err == nil {
@@ -651,13 +762,79 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		} else {
 			pc.Reject.Call(quickjs.UndefinedValue, err.Error())
 		}
+		// The PromiseCapability must be freed here (unlike the scheduled
+		// __imgLoadCheck/__xhrSend, there's no deferred settle closure to
+		// do it), but the returned promise needs its own reference — free
+		// the capability, hand back a Dup'd live promise.
+		promise := pc.Promise.Dup()
 		pc.Free()
-		return pc.Promise
+		return promise
+	}, false)); err != nil {
+		return err
+	}
+
+	// Timers: Go only stores one-shot/repeating ids; the JS prelude keeps
+	// the actual callbacks in its own Maps (__timeouts/__intervals) and
+	// __fireTimer(id) runs them. So no quickjs.Value is ever held by Go, and
+	// there's no native-value lifetime bookkeeping here.
+	if err := must(vm.RegisterFunc("__setTimeout", func(ms int) int {
+		return d.loop.AddTimer(time.Duration(ms)*time.Millisecond, 0, func(id int, vm *quickjs.VM) {
+			_, _ = vm.Call("__fireTimer", id)
+		})
+	}, false)); err != nil {
+		return err
+	}
+	if err := must(vm.RegisterFunc("__setInterval", func(ms int) int {
+		return d.loop.AddTimer(time.Duration(ms)*time.Millisecond, time.Duration(ms)*time.Millisecond, func(id int, vm *quickjs.VM) {
+			_, _ = vm.Call("__fireTimer", id)
+		})
+	}, false)); err != nil {
+		return err
+	}
+	if err := must(vm.RegisterFunc("__clearTimer", func(id int) int {
+		if d.loop != nil {
+			d.loop.ClearTimer(id)
+		}
+		return 0
 	}, false)); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// parseRequestJSON decodes the JSON string that fetch()/XMLHttpRequest hand
+// to __fetchOp/__xhrSend: {"method","url","headers":{name:value},"body"}.
+func parseRequestJSON(s string) webviewRequest {
+	var raw struct {
+		Method  string            `json:"method"`
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+		Body    string            `json:"body"`
+	}
+	_ = json.Unmarshal([]byte(s), &raw)
+	var req webviewRequest
+	req.Method = raw.Method
+	req.URL = raw.URL
+	req.Body = []byte(raw.Body)
+	names := make([]string, 0, len(raw.Headers))
+	for k := range raw.Headers {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		req.Headers = append(req.Headers, [2]string{k, raw.Headers[k]})
+	}
+	return req
+}
+
+// resolveFromBase resolves ref against the current page URL (if any) before
+// a fetch()/XMLHttpRequest, matching how a browser resolves relative URLs.
+func resolveFromBase(base func() *url.URL, ref string) string {
+	if base == nil || base() == nil {
+		return ref
+	}
+	return resolveURL(base(), ref)
 }
 
 func queryNodes(root *nethtml.Node, query string) (elementList, error) {

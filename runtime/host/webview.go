@@ -1,12 +1,14 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -145,13 +147,18 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, descriptor int32) int32 {
-			if _, ok := w.Store.Fetch(descriptor).(*webviewContext); !ok {
+			wv, ok := w.Store.Fetch(descriptor).(*webviewContext)
+			if !ok {
 				return int32(jsInvalidHandler)
 			}
-			// Loading already ran synchronously to completion inside
-			// webview_load/webview_load_html (including draining the
-			// event loop), unlike Swift's async WKNavigationDelegate
-			// dance — so there's nothing left to wait for.
+			// Unlike Swift's async WKNavigationDelegate dance, webview_load/
+			// webview_load_html already ran page scripts synchronously to
+			// completion. What's left is whatever the page scheduled on the
+			// event loop (setTimeout/setInterval continuations), so this
+			// blocks (up to loadQuiesceTimeout) until those drain — that's
+			// what lets a timed challenge script finish before a later
+			// webview_eval reads its result.
+			wv.loop.RunUntilQuiescent(loadQuiesceTimeout)
 			return int32(jsSuccess)
 		}).
 		Export("webview_wait_for_load")
@@ -253,9 +260,15 @@ func (wv *webviewContext) loadHTML(htmlStr string, pageURL *url.URL) {
 	}
 	wv.docRoot = root
 	wv.pageURL = pageURL
+	// A new document has a whole new node tree — drop the old node->handle
+	// identity map. The JS-side wrapper cache must be discarded in lockstep
+	// (see resetNodeCache below), or stale wrappers with dead handles would
+	// survive.
+	wv.handles.Reset()
 
 	wv.loop.Run(func(vm *quickjs.VM) {
 		wv.ensureGlobals(vm)
+		resetNodeCache(vm)
 		wv.bindDocument(vm)
 
 		for _, script := range wv.userScriptsStart {
@@ -344,7 +357,7 @@ func (wv *webviewContext) evalForSideEffect(vm *quickjs.VM, script string, flags
 }
 
 func (wv *webviewContext) fetchBody(rawURL string) (int, []byte, error) {
-	return wv.doRequest(http.MethodGet, rawURL)
+	return wv.doRequest(webviewRequest{Method: http.MethodGet, URL: rawURL})
 }
 
 func findScriptNodes(root *nethtml.Node) []*nethtml.Node {
@@ -456,9 +469,9 @@ func (wv *webviewContext) ensureGlobals(vm *quickjs.VM) {
 func (wv *webviewContext) newDOMBinder() *domBinder {
 	return &domBinder{
 		rules:   func() *contentRuleList { return wv.ruleList },
-		fetch:   wv.fetchBody,
 		request: wv.doRequest,
 		print:   wv.printHandler,
+		pageURL: func() *url.URL { return wv.pageURL },
 		schedule: func(fn func(*quickjs.VM)) {
 			wv.loop.SetTimeout(fn)
 		},
@@ -469,6 +482,7 @@ func (wv *webviewContext) newDOMBinder() *domBinder {
 			return &jarCookieAccessor{jar: wv.client.Jar, pageURL: wv.pageURL}
 		},
 		handles: wv.handles,
+		loop:    wv.loop,
 	}
 }
 
@@ -493,7 +507,7 @@ func (wv *webviewContext) registerModuleLoader(vm *quickjs.VM) {
 			if wv.ruleList.Blocks(moduleName, resourceTypeScript) {
 				return "", fmt.Errorf("blocked by content rule list: %s", moduleName)
 			}
-			status, body, err := wv.doRequest(http.MethodGet, moduleName)
+			status, body, err := wv.doRequest(webviewRequest{Method: http.MethodGet, URL: moduleName})
 			if err != nil {
 				return "", err
 			}
@@ -566,39 +580,79 @@ func (c *jarCookieAccessor) Set(raw string) {
 	}
 }
 
-// doRequest performs a simple GET/HEAD/POST-with-no-body request. Custom
-// headers/request bodies aren't modeled — a deliberate simplification:
-// challenge-verification requests are typically simple GETs, and a full
-// NetRequest-equivalent pipeline here would duplicate net.go for uncertain
-// benefit at this tier.
-func (wv *webviewContext) doRequest(method, rawURL string) (int, []byte, error) {
+// webviewRequest is everything the DOM's fetch()/XMLHttpRequest/Image can
+// send: a method (defaulting to GET), a URL, optional request headers, and
+// an optional body. Redirect following is handled by net/http's default
+// client behavior.
+type webviewRequest struct {
+	Method  string
+	URL     string
+	Headers [][2]string // each pair is (name, value), in order
+	Body    []byte
+}
+
+// doRequest performs a webviewRequest. When r.Body is nil a GET is sent
+// with no body; HEAD/POST/etc. use the given method and optional body.
+func (wv *webviewContext) doRequest(r webviewRequest) (int, []byte, error) {
+	method := r.Method
 	if method == "" {
 		method = http.MethodGet
 	}
-	req, err := http.NewRequest(method, rawURL, nil)
+	var body io.Reader
+	if r.Body != nil {
+		body = bytes.NewReader(r.Body)
+	}
+	req, err := http.NewRequest(method, r.URL, body)
 	if err != nil {
 		return 0, nil, err
+	}
+	for _, h := range r.Headers {
+		req.Header.Add(h[0], h[1])
 	}
 	resp, err := wv.client.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	return resp.StatusCode, body, err
+	b, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, b, err
 }
 
 // eventLoop hand-rolls the piece goja_nodejs/eventloop gave us for free:
-// this sandbox only ever schedules zero-delay continuations (Image/XHR/
-// fetch "async" completions, all resolved synchronously against the local
-// HTTP client), so there's no real timer wheel — just a FIFO of deferred
-// callbacks drained alongside the VM's promise/job queue. Run blocks until
-// the closure *and* every pending job/timer it (transitively) spawns have
-// finished, matching goja_nodejs's Loop.Run contract.
+// a FIFO of zero-delay continuations (Image/XHR/fetch "async" completions,
+// all resolved synchronously against the local HTTP client) drained
+// alongside the VM's promise/job queue, plus — since this tier now also
+// honors real page setTimeout/setInterval — a wall-clock timer wheel.
+//
+// Run executes a closure and drains only jobs + zero-delay continuations
+// (matching real webview_load/evaluateJavaScript, which don't block on a
+// page's timers); RunUntilQuiescent additionally sleeps to and fires due
+// callbacks until nothing is scheduled (that's webview_wait_for_load). All
+// of it runs on one goroutine holding the loop's VM, so no locking is
+// needed; timers fire on the owning goroutine within a Run call.
 type eventLoop struct {
 	vm      *quickjs.VM
 	pending []func(*quickjs.VM)
+
+	timers    []*timer
+	nextTimer int
 }
+
+// timer is a single scheduled callback: a one-shot setTimeout or a repeating
+// setInterval.
+type timer struct {
+	id       int
+	at       time.Time
+	interval time.Duration // 0 means a one-shot timer
+	fn       func(id int, vm *quickjs.VM)
+}
+
+// loadQuiesceTimeout bounds how long webview_wait_for_load will block
+// waiting for a page's timers to drain before giving up. A challenge script
+// that genuinely needs longer than this won't resolve in the headless
+// sandbox regardless, so bailing out (leaving the result unset) is better
+// than hanging the caller forever.
+const loadQuiesceTimeout = 30 * time.Second
 
 func newEventLoop() (*eventLoop, error) {
 	vm, err := quickjs.NewVM()
@@ -621,12 +675,49 @@ func (wv *webviewContext) Close() error {
 	return wv.loop.Close()
 }
 
+// SetTimeout defers fn to run on the next drain, before any wall-clock
+// timer — this is the "zero-delay continuation" slot Image/XHR/fetch use to
+// settle their promises after the current synchronous script finishes.
 func (l *eventLoop) SetTimeout(fn func(*quickjs.VM)) {
 	l.pending = append(l.pending, fn)
 }
 
+// AddTimer schedules fn to fire after delay (repeating every interval, or
+// once when interval is 0) on the loop's owning goroutine, returning its id
+// for ClearTimer. fn receives its own id so the caller can route the firing
+// back to JS without holding any quickjs.Value in Go (see __setTimeout in
+// webviewdom.go).
+func (l *eventLoop) AddTimer(delay, interval time.Duration, fn func(id int, vm *quickjs.VM)) int {
+	l.nextTimer++
+	l.timers = append(l.timers, &timer{
+		id: l.nextTimer, at: time.Now().Add(delay), interval: interval, fn: fn,
+	})
+	return l.nextTimer
+}
+
+// ClearTimer cancels a previously AddTimer'd id (no-op if already fired/
+// never scheduled).
+func (l *eventLoop) ClearTimer(id int) {
+	for i, t := range l.timers {
+		if t.id == id {
+			l.timers = append(l.timers[:i], l.timers[i+1:]...)
+			return
+		}
+	}
+}
+
+// Run executes fn and then drains the VM's promise job queue and zero-delay
+// continuations — but does NOT block on wall-clock timers. This matches the
+// real webview_load / evaluateJavaScript contract: the load runs page
+// scripts and settles microtasks, while a page's setTimeout is left for
+// webview_wait_for_load to drain.
 func (l *eventLoop) Run(fn func(*quickjs.VM)) {
 	fn(l.vm)
+	l.drainNow()
+}
+
+// drainNow processes pending jobs and zero-delay continuations until quiet.
+func (l *eventLoop) drainNow() {
 	for {
 		_, _ = l.vm.ExecutePendingJobs()
 		if len(l.pending) == 0 {
@@ -636,4 +727,55 @@ func (l *eventLoop) Run(fn func(*quickjs.VM)) {
 		l.pending = l.pending[1:]
 		next(l.vm)
 	}
+}
+
+// RunUntilQuiescent keeps draining jobs, zero-delay continuations, and
+// wall-clock timers — sleeping to the earliest due timer — until nothing is
+// left scheduled or maxWait elapses.
+func (l *eventLoop) RunUntilQuiescent(maxWait time.Duration) {
+	deadline := time.Now().Add(maxWait)
+	for {
+		l.drainNow()
+		if len(l.timers) == 0 || time.Now().After(deadline) {
+			return
+		}
+		earliest := l.timers[0]
+		for _, t := range l.timers[1:] {
+			if t.at.Before(earliest.at) {
+				earliest = t
+			}
+		}
+		now := time.Now()
+		if earliest.at.After(now) {
+			if earliest.at.Sub(now) > time.Until(deadline) {
+				return
+			}
+			time.Sleep(earliest.at.Sub(now))
+		}
+		due := l.timers[:0]
+		var fire []*timer
+		for _, t := range l.timers {
+			if !t.at.After(time.Now()) {
+				fire = append(fire, t)
+			} else {
+				due = append(due, t)
+			}
+		}
+		l.timers = due
+		for _, t := range fire {
+			if t.interval > 0 {
+				t.at = t.at.Add(t.interval)
+				l.timers = append(l.timers, t)
+			}
+			t.fn(t.id, l.vm)
+		}
+	}
+}
+
+// resetNodeCache discards the JS-side handle->Element wrapper cache, called
+// at the top of every loadHTML in lockstep with the Go-side nodeRegistry
+// reset. Defined by domPrelude; missing until ensureGlobals runs (an error
+// only before the prelude is installed, which we ignore).
+func resetNodeCache(vm *quickjs.VM) {
+	_, _ = vm.Call("__resetNodeCache")
 }

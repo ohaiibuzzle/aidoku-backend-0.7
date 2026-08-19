@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
@@ -192,6 +194,32 @@ func containsString(haystack []string, needle string) bool {
 
 // Features passes through the loaded Interpreter's detected feature flags.
 func (s *Source) Features() models.SourceFeatures { return s.Runner.Features }
+
+// --- Cookie injection -> Interpreter ---
+
+// SetCookie adds a single name=value cookie scoped to u for this source.
+// See runtime.Interpreter.SetCookie.
+func (s *Source) SetCookie(u *url.URL, name, value string) { s.Runner.SetCookie(u, name, value) }
+
+// SetCookieHeader parses a raw "a=1; b=2" Cookie header and injects each
+// cookie for u. See runtime.Interpreter.SetCookieHeader.
+func (s *Source) SetCookieHeader(u *url.URL, header string) { s.Runner.SetCookieHeader(u, header) }
+
+// SetCookies injects the given cookies for u. See runtime.Interpreter.SetCookies.
+func (s *Source) SetCookies(u *url.URL, cookies []*http.Cookie) { s.Runner.SetCookies(u, cookies) }
+
+// Cookies returns the cookies this source's jar would send for u.
+func (s *Source) Cookies(u *url.URL) []*http.Cookie { return s.Runner.Cookies(u) }
+
+// LoadCookiesFile reads a Netscape cookies.txt file and injects its cookies
+// into this source's jar. See runtime.Interpreter.LoadCookiesFile.
+func (s *Source) LoadCookiesFile(path string) (int, error) { return s.Runner.LoadCookiesFile(path) }
+
+// LoadNetscapeCookies injects cookies from Netscape cookies.txt bytes into
+// this source's jar. See runtime.Interpreter.LoadNetscapeCookies.
+func (s *Source) LoadNetscapeCookies(data []byte) (int, error) {
+	return s.Runner.LoadNetscapeCookies(data)
+}
 
 // OnlySearch mirrors Source.onlySearch: whether the source should default
 // to a search page instead of a home/listings page.
