@@ -12,6 +12,7 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local util = require("util")
 local _ = require("gettext")
 
+local DownloadsEngine = require("downloadsengine")
 local Engine = require("engine")
 local Store = require("store")
 
@@ -33,12 +34,52 @@ function Aidoku:init()
     -- directory. jit.arch (LuaJIT, which KOReader always runs on) names
     -- match Go's GOARCH for the targets koreader/build.sh produces ("arm"
     -- for armv7 Kindles/Kobos, "arm64" for aarch64 devices/desktops).
-    self.engine = Engine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-run")
     self.store = Store.new()
+    self.engine = Engine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-run", function()
+        return { FLARESOLVERR_HOST = self.store:flareSolverrHost() }
+    end)
+    self.downloads_engine = DownloadsEngine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-downloads", self.downloads_dir)
     self.repo_url = DEFAULT_REPO_URL
 
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
+    self:hookEndOfBook()
+end
+
+-- hookEndOfBook wires up auto-advance to the next chapter. It only applies
+-- (and self.document is only set at all) when this plugin instance is
+-- running inside ReaderUI, not the FileManager -- see the note on
+-- is_doc_only in frontend/apps/filemanager/filemanager.lua vs
+-- frontend/apps/reader/readerui.lua, which instantiate every plugin either
+-- way but only the latter passes a document.
+--
+-- ReaderStatus's own onEndOfBook (frontend/apps/reader/modules/
+-- readerstatus.lua) is registered before plugins are and never returns
+-- true, so KOReader's event propagation (which stops at the first true --
+-- see WidgetContainer:propagateEvent) can't be used to suppress its "end of
+-- document" pop-up by registering a same-named handler here: ReaderStatus
+-- would always run first regardless, and both would show. Instead this
+-- wraps the ReaderStatus instance's own method directly: ours runs first,
+-- and falls through to the original when the document isn't one of ours.
+function Aidoku:hookEndOfBook()
+    if not self.document or not self.ui.status then
+        return
+    end
+    local original_on_end_of_book = self.ui.status.onEndOfBook
+    self.ui.status.onEndOfBook = function(status_self, ...)
+        local NextChapter = require("nextchapter")
+        local handled = NextChapter.handle({
+            engine = self.engine,
+            store = self.store,
+            downloads_engine = self.downloads_engine,
+            downloads_dir = self.downloads_dir,
+            open_callback = function(path) self.ui:switchDocument(path) end,
+        }, self.document.file)
+        if handled then
+            return true
+        end
+        return original_on_end_of_book(status_self, ...)
+    end
 end
 
 function Aidoku:onDispatcherRegisterActions()
@@ -63,9 +104,9 @@ function Aidoku:addToMainMenu(menu_items)
 end
 
 function Aidoku:onAidokuBrowseSources()
-    if not self.engine:isAvailable() then
+    if not self.engine:isAvailable() or not self.downloads_engine:isAvailable() then
         UIManager:show(InfoMessage:new{
-            text = _("The bundled aidoku-run binary was not found. Run koreader/build.sh in the aidokurunner-go repo to build and bundle it before using this plugin."),
+            text = _("The bundled aidoku-run/aidoku-downloads binaries were not found. Run koreader/build.sh in the aidokurunner-go repo to build and bundle them before using this plugin."),
         })
         return
     end
@@ -74,6 +115,7 @@ function Aidoku:onAidokuBrowseSources()
     UIManager:show(LibraryBrowser:new{
         engine = self.engine,
         store = self.store,
+        downloads_engine = self.downloads_engine,
         ui = self.ui,
         sources_dir = self.sources_dir,
         downloads_dir = self.downloads_dir,

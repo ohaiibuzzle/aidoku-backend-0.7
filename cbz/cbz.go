@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 )
 
@@ -46,17 +47,42 @@ func extensionFor(data []byte) string {
 // Write creates a CBZ archive at path from pages, in order. Each entry is
 // stored (not deflated) since page images are already compressed formats;
 // deflating them again would only cost CPU for no size benefit.
+//
+// The archive is built at a temporary path in the same directory as path
+// and only renamed into place once fully written, so a process death or
+// write error partway through never leaves a corrupt file sitting at path
+// under its final name -- callers (e.g. a download index) that treat path's
+// existence as "this chapter is downloaded" would otherwise be lied to.
+// Same-directory keeps the rename same-filesystem, so it's a metadata-only
+// operation rather than a second copy of the data.
 func Write(path string, pages [][]byte) (err error) {
-	f, err := os.Create(path)
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".cbz-*.tmp")
 	if err != nil {
-		return fmt.Errorf("cbz: creating %s: %w", path, err)
+		return fmt.Errorf("cbz: creating temp file in %s: %w", dir, err)
 	}
+	tmpPath := tmp.Name()
 	defer func() {
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
+		// Only reached if we returned before the rename below; on success
+		// tmpPath no longer exists under this name, so Remove is a no-op.
+		os.Remove(tmpPath)
 	}()
 
+	if err := writeZip(tmp, pages); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("cbz: closing %s: %w", tmpPath, err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("cbz: renaming %s to %s: %w", tmpPath, path, err)
+	}
+	return nil
+}
+
+func writeZip(f *os.File, pages [][]byte) (err error) {
 	zw := zip.NewWriter(f)
 	defer func() {
 		if cerr := zw.Close(); err == nil {

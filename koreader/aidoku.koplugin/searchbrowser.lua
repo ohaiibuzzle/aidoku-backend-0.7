@@ -103,6 +103,7 @@ function SearchBrowser:onMenuSelect(item)
     UIManager:show(MangaBrowser:new{
         engine = self.engine,
         store = self.store,
+        downloads_engine = self.downloads_engine,
         ui = self.ui,
         source_path = self.source_path,
         downloads_dir = self.downloads_dir,

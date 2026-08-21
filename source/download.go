@@ -157,23 +157,34 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 }
 
 func defaultCBZName(manga models.Manga, chapter models.Chapter) string {
-	title := manga.Title
-	if title == "" {
-		title = manga.Key
-	}
-	return sanitizeFilename(fmt.Sprintf("%s - %s", title, chapterLabel(chapter))) + ".cbz"
+	return sanitizeFilename(fmt.Sprintf("%s - %s", MangaLabel(manga), ChapterLabel(chapter))) + ".cbz"
 }
 
-func chapterLabel(chapter models.Chapter) string {
+// MangaLabel is manga's display title, falling back to its key when it has
+// none.
+func MangaLabel(manga models.Manga) string {
+	if manga.Title != "" {
+		return manga.Title
+	}
+	return manga.Key
+}
+
+// ChapterLabel is chapter's display label: its own title if it has one,
+// else "Chapter N" from ChapterNumber, else its key. Title takes priority
+// over ChapterNumber (matching the KOReader plugin's own chapterLabel in
+// mangabrowser.lua, which this must agree with for a chapter's displayed
+// name to be consistent between the plugin's UI and a downloads index
+// entry recorded by the "download" command).
+func ChapterLabel(chapter models.Chapter) string {
+	if chapter.Title != nil && *chapter.Title != "" {
+		return *chapter.Title
+	}
 	if chapter.ChapterNumber != nil {
 		n := *chapter.ChapterNumber
 		if n == float32(int64(n)) {
 			return fmt.Sprintf("Chapter %d", int64(n))
 		}
 		return fmt.Sprintf("Chapter %g", n)
-	}
-	if chapter.Title != nil && *chapter.Title != "" {
-		return *chapter.Title
 	}
 	return chapter.Key
 }

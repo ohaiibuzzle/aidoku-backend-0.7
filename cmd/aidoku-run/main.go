@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ohaiibuzzle/aidokurunner-go/downloads"
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 	"github.com/ohaiibuzzle/aidokurunner-go/repo"
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime"
@@ -55,8 +56,10 @@ commands:
   settings                          list static + dynamic settings
   manga <key>                       call get_manga_update (details + chapters)
   pages <manga-key> <chapter-key>   call get_manga_update then get_page_list for the matching chapter
-  download <manga-key> <chapter-key> [output.cbz]
-                                     download every page of a chapter and combine them into a CBZ archive
+  download <manga-key> <chapter-key> [output.cbz] [downloads-index-dir]
+                                     download every page of a chapter and combine them into a CBZ archive;
+                                     if downloads-index-dir is given, also records the download into its
+                                     SQLite index there (see the downloads package / aidoku-downloads)
   cookie load <cookies.txt>          load cookies from a Netscape cookies.txt file (cf_clearance etc.)
   cookie list                        show stored cookie domains
   repo list <index-url>              fetch a source-repository index (index.min.json) and list its sources
@@ -205,7 +208,7 @@ func run(dir, command string, args []string) error {
 
 	case "download":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: download <manga-key> <chapter-key> [output.cbz]")
+			return fmt.Errorf("usage: download <manga-key> <chapter-key> [output.cbz] [downloads-index-dir]")
 		}
 		manga := models.Manga{Key: args[0]}
 		updated, err := src.GetMangaUpdate(ctx, manga, true, true, nil)
@@ -232,6 +235,17 @@ func run(dir, command string, args []string) error {
 		if err != nil {
 			return err
 		}
+		// Recording here, in the same process/invocation that just wrote
+		// the CBZ, means a failed or killed download can never leave the
+		// index pointing at a file that doesn't exist (or vice versa) --
+		// the two-step "download, then separately tell an index about it"
+		// a caller could otherwise do has a window for exactly that kind of
+		// inconsistency.
+		if len(args) > 3 && args[3] != "" {
+			if err := recordDownload(args[3], dir, *updated, *chapter, path); err != nil {
+				return fmt.Errorf("recording download: %w", err)
+			}
+		}
 		fmt.Println(path)
 		return nil
 
@@ -239,6 +253,19 @@ func run(dir, command string, args []string) error {
 		usage()
 		return fmt.Errorf("unknown command %q", command)
 	}
+}
+
+// recordDownload indexes a just-written CBZ into the downloads index at
+// downloadsDir. sourcePath identifies the source the same way it's already
+// used elsewhere (the loaded source's own path/directory).
+func recordDownload(downloadsDir, sourcePath string, manga models.Manga, chapter models.Chapter, path string) error {
+	store, err := downloads.Open(downloadsDir)
+	if err != nil {
+		return fmt.Errorf("opening downloads index: %w", err)
+	}
+	defer store.Close()
+	_, err = store.Record(sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter))
+	return err
 }
 
 func printJSON(v any) error {

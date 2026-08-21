@@ -7,6 +7,7 @@ manga to the library happens from searchbrowser.lua's result list, not here.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
+local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
@@ -48,6 +49,7 @@ end
 function MangaBrowser:init()
     self.title = mangaLabel(self.manga)
     self.chapters = {}
+    self.downloaded_keys = {} -- chapter Key -> local path, refreshed by reload()
     self.item_table = {}
     -- Sort-order toggle lives on the title bar's left button since it
     -- applies to the whole list, not one row -- see Menu:onLeftButtonTap
@@ -76,16 +78,24 @@ function MangaBrowser:onLeftButtonTap()
 end
 
 -- downloadedPath returns the local CBZ path for chapter_key if it's
--- downloaded and the file still exists, self-healing the index (removing
--- the stale entry) if the file was deleted out from under it.
+-- downloaded and the file still exists, or "" otherwise. Reads
+-- self.downloaded_keys (an in-memory snapshot refreshed by reload() and
+-- kept up to date locally after each download/removal here) rather than
+-- querying the downloads index per chapter -- this is called once per row
+-- while building the chapter list, and a manga can have dozens of
+-- chapters, so a subprocess call per row is not an option. The lfs check
+-- is a cheap local stat (no subprocess) so it's fine to do per row; a
+-- stale entry (file deleted out from under us) is just treated as "not
+-- downloaded" here rather than cleaned up, since that too would need a
+-- subprocess call mid-render -- record() overwrites it on the next real
+-- download regardless.
 function MangaBrowser:downloadedPath(chapter_key)
-    local path = self.store:downloadedPath(self.source_path, self.manga.Key, chapter_key)
-    if not path then
-        return nil
+    local path = self.downloaded_keys[chapter_key]
+    if not path or path == "" then
+        return ""
     end
     if lfs.attributes(path, "mode") ~= "file" then
-        self.store:removeDownload(self.source_path, self.manga.Key, chapter_key)
-        return nil
+        return ""
     end
     return path
 end
@@ -102,7 +112,7 @@ function MangaBrowser:genItemTable()
     end
     for _, chapter in ipairs(ordered) do
         local label = chapterLabel(chapter)
-        if self:downloadedPath(chapter.Key) then
+        if self:downloadedPath(chapter.Key) ~= "" then
             label = "✓ " .. label
         end
         table.insert(item_table, { text = label, chapter = chapter })
@@ -115,6 +125,23 @@ function MangaBrowser:refresh()
     self:updateItems()
 end
 
+-- reloadDownloadedKeys fetches the full downloads index once and keeps
+-- just this manga's entries, so per-row downloadedPath() lookups are local
+-- table reads instead of one subprocess call each -- see the note on this
+-- in downloadedPath().
+function MangaBrowser:reloadDownloadedKeys()
+    local all = self.downloads_engine:list()
+    self.downloaded_keys = {}
+    if not all then
+        return
+    end
+    for _, entry in ipairs(all) do
+        if entry.sourcePath == self.source_path and entry.mangaKey == self.manga.Key then
+            self.downloaded_keys[entry.chapterKey] = entry.path
+        end
+    end
+end
+
 function MangaBrowser:reload()
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
@@ -125,8 +152,45 @@ function MangaBrowser:reload()
             end
             self.manga = updated
             self.chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
+            self:reloadDownloadedKeys()
             self:refresh()
         end)
+    end)
+end
+
+-- prefetchAhead silently downloads up to store:bufferChapters() upcoming
+-- chapters (in reading order, not display sort order) after chapter, so
+-- they're likely already local by the time the reader reaches them. Runs
+-- via Trapper with a false progress widget (see the note on this in
+-- engine.lua's download()), so it doesn't interrupt whatever the user is
+-- doing with a visible dialog.
+function MangaBrowser:prefetchAhead(chapter)
+    local n = self.store:bufferChapters()
+    if n <= 0 then
+        return
+    end
+    local upcoming = ChapterOrder.after(self.chapters, chapter.Key, n)
+    if #upcoming == 0 then
+        return
+    end
+    Trapper:wrap(function()
+        local any_new = false
+        for _, c in ipairs(upcoming) do
+            if self:downloadedPath(c.Key) == "" then
+                local filename = util.getSafeFilename(
+                    mangaLabel(self.manga) .. " - " .. chapterLabel(c) .. ".cbz", self.downloads_dir)
+                local out_path = self.downloads_dir .. "/" .. filename
+                local path = self.engine:download(self.source_path, self.manga.Key, c.Key, out_path, self.downloads_dir, true)
+                if path then
+                    self.downloaded_keys[c.Key] = path
+                    any_new = true
+                end
+            end
+        end
+        if any_new then
+            self.downloads_engine:prune(self.store:downloadLimitBytes())
+            self:refresh()
+        end
     end)
 end
 
@@ -146,18 +210,21 @@ function MangaBrowser:downloadAndOpen(chapter)
             filename = util.getSafeFilename(filename, self.downloads_dir)
             local out_path = self.downloads_dir .. "/" .. filename
 
-            local path, err = self.engine:download(self.source_path, self.manga.Key, chapter.Key, out_path)
+            local path, err = self.engine:download(self.source_path, self.manga.Key, chapter.Key, out_path, self.downloads_dir)
             if not path then
                 UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), err) })
                 return
             end
-            self.store:recordDownload(self.source_path, self.manga.Key, chapter.Key, path,
-                mangaLabel(self.manga), chapterLabel(chapter))
+            self.downloaded_keys[chapter.Key] = path
+            self.downloads_engine:prune(self.store:downloadLimitBytes())
             self:refresh()
             UIManager:show(ConfirmBox:new{
                 text = T(_("Downloaded to:\n%1\n\nRead now?"), path),
                 ok_text = _("Read now"),
-                ok_callback = function() self:openLocal(path) end,
+                ok_callback = function()
+                    self:prefetchAhead(chapter)
+                    self:openLocal(path)
+                end,
             })
         end)
     end)
@@ -165,11 +232,14 @@ end
 
 function MangaBrowser:onMenuSelect(item)
     local existing = self:downloadedPath(item.chapter.Key)
-    if existing then
+    if existing ~= "" then
         UIManager:show(ConfirmBox:new{
             text = T(_("'%1' is already downloaded. Open it?"), chapterLabel(item.chapter)),
             ok_text = _("Read"),
-            ok_callback = function() self:openLocal(existing) end,
+            ok_callback = function()
+                self:prefetchAhead(item.chapter)
+                self:openLocal(existing)
+            end,
         })
         return true
     end
@@ -180,7 +250,7 @@ end
 
 function MangaBrowser:onMenuHold(item)
     local existing = self:downloadedPath(item.chapter.Key)
-    if not existing then
+    if existing == "" then
         return true
     end
 
@@ -192,16 +262,22 @@ function MangaBrowser:onMenuHold(item)
                 text = _("Re-download"),
                 callback = function()
                     UIManager:close(dialog)
-                    self.store:removeDownload(self.source_path, self.manga.Key, item.chapter.Key)
-                    self:downloadAndOpen(item.chapter)
+                    Trapper:wrap(function()
+                        self.downloads_engine:remove(self.source_path, self.manga.Key, item.chapter.Key)
+                        self.downloaded_keys[item.chapter.Key] = nil
+                        self:downloadAndOpen(item.chapter)
+                    end)
                 end,
             }},
             {{
                 text = _("Remove download"),
                 callback = function()
                     UIManager:close(dialog)
-                    self.store:removeDownload(self.source_path, self.manga.Key, item.chapter.Key)
-                    self:refresh()
+                    Trapper:wrap(function()
+                        self.downloads_engine:remove(self.source_path, self.manga.Key, item.chapter.Key)
+                        self.downloaded_keys[item.chapter.Key] = nil
+                        self:refresh()
+                    end)
                 end,
             }},
         },

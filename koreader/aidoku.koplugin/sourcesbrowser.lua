@@ -1,13 +1,14 @@
 --[[--
-Top-level screen: lists locally installed .aix sources, plus an entry to
-browse the source repository and install more. Tapping an installed source
-opens SearchBrowser against it.
+Top-level screen: lists locally installed .aix sources, plus entries to
+browse the source repository, search every installed source at once, and
+view downloaded chapters. Tapping an installed source opens SearchBrowser
+against it.
 ]]
 
 local ConfirmBox = require("ui/widget/confirmbox")
+local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
 local UIManager = require("ui/uimanager")
-local lfs = require("libs/libkoreader-lfs")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
@@ -16,6 +17,7 @@ local SourcesBrowser = Menu:extend{
 }
 
 local BROWSE_REPO_TEXT = _("Browse source repository…")
+local SEARCH_ALL_TEXT = _("Search all sources…")
 local DOWNLOADS_TEXT = _("Downloaded chapters")
 
 function SourcesBrowser:init()
@@ -26,14 +28,10 @@ end
 function SourcesBrowser:genItemTable()
     local item_table = {}
     table.insert(item_table, { text = BROWSE_REPO_TEXT, is_repo_entry = true })
+    table.insert(item_table, { text = SEARCH_ALL_TEXT, is_search_all_entry = true })
     table.insert(item_table, { text = DOWNLOADS_TEXT, is_downloads_entry = true })
-    for entry in lfs.dir(self.sources_dir) do
-        if entry:match("%.aix$") then
-            table.insert(item_table, {
-                text = entry:gsub("%.aix$", ""),
-                path = self.sources_dir .. "/" .. entry,
-            })
-        end
+    for _, source in ipairs(InstalledSources.list(self.sources_dir)) do
+        table.insert(item_table, source)
     end
     return item_table
 end
@@ -55,10 +53,23 @@ function SourcesBrowser:onMenuSelect(item)
             title_bar_fm_style = true,
             refresh_callback = function() self:refresh() end,
         })
+    elseif item.is_search_all_entry then
+        local GlobalSearchBrowser = require("globalsearchbrowser")
+        UIManager:show(GlobalSearchBrowser:new{
+            engine = self.engine,
+            store = self.store,
+            downloads_engine = self.downloads_engine,
+            ui = self.ui,
+            sources_dir = self.sources_dir,
+            downloads_dir = self.downloads_dir,
+            is_popout = false,
+            is_borderless = true,
+            title_bar_fm_style = true,
+        })
     elseif item.is_downloads_entry then
         local DownloadsBrowser = require("downloadsbrowser")
         UIManager:show(DownloadsBrowser:new{
-            store = self.store,
+            downloads_engine = self.downloads_engine,
             ui = self.ui,
             is_popout = false,
             is_borderless = true,
@@ -69,6 +80,7 @@ function SourcesBrowser:onMenuSelect(item)
         UIManager:show(SearchBrowser:new{
             engine = self.engine,
             store = self.store,
+            downloads_engine = self.downloads_engine,
             ui = self.ui,
             source_path = item.path,
             downloads_dir = self.downloads_dir,
@@ -82,7 +94,7 @@ function SourcesBrowser:onMenuSelect(item)
 end
 
 function SourcesBrowser:onMenuHold(item)
-    if item.is_repo_entry or item.is_downloads_entry then
+    if item.is_repo_entry or item.is_search_all_entry or item.is_downloads_entry then
         return true
     end
     UIManager:show(ConfirmBox:new{

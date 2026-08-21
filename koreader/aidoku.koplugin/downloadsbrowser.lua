@@ -5,7 +5,9 @@ entry.
 ]]
 
 local ConfirmBox = require("ui/widget/confirmbox")
+local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
+local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -15,15 +17,19 @@ local DownloadsBrowser = Menu:extend{
 }
 
 function DownloadsBrowser:init()
-    self.item_table = self:genItemTable()
+    self.item_table = {}
     Menu.init(self)
+    -- init() runs during DownloadsBrowser:new{}, before the caller's own
+    -- UIManager:show(self) -- see the same note in repobrowser.lua's
+    -- init() for why this must be deferred rather than loaded here.
+    UIManager:nextTick(function() self:reload() end)
 end
 
-function DownloadsBrowser:genItemTable()
+function DownloadsBrowser:genItemTable(entries)
     local item_table = {}
-    for _, entry in ipairs(self.store:allDownloads()) do
+    for _, entry in ipairs(entries) do
         table.insert(item_table, {
-            text = entry.manga_title .. " - " .. entry.chapter_title,
+            text = entry.mangaTitle .. " - " .. entry.chapterTitle,
             download_entry = entry,
         })
     end
@@ -33,9 +39,22 @@ function DownloadsBrowser:genItemTable()
     return item_table
 end
 
-function DownloadsBrowser:refresh()
-    self.item_table = self:genItemTable()
+-- loadAndRefresh assumes it's already running inside a Trapper-wrapped
+-- coroutine (reload() provides that for the initial load; onMenuHold's
+-- remove-then-refresh already has its own wrap and calls this directly,
+-- rather than nesting a second one via reload()).
+function DownloadsBrowser:loadAndRefresh()
+    local entries, err = self.downloads_engine:list()
+    if not entries then
+        UIManager:show(InfoMessage:new{ text = T(_("Could not load downloads:\n%1"), err) })
+        return
+    end
+    self.item_table = self:genItemTable(entries)
     self:updateItems()
+end
+
+function DownloadsBrowser:reload()
+    Trapper:wrap(function() self:loadAndRefresh() end)
 end
 
 function DownloadsBrowser:onMenuSelect(item)
@@ -60,8 +79,10 @@ function DownloadsBrowser:onMenuHold(item)
         text = T(_("Remove downloaded chapter?\n\n%1"), item.text),
         ok_text = _("Remove"),
         ok_callback = function()
-            self.store:removeDownload(entry.source_path, entry.manga_key, entry.chapter_key)
-            self:refresh()
+            Trapper:wrap(function()
+                self.downloads_engine:remove(entry.sourcePath, entry.mangaKey, entry.chapterKey)
+                self:loadAndRefresh()
+            end)
         end,
     })
     return true
