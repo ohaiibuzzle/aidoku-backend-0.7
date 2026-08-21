@@ -75,6 +75,12 @@ func (s *Source) downloadURL(ctx context.Context, rawURL string, headers models.
 }
 
 func (s *Source) resolveImageRef(ref models.ImageRef) ([]byte, error) {
+	// Every other GlobalStore consumer frees its descriptor right after use
+	// (see the defer i.RemoveValue(...) calls throughout runner.go); this
+	// one didn't, so a decoded (uncompressed, often much bigger than the
+	// compressed page bytes) image stayed pinned in memory for the rest of
+	// the process for every page a descrambling source produced this way.
+	defer s.Runner.RemoveValue(ref)
 	switch v := s.Runner.Fetch(ref).(type) {
 	case []byte:
 		return v, nil
