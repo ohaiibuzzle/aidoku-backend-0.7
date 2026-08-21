@@ -43,14 +43,21 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: aidoku-downloads <downloads-dir> <command> [args...]
 
 commands:
-  path <source-path> <manga-key> <chapter-key>
+  path <source-key> <manga-key> <chapter-key>
                                      print {"path": "..."}, or {"path": ""} if not downloaded
   by-path <path>                    reverse lookup: print the entry for a local file, or {} if not indexed
-  remove <source-path> <manga-key> <chapter-key>
+  remove <source-key> <manga-key> <chapter-key>
                                      delete the index entry and its file (no-op if absent)
   list                               print every indexed download, most recent first
   total                              print {"totalBytes": N}
-  prune <limit-bytes>                delete oldest downloads until under limit-bytes; print what was removed`)
+  prune <limit-bytes>                delete oldest downloads until under limit-bytes; print what was removed
+  reassociate <old-source-key> <new-source-key>
+                                     repoint every entry under old-source-key to new-source-key; print
+                                     {"reassociated": N} -- a manual repair for entries a source rename/
+                                     update left orphaned (see the downloads package doc)
+
+source-key is the source's stable manifest ID (e.g. "en.weebcentral"), not its installed file's path --
+that can change across a source update (see the downloads package doc for why this distinction matters).`)
 }
 
 func run(dir, command string, args []string) error {
@@ -63,7 +70,7 @@ func run(dir, command string, args []string) error {
 	switch command {
 	case "path":
 		if len(args) < 3 {
-			return fmt.Errorf("usage: path <source-path> <manga-key> <chapter-key>")
+			return fmt.Errorf("usage: path <source-key> <manga-key> <chapter-key>")
 		}
 		path, err := store.Path(args[0], args[1], args[2])
 		if err != nil {
@@ -88,9 +95,31 @@ func run(dir, command string, args []string) error {
 
 	case "remove":
 		if len(args) < 3 {
-			return fmt.Errorf("usage: remove <source-path> <manga-key> <chapter-key>")
+			return fmt.Errorf("usage: remove <source-key> <manga-key> <chapter-key>")
 		}
-		return store.Remove(args[0], args[1], args[2])
+		if err := store.Remove(args[0], args[1], args[2]); err != nil {
+			return err
+		}
+		// Every other successful command prints something to stdout, which
+		// is how subprocess.lua's Runner:exec (the KOReader plugin's shared
+		// shell-out helper) tells success from failure -- empty trimmed
+		// output is treated as an error there. Remove() itself returns
+		// nothing, so print a marker rather than silently misreporting a
+		// successful removal as failed.
+		fmt.Println("ok")
+		return nil
+
+	case "reassociate":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: reassociate <old-source-key> <new-source-key>")
+		}
+		n, err := store.Reassociate(args[0], args[1])
+		if err != nil {
+			return err
+		}
+		return printJSON(struct {
+			Reassociated int64 `json:"reassociated"`
+		}{n})
 
 	case "list":
 		entries, err := store.List()

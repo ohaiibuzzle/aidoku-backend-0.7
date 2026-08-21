@@ -6,7 +6,9 @@ underlying "shell out and decode JSON" mechanics and its important note
 about Trapper:wrap().
 ]]
 
+local DataStorage = require("datastorage")
 local Runner = require("subprocess")
+local json = require("json")
 local _ = require("gettext")
 
 local Engine = {}
@@ -53,8 +55,98 @@ function Engine:info(source_path)
     return self.runner:execJSON({ source_path, "info" }, _("Loading source…"), self:sourceEnv())
 end
 
-function Engine:search(source_path, query, page)
-    return self.runner:execJSON({ source_path, "search", query, tostring(page or 1) }, _("Searching…"), self:sourceEnv())
+-- manifest reads {key, name, version, languages} straight from an
+-- installed source's source.json, without loading its WASM module -- see
+-- cmd/aidoku-run's `manifest` command and source.ReadManifest in the
+-- parent Go repo. Much cheaper than info() (which loads the source), so
+-- this is what installedsources.lua uses to identify and display every
+-- installed source, not just one.
+function Engine:manifest(source_path)
+    return self.runner:execJSON({ source_path, "manifest" }, false)
+end
+
+-- encodeFilterValues JSON-encodes filter_values (an array of tables shaped
+-- like filterbrowser.lua's self.values entries), dropping any empty
+-- included/excluded array first. KOReader's json module can't tell an
+-- empty Lua table meant as an array from one meant as an object, so
+-- json.encode({}) produces "{}" -- which then fails to decode into Go's
+-- []string on the receiving end (confirmed live: selecting one multiselect
+-- filter option, leaving the other side empty, made `search` fail with
+-- "cannot unmarshal object into Go struct field ...excluded of type
+-- []string"). Omitting the key entirely sidesteps the ambiguity, and
+-- matches the Go side's own `omitempty` for these fields.
+local function encodeFilterValues(filter_values)
+    local sanitized = {}
+    for i, v in ipairs(filter_values) do
+        local copy = {}
+        for k, val in pairs(v) do
+            if not ((k == "included" or k == "excluded") and type(val) == "table" and #val == 0) then
+                copy[k] = val
+            end
+        end
+        sanitized[i] = copy
+    end
+    return json.encode(sanitized)
+end
+
+-- filter_values, if given, is an array of tables shaped like
+-- filterbrowser.lua's self.values entries (id/type/value/sortIndex/
+-- sortAscending/checkValue/included/excluded) -- written to a scratch JSON
+-- file and passed as aidoku-run's `search` command's optional third
+-- argument, since that's the only way to hand it a JSON body (no stdin
+-- piping through Trapper:dismissablePopen()'s shell-command model).
+function Engine:search(source_path, query, page, filter_values)
+    local args = { source_path, "search", query, tostring(page or 1) }
+    if filter_values and #filter_values > 0 then
+        local filters_path = DataStorage:getDataDir() .. "/cache/aidoku-search-filters.json"
+        local f = io.open(filters_path, "w")
+        if f then
+            f:write(encodeFilterValues(filter_values))
+            f:close()
+            table.insert(args, filters_path)
+        end
+    end
+    return self.runner:execJSON(args, _("Searching…"), self:sourceEnv())
+end
+
+-- filters lists a source's static + dynamic search filters (see
+-- filterbrowser.lua, which renders the sort/select/multi-select/check
+-- subset of these).
+function Engine:filters(source_path)
+    return self.runner:execJSON({ source_path, "filters" }, _("Loading filters…"), self:sourceEnv())
+end
+
+-- settingsList returns a source's full static + dynamic settings schema
+-- (see sourcesettingsbrowser.lua, which renders the select/multiselect/
+-- toggle/text subset of these).
+function Engine:settingsList(source_path)
+    return self.runner:execJSON({ source_path, "settings" }, _("Loading settings…"), self:sourceEnv())
+end
+
+-- settingsGet returns the current value of one setting (key is the bare
+-- setting key, without the sourceKey. prefix aidoku-run's settings store
+-- namespaces it under internally) -- nil if neither an explicit override nor
+-- a manifest default exists.
+function Engine:settingsGet(source_path, key)
+    local result, err = self.runner:execJSON({ source_path, "settings", "get", key }, false, self:sourceEnv())
+    if not result then
+        return nil, err
+    end
+    return result.value
+end
+
+-- settingsSet stores a setting value. setting_type is "toggle"/"select"/
+-- "text"/"multiselect" (matching cmd/aidoku-run's settings-set usage), and
+-- values is an array of one-or-more already-stringified values: a single
+-- "true"/"false" for toggle, a single string for select/text (joined with
+-- spaces on the Go side, so this should really only ever be one element),
+-- or one element per selection for multiselect.
+function Engine:settingsSet(source_path, key, setting_type, values)
+    local args = { source_path, "settings", "set", key, setting_type }
+    for _, v in ipairs(values) do
+        table.insert(args, v)
+    end
+    return self.runner:exec(args, false, self:sourceEnv())
 end
 
 function Engine:mangaUpdate(source_path, manga_key)

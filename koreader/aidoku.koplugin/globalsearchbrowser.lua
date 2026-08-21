@@ -70,13 +70,16 @@ function GlobalSearchBrowser:promptQuery()
 end
 
 function GlobalSearchBrowser:runSearch(query)
-    local sources = InstalledSources.list(self.sources_dir)
-    if #sources == 0 then
-        UIManager:show(InfoMessage:new{ text = _("No sources installed."), timeout = 2 })
-        return
-    end
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
+            -- InstalledSources.list() now reads each installed source's
+            -- manifest via a subprocess call (see installedsources.lua),
+            -- so this has to happen inside the wrap too, not before it.
+            local sources = InstalledSources.list(self.sources_dir, self.engine)
+            if #sources == 0 then
+                UIManager:show(InfoMessage:new{ text = _("No sources installed."), timeout = 2 })
+                return
+            end
             local item_table = {}
             local failed = {}
             for _, src in ipairs(sources) do
@@ -88,6 +91,7 @@ function GlobalSearchBrowser:runSearch(query)
                             text = "[" .. src.text .. "] " .. mangaLabel(manga),
                             manga = manga,
                             source_path = src.path,
+                            source_key = src.key,
                         })
                     end
                 else
@@ -116,6 +120,7 @@ function GlobalSearchBrowser:onMenuSelect(item)
         downloads_engine = self.downloads_engine,
         ui = self.ui,
         source_path = item.source_path,
+        source_key = item.source_key,
         downloads_dir = self.downloads_dir,
         manga = item.manga,
         is_popout = false,

@@ -1,6 +1,11 @@
 package models
 
-import "github.com/ohaiibuzzle/aidokurunner-go/postcard"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/ohaiibuzzle/aidokurunner-go/postcard"
+)
 
 type FilterValueKind uint8
 
@@ -100,6 +105,121 @@ func (f *FilterValue) EncodePostcard(w *postcard.Writer) {
 		encodeOptionalF32(w, f.From)
 		encodeOptionalF32(w, f.To)
 	}
+}
+
+// --- JSON ---
+// Used by cmd/aidoku-run's `search` command to accept filter selections
+// from a caller (the KOReader plugin's filter picker) as a JSON file, using
+// the same string vocabulary as FilterKind's own JSON (models/filter.go)
+// rather than leaking FilterValueKind's iota ordering as an implicit,
+// silently-breakable wire contract.
+
+func (k FilterValueKind) jsonType() string {
+	switch k {
+	case FilterValueKindText:
+		return "text"
+	case FilterValueKindSort:
+		return "sort"
+	case FilterValueKindCheck:
+		return "check"
+	case FilterValueKindSelect:
+		return "select"
+	case FilterValueKindMultiselect:
+		return "multi-select"
+	case FilterValueKindRange:
+		return "range"
+	default:
+		return ""
+	}
+}
+
+func filterValueKindFromJSONType(s string) (FilterValueKind, error) {
+	switch s {
+	case "text":
+		return FilterValueKindText, nil
+	case "sort":
+		return FilterValueKindSort, nil
+	case "check":
+		return FilterValueKindCheck, nil
+	case "select":
+		return FilterValueKindSelect, nil
+	case "multi-select":
+		return FilterValueKindMultiselect, nil
+	case "range":
+		return FilterValueKindRange, nil
+	default:
+		return 0, fmt.Errorf("models: unknown filter value type %q", s)
+	}
+}
+
+type filterValueJSON struct {
+	ID            string   `json:"id"`
+	Type          string   `json:"type"`
+	Value         *string  `json:"value,omitempty"`
+	SortIndex     *int32   `json:"sortIndex,omitempty"`
+	SortAscending *bool    `json:"sortAscending,omitempty"`
+	CheckValue    *int64   `json:"checkValue,omitempty"`
+	Included      []string `json:"included,omitempty"`
+	Excluded      []string `json:"excluded,omitempty"`
+	From          *float32 `json:"from,omitempty"`
+	To            *float32 `json:"to,omitempty"`
+}
+
+func (f FilterValue) MarshalJSON() ([]byte, error) {
+	raw := filterValueJSON{ID: f.ID, Type: f.Kind.jsonType()}
+	switch f.Kind {
+	case FilterValueKindText, FilterValueKindSelect:
+		raw.Value = &f.Value
+	case FilterValueKindSort:
+		raw.SortIndex = &f.SortIndex
+		raw.SortAscending = &f.SortAscending
+	case FilterValueKindCheck:
+		raw.CheckValue = &f.CheckValue
+	case FilterValueKindMultiselect:
+		raw.Included = f.Included
+		raw.Excluded = f.Excluded
+	case FilterValueKindRange:
+		raw.From = f.From
+		raw.To = f.To
+	}
+	return json.Marshal(raw)
+}
+
+func (f *FilterValue) UnmarshalJSON(data []byte) error {
+	var raw filterValueJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	kind, err := filterValueKindFromJSONType(raw.Type)
+	if err != nil {
+		return err
+	}
+	f.Kind = kind
+	f.ID = raw.ID
+	switch kind {
+	case FilterValueKindText, FilterValueKindSelect:
+		if raw.Value != nil {
+			f.Value = *raw.Value
+		}
+	case FilterValueKindSort:
+		if raw.SortIndex != nil {
+			f.SortIndex = *raw.SortIndex
+		}
+		if raw.SortAscending != nil {
+			f.SortAscending = *raw.SortAscending
+		}
+	case FilterValueKindCheck:
+		if raw.CheckValue != nil {
+			f.CheckValue = *raw.CheckValue
+		}
+	case FilterValueKindMultiselect:
+		f.Included = raw.Included
+		f.Excluded = raw.Excluded
+	case FilterValueKindRange:
+		f.From = raw.From
+		f.To = raw.To
+	}
+	return nil
 }
 
 // EncodeFilterValueSlice/DecodeFilterValueSlice handle the []FilterValue

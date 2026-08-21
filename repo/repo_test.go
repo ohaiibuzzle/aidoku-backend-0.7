@@ -95,6 +95,53 @@ func TestInstallDownloadsAndNamesByIDAndVersion(t *testing.T) {
 	}
 }
 
+// TestInstallReplacesOlderVersion checks that installing an updated version
+// of an already-installed source removes the old file rather than leaving
+// both "<id>-v6.aix" and "<id>-v7.aix" installed side by side -- which would
+// otherwise strand anything (library bookmarks, downloaded chapters) still
+// keyed to the old file's path.
+func TestInstallReplacesOlderVersion(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.min.json", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(Index{
+			Sources: []Source{
+				{ID: "en.example", Version: 7, DownloadURL: "new.bin"},
+			},
+		})
+	})
+	mux.HandleFunc("/new.bin", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("v7 contents"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	destDir := t.TempDir()
+	oldPath := filepath.Join(destDir, "en.example-v6.aix")
+	if err := os.WriteFile(oldPath, []byte("v6 contents"), 0o644); err != nil {
+		t.Fatalf("seeding old version: %v", err)
+	}
+	// A different source's file, sharing the "en.example" prefix only
+	// coincidentally, must survive untouched.
+	unrelatedPath := filepath.Join(destDir, "en.example-extra-v1.aix")
+	if err := os.WriteFile(unrelatedPath, []byte("unrelated"), 0o644); err != nil {
+		t.Fatalf("seeding unrelated file: %v", err)
+	}
+
+	path, err := Install(context.Background(), srv.URL+"/index.min.json", "en.example", destDir)
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if want := filepath.Join(destDir, "en.example-v7.aix"); path != want {
+		t.Errorf("Install path = %q, want %q", path, want)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Errorf("old version still present: err=%v", err)
+	}
+	if _, err := os.Stat(unrelatedPath); err != nil {
+		t.Errorf("unrelated file was removed: %v", err)
+	}
+}
+
 // TestInstallUnknownSource ensures a source id absent from the index
 // produces a clear error rather than a nil-pointer panic.
 func TestInstallUnknownSource(t *testing.T) {

@@ -8,12 +8,14 @@ downloads Go package) since it's queried on nearly every screen and a
 SQLite index scales better than re-parsing a growing JSON blob on every
 read.
 
-Library entries are keyed by source_path (the installed .aix file's path)
-plus manga key, matching how source_path already flows through
-sourcesbrowser/searchbrowser/mangabrowser. Reinstalling a source at a new
-version changes its filename and so its identity here -- same limitation
-sourcesbrowser.lua already has for installed-source identity, not something
-new to this store.
+Library entries are keyed by source_key (the source's stable manifest ID,
+e.g. "en.weebcentral") plus manga key, not by source_path -- a source
+update changes its installed file's path (the "-v7.aix" -> "-v8.aix"
+rename), which would otherwise silently orphan every bookmark pointing at
+the old one. source_path is still stored per entry, but only as a
+best-effort display/debugging hint; see installedsources.lua's
+findByKey(), which librarybrowser.lua uses to re-resolve a bookmark's
+current path from its key before opening it.
 ]]
 
 local DataStorage = require("datastorage")
@@ -27,20 +29,21 @@ function Store.new()
     return setmetatable({ settings = settings }, Store)
 end
 
-local function libraryKey(source_path, manga_key)
-    return source_path .. "|" .. manga_key
+local function libraryKey(source_key, manga_key)
+    return source_key .. "|" .. manga_key
 end
 
 -- ===== Library (bookmarked manga) =====
 
-function Store:isBookmarked(source_path, manga_key)
+function Store:isBookmarked(source_key, manga_key)
     local library = self.settings:readSetting("library", {})
-    return library[libraryKey(source_path, manga_key)] ~= nil
+    return library[libraryKey(source_key, manga_key)] ~= nil
 end
 
-function Store:addBookmark(source_path, manga_key, title, cover)
+function Store:addBookmark(source_key, source_path, manga_key, title, cover)
     local library = self.settings:readSetting("library", {})
-    library[libraryKey(source_path, manga_key)] = {
+    library[libraryKey(source_key, manga_key)] = {
+        source_key = source_key,
         source_path = source_path,
         manga_key = manga_key,
         title = title,
@@ -50,9 +53,9 @@ function Store:addBookmark(source_path, manga_key, title, cover)
     self.settings:flush()
 end
 
-function Store:removeBookmark(source_path, manga_key)
+function Store:removeBookmark(source_key, manga_key)
     local library = self.settings:readSetting("library", {})
-    library[libraryKey(source_path, manga_key)] = nil
+    library[libraryKey(source_key, manga_key)] = nil
     self.settings:flush()
 end
 

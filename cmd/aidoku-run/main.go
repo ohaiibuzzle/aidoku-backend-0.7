@@ -48,12 +48,24 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: aidoku-run <source-dir> [command] [args...]
 
 commands:
+  manifest                          print {"key","name","version","languages"} straight from
+                                     source.json, without loading main.wasm -- much cheaper than
+                                     info/search/etc. for callers that only need a source's
+                                     identity and display name (e.g. listing installed sources)
   info                              print source metadata and detected features (default)
-  search <query> [page]             call get_search_manga_list
+  search <query> [page] [filters.json]
+                                     call get_search_manga_list; filters.json, if given, is a JSON array
+                                     of filter selections (see models.FilterValue's MarshalJSON)
   home                              call get_home
   listings                          list static + dynamic listings
   filters                           list static + dynamic filters
   settings                          list static + dynamic settings
+  settings get <key>                print the current value of one setting (its stored override, or
+                                     its manifest default, or null if neither exists)
+  settings set <key> <type> <value...>
+                                     store a setting value; type is one of toggle/select/text/multiselect
+                                     (toggle takes one true/false value, select/text join every value
+                                     with a space, multiselect takes each value as one selection)
   manga <key>                       call get_manga_update (details + chapters)
   pages <manga-key> <chapter-key>   call get_manga_update then get_page_list for the matching chapter
   download <manga-key> <chapter-key> [output.cbz] [downloads-index-dir]
@@ -68,14 +80,26 @@ commands:
 Cookies stored with `+"`cookie load`"+` are injected into a source's requests
 for the matching domain on every command, helping get past Cloudflare.
 
+AIDOKU_SETTINGS_DIR, if set, persists settings under <dir>/settings.json
+instead of a shared temp file, so values set with `+"`settings set`"+` survive
+across invocations and processes -- set this to a real per-install directory
+for anything other than one-off CLI testing.
+
 The <source-dir> argument is required but ignored by the `+"`cookie`"+` and `+"`repo`"+`
-subcommands, which don't operate on a loaded source.`)
+subcommands, which don't operate on a loaded source. `+"`manifest`"+` does use it, but
+reads source.json directly rather than loading the source.`)
 }
 
 func run(dir, command string, args []string) error {
 	ctx := context.Background()
 
 	settingsPath := filepath.Join(os.TempDir(), "aidoku-run-settings.json")
+	if dir := os.Getenv("AIDOKU_SETTINGS_DIR"); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("creating settings dir: %w", err)
+		}
+		settingsPath = filepath.Join(dir, "settings.json")
+	}
 	settings, err := settingsstore.Open(settingsPath)
 	if err != nil {
 		return fmt.Errorf("opening settings store: %w", err)
@@ -91,6 +115,9 @@ func run(dir, command string, args []string) error {
 	}
 	if command == "repo" {
 		return handleRepo(ctx, args)
+	}
+	if command == "manifest" {
+		return handleManifest(dir)
 	}
 
 	src, err := source.LoadPath(ctx, dir, runtime.Config{
@@ -129,14 +156,24 @@ func run(dir, command string, args []string) error {
 
 	case "search":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: search <query> [page]")
+			return fmt.Errorf("usage: search <query> [page] [filters.json]")
 		}
 		page := 1
-		if len(args) > 1 {
+		if len(args) > 1 && args[1] != "" {
 			fmt.Sscanf(args[1], "%d", &page)
 		}
 		query := args[0]
-		result, err := src.GetSearchMangaList(ctx, &query, page, nil)
+		var filters []models.FilterValue
+		if len(args) > 2 && args[2] != "" {
+			data, err := os.ReadFile(args[2])
+			if err != nil {
+				return fmt.Errorf("reading filters file: %w", err)
+			}
+			if err := json.Unmarshal(data, &filters); err != nil {
+				return fmt.Errorf("parsing filters file: %w", err)
+			}
+		}
+		result, err := src.GetSearchMangaList(ctx, &query, page, filters)
 		if err != nil {
 			return err
 		}
@@ -164,11 +201,53 @@ func run(dir, command string, args []string) error {
 		return printJSON(result)
 
 	case "settings":
-		result, err := src.GetSettings(ctx)
-		if err != nil {
-			return err
+		if len(args) == 0 {
+			result, err := src.GetSettings(ctx)
+			if err != nil {
+				return err
+			}
+			return printJSON(result)
 		}
-		return printJSON(result)
+		switch args[0] {
+		case "get":
+			if len(args) < 2 {
+				return fmt.Errorf("usage: settings get <key>")
+			}
+			return printJSON(map[string]any{"value": settings.Object(src.Key + "." + args[1])})
+		case "set":
+			if len(args) < 3 {
+				return fmt.Errorf("usage: settings set <key> <type> <value...>")
+			}
+			key := src.Key + "." + args[1]
+			settingType := args[2]
+			rest := args[3:]
+			var value any
+			switch settingType {
+			case "toggle":
+				if len(rest) < 1 {
+					return fmt.Errorf("usage: settings set <key> toggle <true|false>")
+				}
+				value = rest[0] == "true"
+			case "select", "text":
+				value = strings.Join(rest, " ")
+			case "multiselect":
+				value = rest
+			default:
+				return fmt.Errorf("unsupported setting type %q (want toggle/select/text/multiselect)", settingType)
+			}
+			if err := settings.SetValue(key, value); err != nil {
+				return fmt.Errorf("setting value: %w", err)
+			}
+			// Every other successful command prints something to stdout
+			// (a JSON body, or at least a path), which is how
+			// subprocess.lua's Runner:exec tells success from failure --
+			// empty trimmed output is treated as an error there. Printing
+			// nothing here would misreport a successful set as failed.
+			fmt.Println("ok")
+			return nil
+		default:
+			return fmt.Errorf("unknown settings command %q (want get/set, or no args to list)", args[0])
+		}
 
 	case "manga":
 		if len(args) < 1 {
@@ -242,7 +321,7 @@ func run(dir, command string, args []string) error {
 		// a caller could otherwise do has a window for exactly that kind of
 		// inconsistency.
 		if len(args) > 3 && args[3] != "" {
-			if err := recordDownload(args[3], dir, *updated, *chapter, path); err != nil {
+			if err := recordDownload(args[3], src.Key, dir, *updated, *chapter, path); err != nil {
 				return fmt.Errorf("recording download: %w", err)
 			}
 		}
@@ -256,15 +335,17 @@ func run(dir, command string, args []string) error {
 }
 
 // recordDownload indexes a just-written CBZ into the downloads index at
-// downloadsDir. sourcePath identifies the source the same way it's already
-// used elsewhere (the loaded source's own path/directory).
-func recordDownload(downloadsDir, sourcePath string, manga models.Manga, chapter models.Chapter, path string) error {
+// downloadsDir. sourceKey is the source's stable manifest ID (survives a
+// source update renaming its installed file, unlike sourcePath -- see the
+// downloads package doc); sourcePath is the loaded source's own
+// path/directory, kept only as a display/debugging hint.
+func recordDownload(downloadsDir, sourceKey, sourcePath string, manga models.Manga, chapter models.Chapter, path string) error {
 	store, err := downloads.Open(downloadsDir)
 	if err != nil {
 		return fmt.Errorf("opening downloads index: %w", err)
 	}
 	defer store.Close()
-	_, err = store.Record(sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter))
+	_, err = store.Record(sourceKey, sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter))
 	return err
 }
 
@@ -386,6 +467,23 @@ func cookieEntriesContainName(entries []cookieEntry, name string) bool {
 		}
 	}
 	return false
+}
+
+// handleManifest serves the "manifest" command, reading dir's source.json
+// directly instead of going through source.LoadPath -- deliberately not
+// loading main.wasm at all, so this is cheap enough to call once per
+// installed source on every listing (see source.ReadManifest).
+func handleManifest(dir string) error {
+	info, err := source.ReadManifest(dir)
+	if err != nil {
+		return err
+	}
+	return printJSON(map[string]any{
+		"key":       info.Key,
+		"name":      info.Name,
+		"version":   info.Version,
+		"languages": info.Languages,
+	})
 }
 
 func handleRepo(ctx context.Context, args []string) error {

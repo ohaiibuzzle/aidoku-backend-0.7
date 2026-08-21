@@ -1,6 +1,7 @@
 package downloads
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,11 +25,11 @@ func TestRecordAndPath(t *testing.T) {
 	defer s.Close()
 
 	file := writeFile(t, dir, "ch1.cbz", 1024)
-	if _, err := s.Record("src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 
-	got, err := s.Path("src.aix", "manga1", "ch1")
+	got, err := s.Path("src.key", "manga1", "ch1")
 	if err != nil {
 		t.Fatalf("Path: %v", err)
 	}
@@ -36,7 +37,7 @@ func TestRecordAndPath(t *testing.T) {
 		t.Errorf("Path = %q, want %q", got, file)
 	}
 
-	if got, err := s.Path("src.aix", "manga1", "missing"); err != nil || got != "" {
+	if got, err := s.Path("src.key", "manga1", "missing"); err != nil || got != "" {
 		t.Errorf("Path(missing) = %q, %v, want \"\", nil", got, err)
 	}
 }
@@ -50,7 +51,7 @@ func TestByPath(t *testing.T) {
 	defer s.Close()
 
 	file := writeFile(t, dir, "ch1.cbz", 512)
-	if _, err := s.Record("src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 
@@ -76,11 +77,11 @@ func TestRecordReplacesExisting(t *testing.T) {
 	defer s.Close()
 
 	file1 := writeFile(t, dir, "ch1-v1.cbz", 100)
-	if _, err := s.Record("src.aix", "manga1", "ch1", file1, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file1, "Manga", "Chapter 1"); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	file2 := writeFile(t, dir, "ch1-v2.cbz", 200)
-	if _, err := s.Record("src.aix", "manga1", "ch1", file2, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file2, "Manga", "Chapter 1"); err != nil {
 		t.Fatalf("Record (replace): %v", err)
 	}
 
@@ -105,21 +106,21 @@ func TestRemove(t *testing.T) {
 	defer s.Close()
 
 	file := writeFile(t, dir, "ch1.cbz", 100)
-	if _, err := s.Record("src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if err := s.Remove("src.aix", "manga1", "ch1"); err != nil {
+	if err := s.Remove("src.key", "manga1", "ch1"); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Errorf("file still exists after Remove: err=%v", err)
 	}
-	if got, err := s.Path("src.aix", "manga1", "ch1"); err != nil || got != "" {
+	if got, err := s.Path("src.key", "manga1", "ch1"); err != nil || got != "" {
 		t.Errorf("Path after Remove = %q, %v, want \"\", nil", got, err)
 	}
 
 	// Removing an already-absent entry should be a no-op, not an error.
-	if err := s.Remove("src.aix", "manga1", "ch1"); err != nil {
+	if err := s.Remove("src.key", "manga1", "ch1"); err != nil {
 		t.Errorf("Remove (already gone): %v", err)
 	}
 }
@@ -144,7 +145,7 @@ func TestTotalBytesAndPrune(t *testing.T) {
 	for i, size := range sizes {
 		key := "ch" + string(rune('1'+i))
 		file := writeFile(t, dir, key+".cbz", size)
-		if _, err := s.Record("src.aix", "manga1", key, file, "Manga", "Chapter"); err != nil {
+		if _, err := s.Record("src.key", "src.aix", "manga1", key, file, "Manga", "Chapter"); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 		if _, err := s.db.Exec(`UPDATE downloads SET downloaded_at = ? WHERE chapter_key = ?`, i, key); err != nil {
@@ -183,5 +184,138 @@ func TestTotalBytesAndPrune(t *testing.T) {
 	// value tested above.
 	if removed, err := s.Prune(0); err != nil || removed != nil {
 		t.Errorf("Prune(0) = %+v, %v, want nil, nil", removed, err)
+	}
+}
+
+// TestMigrateToSourceKey simulates opening a database created by a version
+// of this package before source_key existed (source_path was the primary
+// key), and checks that Open transparently upgrades it in place: every
+// existing row keeps resolving under its old source_path value (now
+// standing in as its source_key too, since nothing on disk records what
+// the real key was), and newly recorded rows use a real source_key from
+// there on.
+func TestMigrateToSourceKey(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "index.db"))
+	if err != nil {
+		t.Fatalf("opening raw db: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE downloads (
+			source_path   TEXT NOT NULL,
+			manga_key     TEXT NOT NULL,
+			chapter_key   TEXT NOT NULL,
+			path          TEXT NOT NULL,
+			manga_title   TEXT NOT NULL,
+			chapter_title TEXT NOT NULL,
+			size_bytes    INTEGER NOT NULL,
+			downloaded_at INTEGER NOT NULL,
+			PRIMARY KEY (source_path, manga_key, chapter_key)
+		)
+	`); err != nil {
+		t.Fatalf("seeding pre-migration schema: %v", err)
+	}
+	file := writeFile(t, dir, "ch1.cbz", 1024)
+	if _, err := db.Exec(`INSERT INTO downloads VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"en.weebcentral-v7.aix", "manga1", "ch1", file, "Manga", "Chapter 1", 1024, 1000); err != nil {
+		t.Fatalf("seeding pre-migration row: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("closing raw db: %v", err)
+	}
+
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open (migrating): %v", err)
+	}
+	defer s.Close()
+
+	got, err := s.Path("en.weebcentral-v7.aix", "manga1", "ch1")
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	if got != file {
+		t.Errorf("Path after migration = %q, want %q", got, file)
+	}
+	entries, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 1 || entries[0].SourceKey != "en.weebcentral-v7.aix" || entries[0].SourcePath != "en.weebcentral-v7.aix" {
+		t.Errorf("List after migration = %+v", entries)
+	}
+
+	// A fresh record after migration uses the real, distinct source_key.
+	file2 := writeFile(t, dir, "ch2.cbz", 512)
+	if _, err := s.Record("en.weebcentral", "en.weebcentral-v8.aix", "manga1", "ch2", file2, "Manga", "Chapter 2"); err != nil {
+		t.Fatalf("Record after migration: %v", err)
+	}
+	if got, err := s.Path("en.weebcentral", "manga1", "ch2"); err != nil || got != file2 {
+		t.Errorf("Path(new key) = %q, %v, want %q, nil", got, err, file2)
+	}
+
+	// Opening an already-migrated database again must be a no-op, not
+	// error out or re-run the migration.
+	if err := s.Close(); err != nil {
+		t.Fatalf("closing: %v", err)
+	}
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatalf("re-Open after migration: %v", err)
+	}
+	defer s2.Close()
+	if entries, err := s2.List(); err != nil || len(entries) != 2 {
+		t.Errorf("List after re-Open = %+v, %v, want 2 entries", entries, err)
+	}
+}
+
+// TestReassociate covers the manual repair path: relinking every entry
+// under an old source_key (e.g. a source's file got renamed by an update
+// installed before this package's automatic handling existed) to the
+// source's current key, including the case where the new key already has
+// a conflicting entry for the same (manga, chapter).
+func TestReassociate(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	file1 := writeFile(t, dir, "ch1.cbz", 100)
+	if _, err := s.Record("old.key", "old.aix", "manga1", "ch1", file1, "Manga", "Chapter 1"); err != nil {
+		t.Fatalf("Record ch1: %v", err)
+	}
+	// ch2 exists under both the old and new key -- the new key's version
+	// should win, and the old one should just be dropped rather than
+	// erroring out on the primary-key conflict.
+	fileOld2 := writeFile(t, dir, "ch2-old.cbz", 50)
+	if _, err := s.Record("old.key", "old.aix", "manga1", "ch2", fileOld2, "Manga", "Chapter 2"); err != nil {
+		t.Fatalf("Record ch2 (old): %v", err)
+	}
+	fileNew2 := writeFile(t, dir, "ch2-new.cbz", 60)
+	if _, err := s.Record("new.key", "new.aix", "manga1", "ch2", fileNew2, "Manga", "Chapter 2"); err != nil {
+		t.Fatalf("Record ch2 (new): %v", err)
+	}
+
+	n, err := s.Reassociate("old.key", "new.key")
+	if err != nil {
+		t.Fatalf("Reassociate: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("Reassociate returned %d, want 1 (only ch1 should move)", n)
+	}
+
+	if got, err := s.Path("new.key", "manga1", "ch1"); err != nil || got != file1 {
+		t.Errorf("Path(new.key, ch1) = %q, %v, want %q, nil", got, err, file1)
+	}
+	if got, err := s.Path("old.key", "manga1", "ch1"); err != nil || got != "" {
+		t.Errorf("Path(old.key, ch1) = %q, %v, want \"\", nil", got, err)
+	}
+	if got, err := s.Path("new.key", "manga1", "ch2"); err != nil || got != fileNew2 {
+		t.Errorf("Path(new.key, ch2) = %q, %v, want the new-key version %q", got, err, fileNew2)
+	}
+	if got, err := s.Path("old.key", "manga1", "ch2"); err != nil || got != "" {
+		t.Errorf("Path(old.key, ch2) = %q, %v, want \"\" (dropped, not moved)", got, err)
 	}
 }

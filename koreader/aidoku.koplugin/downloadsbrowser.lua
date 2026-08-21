@@ -80,7 +80,7 @@ function DownloadsBrowser:onMenuHold(item)
         ok_text = _("Remove"),
         ok_callback = function()
             Trapper:wrap(function()
-                self.downloads_engine:remove(entry.sourcePath, entry.mangaKey, entry.chapterKey)
+                self.downloads_engine:remove(entry.sourceKey, entry.mangaKey, entry.chapterKey)
                 self:loadAndRefresh()
             end)
         end,

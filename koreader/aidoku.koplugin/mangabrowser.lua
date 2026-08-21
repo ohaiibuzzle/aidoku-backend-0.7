@@ -4,6 +4,15 @@ returns details + chapters together), lets the user flip chapter sort order
 via a title bar button, and downloads a chapter as a CBZ (skipping the
 network entirely if it's already downloaded) then opens it. Bookmarking a
 manga to the library happens from searchbrowser.lua's result list, not here.
+
+Requires both source_path (the installed .aix's path, used for every
+content operation -- search/mangaUpdate/download) and source_key (the
+source's stable manifest ID, used for every downloads-index operation --
+see the downloads Go package doc for why those are kept separate). Callers
+that only have one of the two (e.g. librarybrowser.lua's bookmark entries,
+which store source_key and must re-resolve source_path via
+installedsources.lua's findByKey before opening this) must resolve the
+other first.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
@@ -136,7 +145,7 @@ function MangaBrowser:reloadDownloadedKeys()
         return
     end
     for _, entry in ipairs(all) do
-        if entry.sourcePath == self.source_path and entry.mangaKey == self.manga.Key then
+        if entry.sourceKey == self.source_key and entry.mangaKey == self.manga.Key then
             self.downloaded_keys[entry.chapterKey] = entry.path
         end
     end
@@ -263,7 +272,7 @@ function MangaBrowser:onMenuHold(item)
                 callback = function()
                     UIManager:close(dialog)
                     Trapper:wrap(function()
-                        self.downloads_engine:remove(self.source_path, self.manga.Key, item.chapter.Key)
+                        self.downloads_engine:remove(self.source_key, self.manga.Key, item.chapter.Key)
                         self.downloaded_keys[item.chapter.Key] = nil
                         self:downloadAndOpen(item.chapter)
                     end)
@@ -274,7 +283,7 @@ function MangaBrowser:onMenuHold(item)
                 callback = function()
                     UIManager:close(dialog)
                     Trapper:wrap(function()
-                        self.downloads_engine:remove(self.source_path, self.manga.Key, item.chapter.Key)
+                        self.downloads_engine:remove(self.source_key, self.manga.Key, item.chapter.Key)
                         self.downloaded_keys[item.chapter.Key] = nil
                         self:refresh()
                     end)

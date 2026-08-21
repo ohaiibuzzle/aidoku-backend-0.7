@@ -9,6 +9,7 @@ the next chapter in reading order (see chapterorder.lua).
 local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
+local InstalledSources = require("installedsources")
 local NetworkMgr = require("ui/network/manager")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
@@ -36,8 +37,8 @@ local function chapterLabel(chapter)
 end
 
 -- handle is called from Aidoku:onEndOfBook() with:
---   engine, downloads_engine, store, downloads_dir -- same as elsewhere in
---   the plugin
+--   engine, downloads_engine, store, downloads_dir, sources_dir -- same as
+--   elsewhere in the plugin
 --   file_path -- the document that just ended
 --   open_callback(path) -- how to actually switch the reader to a new file
 -- Returns true if file_path was one of ours and this took over (so the
@@ -68,7 +69,17 @@ function NextChapter.handle(ctx, file_path)
                 return
             end
 
-            local updated, err = ctx.engine:mangaUpdate(entry.sourcePath, entry.mangaKey)
+            -- entry.sourcePath is only a stale hint (see the downloads Go
+            -- package doc) -- resolve the source's current installed path
+            -- from its key before using it to load the source.
+            local found = InstalledSources.findByKey(ctx.sources_dir, ctx.engine, entry.sourceKey)
+            if not found then
+                UIManager:show(InfoMessage:new{ text = _("Could not check for next chapter: this source is no longer installed.") })
+                return
+            end
+            local source_path = found.path
+
+            local updated, err = ctx.engine:mangaUpdate(source_path, entry.mangaKey)
             if not updated then
                 UIManager:show(InfoMessage:new{ text = T(_("Could not check for next chapter:\n%1"), err) })
                 return
@@ -82,7 +93,7 @@ function NextChapter.handle(ctx, file_path)
             end
 
             local function fetchAndOpen()
-                local existing = ctx.downloads_engine:path(entry.sourcePath, entry.mangaKey, next_chapter.Key)
+                local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
                 if existing ~= "" then
                     ctx.open_callback(existing)
                     return
@@ -90,7 +101,7 @@ function NextChapter.handle(ctx, file_path)
                 local filename = util.getSafeFilename(
                     mangaLabel(updated) .. " - " .. chapterLabel(next_chapter) .. ".cbz", ctx.downloads_dir)
                 local out_path = ctx.downloads_dir .. "/" .. filename
-                local path, dl_err = ctx.engine:download(entry.sourcePath, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir)
+                local path, dl_err = ctx.engine:download(source_path, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir)
                 if not path then
                     UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
                     return

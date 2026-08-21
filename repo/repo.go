@@ -95,8 +95,13 @@ func resolve(base *url.URL, ref string) string {
 
 // Install fetches the repository index at indexURL, downloads the .aix for
 // sourceID, and saves it into destDir as "<id>-v<version>.aix" (the naming
-// convention Aidoku's own build tooling uses). It returns the path to the
-// downloaded file.
+// convention Aidoku's own build tooling uses). Any other "<id>-v*.aix"
+// already in destDir (an older version of the same source) is removed
+// afterward, so updating a source replaces it in place instead of
+// accumulating both versions side by side -- which would otherwise leave
+// two installed entries for what the user thinks of as one source, and
+// silently strand anything (library bookmarks, downloaded chapters) still
+// keyed to the old file's path. It returns the path to the downloaded file.
 func Install(ctx context.Context, indexURL, sourceID, destDir string) (string, error) {
 	idx, err := FetchIndex(ctx, indexURL)
 	if err != nil {
@@ -109,7 +114,28 @@ func Install(ctx context.Context, indexURL, sourceID, destDir string) (string, e
 	if src.DownloadURL == "" {
 		return "", fmt.Errorf("repo: source %q has no downloadURL", sourceID)
 	}
-	return download(ctx, src.DownloadURL, destDir, fmt.Sprintf("%s-v%d.aix", src.ID, src.Version))
+	name := fmt.Sprintf("%s-v%d.aix", src.ID, src.Version)
+	path, err := download(ctx, src.DownloadURL, destDir, name)
+	if err != nil {
+		return "", err
+	}
+	removeOtherVersions(destDir, src.ID, name)
+	return path, nil
+}
+
+// removeOtherVersions deletes every "<id>-v*.aix" in dir except keepName,
+// best-effort (a removal failure is ignored rather than failing the
+// install that already succeeded).
+func removeOtherVersions(dir, id, keepName string) {
+	matches, err := filepath.Glob(filepath.Join(dir, id+"-v*.aix"))
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		if filepath.Base(m) != keepName {
+			_ = os.Remove(m)
+		}
+	}
 }
 
 // download streams the body of url into destDir/name, returning the

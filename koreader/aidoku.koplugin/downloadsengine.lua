@@ -36,9 +36,12 @@ function DownloadsEngine:isAvailable()
 end
 
 -- path returns the local CBZ path for a chapter, or "" if not downloaded.
-function DownloadsEngine:path(source_path, manga_key, chapter_key)
+-- source_key is the source's stable manifest ID (e.g. "en.weebcentral"),
+-- not its installed file's path -- see the downloads Go package doc for
+-- why entries are keyed by that instead.
+function DownloadsEngine:path(source_key, manga_key, chapter_key)
     local result, err = self.runner:execJSON(
-        { self.downloads_dir, "path", source_path, manga_key, chapter_key }, false)
+        { self.downloads_dir, "path", source_key, manga_key, chapter_key }, false)
     if not result then
         return "", err
     end
@@ -60,9 +63,22 @@ function DownloadsEngine:byPath(file_path)
 end
 
 -- remove deletes both the index entry and its backing file (a no-op, not
--- an error, if it doesn't exist).
-function DownloadsEngine:remove(source_path, manga_key, chapter_key)
-    return self.runner:exec({ self.downloads_dir, "remove", source_path, manga_key, chapter_key }, false)
+-- an error, if it doesn't exist). source_key: see path() above.
+function DownloadsEngine:remove(source_key, manga_key, chapter_key)
+    return self.runner:exec({ self.downloads_dir, "remove", source_key, manga_key, chapter_key }, false)
+end
+
+-- reassociate repoints every downloaded-chapter entry under old_source_key
+-- to new_source_key -- a manual repair for entries a source rename/update
+-- left orphaned (see the downloads Go package doc). Returns how many
+-- entries were moved.
+function DownloadsEngine:reassociate(old_source_key, new_source_key)
+    local result, err = self.runner:execJSON(
+        { self.downloads_dir, "reassociate", old_source_key, new_source_key }, false)
+    if not result then
+        return 0, err
+    end
+    return result.reassociated or 0
 end
 
 -- list returns every downloaded chapter, most recently downloaded first.
