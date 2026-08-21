@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
+	"github.com/ohaiibuzzle/aidokurunner-go/repo"
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime"
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime/host"
 	"github.com/ohaiibuzzle/aidokurunner-go/settingsstore"
@@ -58,8 +59,14 @@ commands:
                                      download every page of a chapter and combine them into a CBZ archive
   cookie load <cookies.txt>          load cookies from a Netscape cookies.txt file (cf_clearance etc.)
   cookie list                        show stored cookie domains
+  repo list <index-url>              fetch a source-repository index (index.min.json) and list its sources
+  repo install <index-url> <source-id> <dest-dir>
+                                     download a source's .aix from a repository index into dest-dir
 Cookies stored with `+"`cookie load`"+` are injected into a source's requests
-for the matching domain on every command, helping get past Cloudflare.`)
+for the matching domain on every command, helping get past Cloudflare.
+
+The <source-dir> argument is required but ignored by the `+"`cookie`"+` and `+"`repo`"+`
+subcommands, which don't operate on a loaded source.`)
 }
 
 func run(dir, command string, args []string) error {
@@ -78,6 +85,9 @@ func run(dir, command string, args []string) error {
 	// dispatch).
 	if command == "cookie" {
 		return handleCookie(cookiePath, args)
+	}
+	if command == "repo" {
+		return handleRepo(ctx, args)
 	}
 
 	src, err := source.LoadPath(ctx, dir, runtime.Config{
@@ -349,6 +359,37 @@ func cookieEntriesContainName(entries []cookieEntry, name string) bool {
 		}
 	}
 	return false
+}
+
+func handleRepo(ctx context.Context, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: repo list <index-url> | repo install <index-url> <source-id> <dest-dir>")
+	}
+	switch args[0] {
+	case "list":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: repo list <index-url>")
+		}
+		idx, err := repo.FetchIndex(ctx, args[1])
+		if err != nil {
+			return err
+		}
+		return printJSON(idx)
+
+	case "install":
+		if len(args) < 4 {
+			return fmt.Errorf("usage: repo install <index-url> <source-id> <dest-dir>")
+		}
+		path, err := repo.Install(ctx, args[1], args[2], args[3])
+		if err != nil {
+			return err
+		}
+		fmt.Println(path)
+		return nil
+
+	default:
+		return fmt.Errorf("unknown repo command %q", args[0])
+	}
 }
 
 func handleCookie(path string, args []string) error {
