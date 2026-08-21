@@ -25,7 +25,7 @@ func TestRecordAndPath(t *testing.T) {
 	defer s.Close()
 
 	file := writeFile(t, dir, "ch1.cbz", 1024)
-	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1", nil, nil); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 
@@ -51,7 +51,7 @@ func TestByPath(t *testing.T) {
 	defer s.Close()
 
 	file := writeFile(t, dir, "ch1.cbz", 512)
-	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1", nil, nil); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 
@@ -77,11 +77,11 @@ func TestRecordReplacesExisting(t *testing.T) {
 	defer s.Close()
 
 	file1 := writeFile(t, dir, "ch1-v1.cbz", 100)
-	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file1, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file1, "Manga", "Chapter 1", nil, nil); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	file2 := writeFile(t, dir, "ch1-v2.cbz", 200)
-	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file2, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file2, "Manga", "Chapter 1", nil, nil); err != nil {
 		t.Fatalf("Record (replace): %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestRemove(t *testing.T) {
 	defer s.Close()
 
 	file := writeFile(t, dir, "ch1.cbz", 100)
-	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1", nil, nil); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	if err := s.Remove("src.key", "manga1", "ch1"); err != nil {
@@ -145,7 +145,7 @@ func TestTotalBytesAndPrune(t *testing.T) {
 	for i, size := range sizes {
 		key := "ch" + string(rune('1'+i))
 		file := writeFile(t, dir, key+".cbz", size)
-		if _, err := s.Record("src.key", "src.aix", "manga1", key, file, "Manga", "Chapter"); err != nil {
+		if _, err := s.Record("src.key", "src.aix", "manga1", key, file, "Manga", "Chapter", nil, nil); err != nil {
 			t.Fatalf("Record: %v", err)
 		}
 		if _, err := s.db.Exec(`UPDATE downloads SET downloaded_at = ? WHERE chapter_key = ?`, i, key); err != nil {
@@ -247,7 +247,7 @@ func TestMigrateToSourceKey(t *testing.T) {
 
 	// A fresh record after migration uses the real, distinct source_key.
 	file2 := writeFile(t, dir, "ch2.cbz", 512)
-	if _, err := s.Record("en.weebcentral", "en.weebcentral-v8.aix", "manga1", "ch2", file2, "Manga", "Chapter 2"); err != nil {
+	if _, err := s.Record("en.weebcentral", "en.weebcentral-v8.aix", "manga1", "ch2", file2, "Manga", "Chapter 2", nil, nil); err != nil {
 		t.Fatalf("Record after migration: %v", err)
 	}
 	if got, err := s.Path("en.weebcentral", "manga1", "ch2"); err != nil || got != file2 {
@@ -269,6 +269,124 @@ func TestMigrateToSourceKey(t *testing.T) {
 	}
 }
 
+// TestChapterOrdering covers ChapterNumber/VolumeNumber round-tripping
+// through Record/List/ByPath, including the nil ("source didn't report
+// one") case -- these are needed offline to reproduce reading order from
+// the index alone, without a network chapter-list fetch.
+func TestChapterOrdering(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	chNum := float32(4.5)
+	volNum := float32(2)
+	file1 := writeFile(t, dir, "ch1.cbz", 100)
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file1, "Manga", "Chapter 4.5", &chNum, &volNum); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	file2 := writeFile(t, dir, "ch2.cbz", 100)
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch2", file2, "Manga", "Chapter ?", nil, nil); err != nil {
+		t.Fatalf("Record (no chapter number): %v", err)
+	}
+
+	entry, err := s.ByPath(file1)
+	if err != nil {
+		t.Fatalf("ByPath: %v", err)
+	}
+	if entry == nil || entry.ChapterNumber == nil || *entry.ChapterNumber != chNum {
+		t.Errorf("ByPath(file1).ChapterNumber = %+v, want %v", entry, chNum)
+	}
+	if entry.VolumeNumber == nil || *entry.VolumeNumber != volNum {
+		t.Errorf("ByPath(file1).VolumeNumber = %+v, want %v", entry, volNum)
+	}
+
+	entries, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	var got1, got2 *Entry
+	for i := range entries {
+		switch entries[i].ChapterKey {
+		case "ch1":
+			got1 = &entries[i]
+		case "ch2":
+			got2 = &entries[i]
+		}
+	}
+	if got1 == nil || got1.ChapterNumber == nil || *got1.ChapterNumber != chNum {
+		t.Errorf("List ch1.ChapterNumber = %+v, want %v", got1, chNum)
+	}
+	if got2 == nil || got2.ChapterNumber != nil {
+		t.Errorf("List ch2.ChapterNumber = %+v, want nil", got2)
+	}
+}
+
+// TestMigrateAddChapterOrdering simulates opening a database created before
+// chapter_number/volume_number existed (post-source_key, pre-ordering) and
+// checks Open adds the columns in place without erroring or losing existing
+// rows, and that re-opening an already-migrated database is a no-op.
+func TestMigrateAddChapterOrdering(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "index.db"))
+	if err != nil {
+		t.Fatalf("opening raw db: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE downloads (
+			source_key    TEXT NOT NULL,
+			manga_key     TEXT NOT NULL,
+			chapter_key   TEXT NOT NULL,
+			source_path   TEXT NOT NULL,
+			path          TEXT NOT NULL,
+			manga_title   TEXT NOT NULL,
+			chapter_title TEXT NOT NULL,
+			size_bytes    INTEGER NOT NULL,
+			downloaded_at INTEGER NOT NULL,
+			PRIMARY KEY (source_key, manga_key, chapter_key)
+		)
+	`); err != nil {
+		t.Fatalf("seeding pre-ordering schema: %v", err)
+	}
+	file := writeFile(t, dir, "ch1.cbz", 1024)
+	if _, err := db.Exec(`INSERT INTO downloads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"src.key", "manga1", "ch1", "src.aix", file, "Manga", "Chapter 1", 1024, 1000); err != nil {
+		t.Fatalf("seeding pre-ordering row: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("closing raw db: %v", err)
+	}
+
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open (migrating): %v", err)
+	}
+	defer s.Close()
+
+	entries, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 1 || entries[0].ChapterKey != "ch1" || entries[0].ChapterNumber != nil {
+		t.Errorf("List after migration = %+v, want 1 entry with nil ChapterNumber", entries)
+	}
+
+	// Opening an already-migrated database again must be a no-op.
+	if err := s.Close(); err != nil {
+		t.Fatalf("closing: %v", err)
+	}
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatalf("re-Open after migration: %v", err)
+	}
+	defer s2.Close()
+	if entries, err := s2.List(); err != nil || len(entries) != 1 {
+		t.Errorf("List after re-Open = %+v, %v, want 1 entry", entries, err)
+	}
+}
+
 // TestReassociate covers the manual repair path: relinking every entry
 // under an old source_key (e.g. a source's file got renamed by an update
 // installed before this package's automatic handling existed) to the
@@ -283,18 +401,18 @@ func TestReassociate(t *testing.T) {
 	defer s.Close()
 
 	file1 := writeFile(t, dir, "ch1.cbz", 100)
-	if _, err := s.Record("old.key", "old.aix", "manga1", "ch1", file1, "Manga", "Chapter 1"); err != nil {
+	if _, err := s.Record("old.key", "old.aix", "manga1", "ch1", file1, "Manga", "Chapter 1", nil, nil); err != nil {
 		t.Fatalf("Record ch1: %v", err)
 	}
 	// ch2 exists under both the old and new key -- the new key's version
 	// should win, and the old one should just be dropped rather than
 	// erroring out on the primary-key conflict.
 	fileOld2 := writeFile(t, dir, "ch2-old.cbz", 50)
-	if _, err := s.Record("old.key", "old.aix", "manga1", "ch2", fileOld2, "Manga", "Chapter 2"); err != nil {
+	if _, err := s.Record("old.key", "old.aix", "manga1", "ch2", fileOld2, "Manga", "Chapter 2", nil, nil); err != nil {
 		t.Fatalf("Record ch2 (old): %v", err)
 	}
 	fileNew2 := writeFile(t, dir, "ch2-new.cbz", 60)
-	if _, err := s.Record("new.key", "new.aix", "manga1", "ch2", fileNew2, "Manga", "Chapter 2"); err != nil {
+	if _, err := s.Record("new.key", "new.aix", "manga1", "ch2", fileNew2, "Manga", "Chapter 2", nil, nil); err != nil {
 		t.Fatalf("Record ch2 (new): %v", err)
 	}
 

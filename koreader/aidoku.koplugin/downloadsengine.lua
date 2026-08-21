@@ -13,6 +13,12 @@ downloads_dir argument) in the same process that writes the CBZ, not as a
 separate step from here -- see the comment on this in
 cmd/aidoku-downloads/main.go.
 
+One exception to "every field comes back as a zero value, never JSON null":
+an entry's chapterNumber/volumeNumber are nil-means-absent, same as the
+network chapter list's ChapterNumber -- decode them via chapterorder.lua's
+ChapterOrder.fromEntry, which already handles the
+null-decodes-as-a-function-sentinel gotcha documented in mangabrowser.lua.
+
 Calls run with an invisible progress widget (SQLite queries against a local
 file are near-instant, not worth a visible spinner), but still go through
 subprocess.lua's Runner/Trapper machinery -- see its docs for why that

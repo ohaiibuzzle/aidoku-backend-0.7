@@ -1,9 +1,13 @@
 --[[--
-Shows one manga's chapter list (fetched fresh via the "manga" command, which
-returns details + chapters together), lets the user flip chapter sort order
-via a title bar button, and downloads a chapter as a CBZ (skipping the
-network entirely if it's already downloaded) then opens it. Bookmarking a
-manga to the library happens from searchbrowser.lua's result list, not here.
+Shows one manga's chapter list, lets the user flip chapter sort order via a
+title bar button, and downloads a chapter as a CBZ (skipping the network
+entirely if it's already downloaded) then opens it. Bookmarking a manga to
+the library happens from searchbrowser.lua's result list, not here.
+
+reload() renders the local downloads index first (see the note there) and
+only opportunistically refreshes from the network's "manga" command (details
++ chapters together) when already connected, so already-downloaded chapters
+stay browsable/openable fully offline.
 
 Requires both source_path (the installed .aix's path, used for every
 content operation -- search/mangaUpdate/download) and source_key (the
@@ -16,6 +20,7 @@ other first.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
+local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
@@ -119,36 +124,58 @@ function MangaBrowser:refresh()
     self:updateItems()
 end
 
--- reloadDownloadedKeys fetches the full downloads index once and keeps
--- just this manga's entries, so per-row downloadedPath() lookups are local
--- table reads instead of one subprocess call each -- see the note on this
--- in downloadedPath().
-function MangaBrowser:reloadDownloadedKeys()
-    local all = self.downloads_engine:list()
+-- reloadDownloadedKeys fetches the full downloads index (unless a
+-- previously-fetched list is passed in, to avoid a second subprocess call
+-- when reload() already has one) and keeps just this manga's entries, so
+-- per-row downloadedPath() lookups are local table reads instead of one
+-- subprocess call each -- see the note on this in downloadedPath(). Returns
+-- the full (unfiltered) list, for callers that also need it (reload()'s
+-- offline chapter-list fallback).
+function MangaBrowser:reloadDownloadedKeys(all)
+    all = all or self.downloads_engine:list()
     self.downloaded_keys = {}
     if not all then
-        return
+        return all
     end
     for _, entry in ipairs(all) do
         if entry.sourceKey == self.source_key and entry.mangaKey == self.manga.Key then
             self.downloaded_keys[entry.chapterKey] = entry.path
         end
     end
+    return all
 end
 
+-- reload() always shows what's already downloaded first, straight from the
+-- local downloads index -- no network involved -- so this manga's
+-- downloaded chapters stay browsable/openable even fully offline. It then
+-- opportunistically refreshes from the network (fetching the real chapter
+-- list, titles, and any chapters not yet downloaded) only if already
+-- connected; if not, it skips straight past that rather than popping a
+-- "connect to network?" prompt, since the point is to let already-downloaded
+-- content just work without a network fuss.
 function MangaBrowser:reload()
-    NetworkMgr:runWhenConnected(function()
-        Trapper:wrap(function()
-            local updated, err = self.engine:mangaUpdate(self.source_path, self.manga.Key)
-            if not updated then
+    Trapper:wrap(function()
+        local all = self:reloadDownloadedKeys()
+        if #self.chapters == 0 then
+            self.chapters = ChapterOrder.fromEntries(all, self.source_key, self.manga.Key)
+        end
+        self:refresh()
+
+        if not NetworkMgr:isConnected() then
+            return
+        end
+
+        local updated, err = self.engine:mangaUpdate(self.source_path, self.manga.Key)
+        if not updated then
+            if #self.chapters == 0 then
                 UIManager:show(InfoMessage:new{ text = T(_("Could not load chapters:\n%1"), err) })
-                return
             end
-            self.manga = updated
-            self.chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
-            self:reloadDownloadedKeys()
-            self:refresh()
-        end)
+            return
+        end
+        self.manga = updated
+        self.chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
+        self:reloadDownloadedKeys()
+        self:refresh()
     end)
 end
 

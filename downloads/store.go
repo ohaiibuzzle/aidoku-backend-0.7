@@ -27,15 +27,17 @@ type Store struct {
 // most recent Record) is kept alongside purely as a display/debugging hint;
 // nothing should treat it as a stable identifier.
 type Entry struct {
-	SourceKey    string `json:"sourceKey"`
-	SourcePath   string `json:"sourcePath"`
-	MangaKey     string `json:"mangaKey"`
-	ChapterKey   string `json:"chapterKey"`
-	Path         string `json:"path"`
-	MangaTitle   string `json:"mangaTitle"`
-	ChapterTitle string `json:"chapterTitle"`
-	SizeBytes    int64  `json:"sizeBytes"`
-	DownloadedAt int64  `json:"downloadedAt"` // unix seconds
+	SourceKey     string   `json:"sourceKey"`
+	SourcePath    string   `json:"sourcePath"`
+	MangaKey      string   `json:"mangaKey"`
+	ChapterKey    string   `json:"chapterKey"`
+	Path          string   `json:"path"`
+	MangaTitle    string   `json:"mangaTitle"`
+	ChapterTitle  string   `json:"chapterTitle"`
+	SizeBytes     int64    `json:"sizeBytes"`
+	DownloadedAt  int64    `json:"downloadedAt"` // unix seconds
+	ChapterNumber *float32 `json:"chapterNumber"` // nil if the source didn't report one, same as models.Chapter
+	VolumeNumber  *float32 `json:"volumeNumber"`  // nil if the source didn't report one, same as models.Chapter
 }
 
 // Open opens (creating if needed) the downloads index database at
@@ -57,20 +59,26 @@ func Open(dir string) (*Store, error) {
 	}
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS downloads (
-			source_key    TEXT NOT NULL,
-			manga_key     TEXT NOT NULL,
-			chapter_key   TEXT NOT NULL,
-			source_path   TEXT NOT NULL,
-			path          TEXT NOT NULL,
-			manga_title   TEXT NOT NULL,
-			chapter_title TEXT NOT NULL,
-			size_bytes    INTEGER NOT NULL,
-			downloaded_at INTEGER NOT NULL,
+			source_key     TEXT NOT NULL,
+			manga_key      TEXT NOT NULL,
+			chapter_key    TEXT NOT NULL,
+			source_path    TEXT NOT NULL,
+			path           TEXT NOT NULL,
+			manga_title    TEXT NOT NULL,
+			chapter_title  TEXT NOT NULL,
+			size_bytes     INTEGER NOT NULL,
+			downloaded_at  INTEGER NOT NULL,
+			chapter_number REAL,
+			volume_number  REAL,
 			PRIMARY KEY (source_key, manga_key, chapter_key)
 		)
 	`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("downloads: creating schema: %w", err)
+	}
+	if err := s.migrateAddChapterOrdering(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("downloads: migrating schema: %w", err)
 	}
 	return s, nil
 }
@@ -160,35 +168,81 @@ func (s *Store) migrateToSourceKey() error {
 	return tx.Commit()
 }
 
+// migrateAddChapterOrdering adds the chapter_number/volume_number columns
+// (needed to reproduce reading order from the index alone, offline) to a
+// database created before they existed. Unlike migrateToSourceKey, these
+// aren't part of the primary key, so a plain ALTER TABLE ADD COLUMN suffices
+// -- no table rebuild. A no-op if the table doesn't exist yet (the preceding
+// CREATE TABLE IF NOT EXISTS already included both columns) or already has
+// them.
+func (s *Store) migrateAddChapterOrdering() error {
+	rows, err := s.db.Query(`PRAGMA table_info(downloads)`)
+	if err != nil {
+		return err
+	}
+	hasChapterNumber := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "chapter_number" {
+			hasChapterNumber = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if hasChapterNumber {
+		return nil
+	}
+
+	if _, err := s.db.Exec(`ALTER TABLE downloads ADD COLUMN chapter_number REAL`); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(`ALTER TABLE downloads ADD COLUMN volume_number REAL`); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *Store) Close() error { return s.db.Close() }
 
 // Record inserts or replaces the index entry for a downloaded chapter,
 // computing its size from the file at path. Replacing lets a re-download
 // (same source/manga/chapter, e.g. after MangaBrowser's "Re-download"
 // action) update the existing row rather than accumulate duplicates.
-func (s *Store) Record(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaTitle, chapterTitle string) (*Entry, error) {
+func (s *Store) Record(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaTitle, chapterTitle string, chapterNumber, volumeNumber *float32) (*Entry, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("downloads: stat %s: %w", path, err)
 	}
 	e := &Entry{
-		SourceKey:    sourceKey,
-		SourcePath:   sourcePath,
-		MangaKey:     mangaKey,
-		ChapterKey:   chapterKey,
-		Path:         path,
-		MangaTitle:   mangaTitle,
-		ChapterTitle: chapterTitle,
-		SizeBytes:    info.Size(),
-		DownloadedAt: time.Now().Unix(),
+		SourceKey:     sourceKey,
+		SourcePath:    sourcePath,
+		MangaKey:      mangaKey,
+		ChapterKey:    chapterKey,
+		Path:          path,
+		MangaTitle:    mangaTitle,
+		ChapterTitle:  chapterTitle,
+		SizeBytes:     info.Size(),
+		DownloadedAt:  time.Now().Unix(),
+		ChapterNumber: chapterNumber,
+		VolumeNumber:  volumeNumber,
 	}
 	_, err = s.db.Exec(`
-		INSERT INTO downloads (source_key, manga_key, chapter_key, source_path, path, manga_title, chapter_title, size_bytes, downloaded_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO downloads (source_key, manga_key, chapter_key, source_path, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (source_key, manga_key, chapter_key) DO UPDATE SET
 			source_path=excluded.source_path, path=excluded.path, manga_title=excluded.manga_title, chapter_title=excluded.chapter_title,
-			size_bytes=excluded.size_bytes, downloaded_at=excluded.downloaded_at
-	`, e.SourceKey, e.MangaKey, e.ChapterKey, e.SourcePath, e.Path, e.MangaTitle, e.ChapterTitle, e.SizeBytes, e.DownloadedAt)
+			size_bytes=excluded.size_bytes, downloaded_at=excluded.downloaded_at,
+			chapter_number=excluded.chapter_number, volume_number=excluded.volume_number
+	`, e.SourceKey, e.MangaKey, e.ChapterKey, e.SourcePath, e.Path, e.MangaTitle, e.ChapterTitle, e.SizeBytes, e.DownloadedAt, e.ChapterNumber, e.VolumeNumber)
 	if err != nil {
 		return nil, fmt.Errorf("downloads: recording: %w", err)
 	}
@@ -210,20 +264,33 @@ func (s *Store) Path(sourceKey, mangaKey, chapterKey string) (string, error) {
 	return path, nil
 }
 
+// nullFloat32 converts a nullable REAL column scan into the *float32
+// pointer-means-absent representation Entry uses (matching models.Chapter).
+func nullFloat32(n sql.NullFloat64) *float32 {
+	if !n.Valid {
+		return nil
+	}
+	v := float32(n.Float64)
+	return &v
+}
+
 // ByPath is the reverse lookup: given a local file path (e.g. the document
 // currently open in a reader), find which chapter it is. Returns nil if
 // path isn't indexed.
 func (s *Store) ByPath(path string) (*Entry, error) {
 	e := &Entry{}
-	err := s.db.QueryRow(`SELECT source_key, source_path, manga_key, chapter_key, path, manga_title, chapter_title, size_bytes, downloaded_at
+	var chapterNumber, volumeNumber sql.NullFloat64
+	err := s.db.QueryRow(`SELECT source_key, source_path, manga_key, chapter_key, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number
 		FROM downloads WHERE path=?`, path).
-		Scan(&e.SourceKey, &e.SourcePath, &e.MangaKey, &e.ChapterKey, &e.Path, &e.MangaTitle, &e.ChapterTitle, &e.SizeBytes, &e.DownloadedAt)
+		Scan(&e.SourceKey, &e.SourcePath, &e.MangaKey, &e.ChapterKey, &e.Path, &e.MangaTitle, &e.ChapterTitle, &e.SizeBytes, &e.DownloadedAt, &chapterNumber, &volumeNumber)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("downloads: querying: %w", err)
 	}
+	e.ChapterNumber = nullFloat32(chapterNumber)
+	e.VolumeNumber = nullFloat32(volumeNumber)
 	return e, nil
 }
 
@@ -249,7 +316,7 @@ func (s *Store) Remove(sourceKey, mangaKey, chapterKey string) error {
 
 // List returns every downloaded chapter, most recently downloaded first.
 func (s *Store) List() ([]Entry, error) {
-	rows, err := s.db.Query(`SELECT source_key, source_path, manga_key, chapter_key, path, manga_title, chapter_title, size_bytes, downloaded_at
+	rows, err := s.db.Query(`SELECT source_key, source_path, manga_key, chapter_key, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number
 		FROM downloads ORDER BY downloaded_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("downloads: listing: %w", err)
@@ -258,9 +325,12 @@ func (s *Store) List() ([]Entry, error) {
 	var entries []Entry
 	for rows.Next() {
 		var e Entry
-		if err := rows.Scan(&e.SourceKey, &e.SourcePath, &e.MangaKey, &e.ChapterKey, &e.Path, &e.MangaTitle, &e.ChapterTitle, &e.SizeBytes, &e.DownloadedAt); err != nil {
+		var chapterNumber, volumeNumber sql.NullFloat64
+		if err := rows.Scan(&e.SourceKey, &e.SourcePath, &e.MangaKey, &e.ChapterKey, &e.Path, &e.MangaTitle, &e.ChapterTitle, &e.SizeBytes, &e.DownloadedAt, &chapterNumber, &volumeNumber); err != nil {
 			return nil, fmt.Errorf("downloads: scanning: %w", err)
 		}
+		e.ChapterNumber = nullFloat32(chapterNumber)
+		e.VolumeNumber = nullFloat32(volumeNumber)
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()

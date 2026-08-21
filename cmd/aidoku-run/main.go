@@ -349,7 +349,7 @@ func recordDownload(downloadsDir, sourceKey, sourcePath string, manga models.Man
 		return fmt.Errorf("opening downloads index: %w", err)
 	}
 	defer store.Close()
-	_, err = store.Record(sourceKey, sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter))
+	_, err = store.Record(sourceKey, sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber)
 	return err
 }
 
