@@ -46,8 +46,7 @@ function Aidoku:init()
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
     self:hookEndOfBook()
-    self:hookHome()
-    self:hookStatusFileBrowser()
+    self:hookShowFileManager()
     self:openPendingLibrary()
 end
 
@@ -110,63 +109,45 @@ function Aidoku:hookEndOfBook()
     end
 end
 
--- hookHome makes the "Files" action (frontend/apps/reader/readerui.lua's
--- onHome -- bound to the dispatcher's "filemanager" action and to
--- readerback.lua's back-gesture-stack-exhausted case) return to Aidoku's
--- own Library screen instead of leaving the user looking at KOReader's raw
--- file browser, when the chapter being closed is one of ours.
+-- hookShowFileManager makes every "back to Files" path -- ReaderUI:onHome()
+-- (dispatcher's "filemanager" action / readerback.lua's back-gesture-stack-
+-- exhausted case), ReaderStatus:openFileBrowser() (the end-of-document
+-- pop-up's "File browser" button and every end_document_action that lands
+-- there), and readermenu.lua's top-bar file-browser icon (its callback
+-- calls self.ui:onClose() + self.ui:showFileManager(file) directly, not
+-- through onHome) -- return to Aidoku's own Library screen instead of
+-- leaving the user looking at KOReader's raw file browser, when the
+-- chapter being closed is one of ours. All three (and every other
+-- showFileManager caller in readerui.lua) funnel through
+-- ReaderUI:showFileManager(file) itself, so hooking that one method covers
+-- all of them instead of chasing each call site separately.
 --
--- ReaderUI:onHome() unconditionally does self:onClose() (tearing down this
--- very plugin instance) then self:showFileManager(file), which spins up a
--- *new* FileManager instance -- and since is_doc_only = false, a *new*
--- Aidoku plugin instance for it. There's no direct way to hand that future
+-- Every caller does self:onClose() (tearing down this very plugin
+-- instance) then self:showFileManager(file), which spins up a *new*
+-- FileManager instance -- and since is_doc_only = false, a *new* Aidoku
+-- plugin instance for it. There's no direct way to hand that future
 -- instance a "reopen the Library" instruction, so this leaves a note in
 -- pendinglibrary.lua (a require()-cached table, shared process-wide across
 -- the teardown/recreate boundary) for that instance's init() to act on --
 -- see openPendingLibrary() below. Same monkey-patch technique as
--- hookEndOfBook, for the same reason: onHome is a plain instance method,
--- not something event propagation can intercept.
-function Aidoku:hookHome()
+-- hookEndOfBook, for the same reason: showFileManager is a plain instance
+-- method, not something event propagation can intercept.
+function Aidoku:hookShowFileManager()
     if not self.document then
         return
     end
-    local original_on_home = self.ui.onHome
-    self.ui.onHome = function(ui_self, ...)
-        local file = self.document and self.document.file
+    local original_show_file_manager = self.ui.showFileManager
+    self.ui.showFileManager = function(ui_self, file, ...)
+        file = file or (self.document and self.document.file)
         if file and file:sub(1, #self.downloads_dir) == self.downloads_dir then
             require("pendinglibrary").open = true
         end
-        return original_on_home(ui_self, ...)
-    end
-end
-
--- hookStatusFileBrowser covers the actual "Files" button users hit after
--- finishing a chapter: the end-of-document pop-up (readerstatus.lua's
--- onEndOfBook, which hookEndOfBook above suppresses only when auto-advance
--- handles the chapter transition) has a button literally labeled "File
--- browser". That button, plus every G_reader_settings end_document_action
--- that also lands in the file browser ("book_status_file_browser",
--- "file_browser", and the interrupted-quickstart-guide case), all funnel
--- through ReaderStatus:openFileBrowser() -- a separate call path from
--- ReaderUI:onHome() above, so it needs its own hook using the same
--- pendinglibrary.lua bridge.
-function Aidoku:hookStatusFileBrowser()
-    if not self.document or not self.ui.status then
-        return
-    end
-    local original_open_file_browser = self.ui.status.openFileBrowser
-    self.ui.status.openFileBrowser = function(status_self, ...)
-        local file = self.document and self.document.file
-        if file and file:sub(1, #self.downloads_dir) == self.downloads_dir then
-            require("pendinglibrary").open = true
-        end
-        return original_open_file_browser(status_self, ...)
+        return original_show_file_manager(ui_self, file, ...)
     end
 end
 
 -- Reopens the Library screen on top of a freshly shown FileManager when a
--- previous ReaderUI instance's hookHome()/hookStatusFileBrowser() (above)
--- requested it.
+-- previous ReaderUI instance's hookShowFileManager() (above) requested it.
 function Aidoku:openPendingLibrary()
     if self.document then
         return

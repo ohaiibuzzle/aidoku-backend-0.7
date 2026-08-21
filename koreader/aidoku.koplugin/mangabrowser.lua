@@ -243,14 +243,8 @@ end
 function MangaBrowser:onMenuSelect(item)
     local existing = self:downloadedPath(item.chapter.Key)
     if existing ~= "" then
-        UIManager:show(ConfirmBox:new{
-            text = T(_("'%1' is already downloaded. Open it?"), chapterLabel(item.chapter)),
-            ok_text = _("Read"),
-            ok_callback = function()
-                self:prefetchAhead(item.chapter)
-                self:openLocal(existing)
-            end,
-        })
+        self:openLocal(existing)
+        self:prefetchAhead(item.chapter)
         return true
     end
 
