@@ -46,6 +46,7 @@ function RepoBrowser:reload()
             local langs = table.concat(src_langs, ", ")
             table.insert(item_table, {
                 text = langs ~= "" and (src.name .. " (" .. langs .. ")") or src.name,
+                mandatory = "v" .. tostring(src.version),
                 source = src,
             })
         end

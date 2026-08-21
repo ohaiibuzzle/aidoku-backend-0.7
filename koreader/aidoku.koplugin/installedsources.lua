@@ -1,10 +1,12 @@
 --[[--
 Lists installed .aix sources in a sources directory, as
-{text = "<display name> (<languages>)", path = "<sources_dir>/<file>.aix",
-key = "<source's manifest id>"} entries -- shared by sourcesbrowser.lua
-(one source), globalsearchbrowser.lua (every source at once), and
-librarybrowser.lua (resolving a bookmark's stored key back to a live path
-via findByKey).
+{text = "<display name> (<languages>)", name = "<display name>",
+path = "<sources_dir>/<file>.aix", key = "<source's manifest id>"}
+entries -- shared by sourcesbrowser.lua (one source, uses text),
+globalsearchbrowser.lua (every source at once, uses name -- a result row
+already carries the manga title, so repeating each source's full
+language list per result there is just noise), and librarybrowser.lua
+(resolving a bookmark's stored key back to a live path via findByKey).
 
 Both key and text come straight from the source's own source.json (via
 engine:manifest(), which reads it without loading the source's WASM module
@@ -21,20 +23,21 @@ local lfs = require("libs/libkoreader-lfs")
 
 local InstalledSources = {}
 
--- displayText prefers "<name> (<languages>)" (matching repobrowser.lua's
--- own repository-listing convention) from the manifest, falling back to
--- the bare filename if the manifest couldn't be read (e.g. a corrupt or
--- unreadable file) so a broken source still shows up as *something*
--- rather than silently vanishing from the list.
-local function displayText(filename, manifest)
+-- displayName falls back to the bare filename if the manifest couldn't be
+-- read (e.g. a corrupt or unreadable file) so a broken source still shows
+-- up as *something* rather than silently vanishing from the list.
+local function displayName(filename, manifest)
     if not manifest or type(manifest.name) ~= "string" or manifest.name == "" then
         return filename:gsub("%.aix$", "")
     end
-    local langs = type(manifest.languages) == "table" and table.concat(manifest.languages, ", ") or ""
-    if langs ~= "" then
-        return manifest.name .. " (" .. langs .. ")"
-    end
     return manifest.name
+end
+
+-- displayText appends "(<languages>)" (matching repobrowser.lua's own
+-- repository-listing convention) to name.
+local function displayText(name, manifest)
+    local langs = manifest and type(manifest.languages) == "table" and table.concat(manifest.languages, ", ") or ""
+    return langs ~= "" and (name .. " (" .. langs .. ")") or name
 end
 
 function InstalledSources.list(sources_dir, engine)
@@ -44,7 +47,7 @@ function InstalledSources.list(sources_dir, engine)
             local path = sources_dir .. "/" .. entry
             local manifest = engine:manifest(path)
             -- Fallback for a manifest that couldn't be read: the bare
-            -- filename, matching displayText()'s own fallback -- no worse
+            -- filename, matching displayName()'s own fallback -- no worse
             -- than treating the whole filename as the identity, which is
             -- what every source's identity amounted to before source_key
             -- existed.
@@ -52,8 +55,10 @@ function InstalledSources.list(sources_dir, engine)
             if manifest and type(manifest.key) == "string" and manifest.key ~= "" then
                 key = manifest.key
             end
+            local name = displayName(entry, manifest)
             table.insert(sources, {
-                text = displayText(entry, manifest),
+                text = displayText(name, manifest),
+                name = name,
                 path = path,
                 key = key,
             })

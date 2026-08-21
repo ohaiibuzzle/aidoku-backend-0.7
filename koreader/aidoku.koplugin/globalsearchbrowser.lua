@@ -4,7 +4,9 @@ sequence -- each call to engine:search shows its own brief progress widget
 one after another), merging results into one list tagged by which source
 each came from. A source that fails to search is skipped rather than
 aborting the whole search; tapping a result opens MangaBrowser against its
-actual source.
+actual source, holding one bookmarks (or unbookmarks) it to the library
+directly, without opening it -- same as searchbrowser.lua's single-source
+search, since this is just as likely an entry point.
 ]]
 
 local InfoMessage = require("ui/widget/infomessage")
@@ -19,6 +21,7 @@ local _ = require("gettext")
 
 local GlobalSearchBrowser = Menu:extend{
     title = _("Search all sources"),
+    subtitle = _("Hold a result to add or remove it from your library"),
 }
 
 -- Manga.Title is a plain (non-pointer) Go string, so an absent title
@@ -29,6 +32,11 @@ local function mangaLabel(manga)
         return manga.Title
     end
     return manga.Key
+end
+
+-- Cover is a nilable Go *string; see the JSON-null note in mangabrowser.lua.
+local function mangaCover(manga)
+    return type(manga.Cover) == "string" and manga.Cover or nil
 end
 
 function GlobalSearchBrowser:init()
@@ -87,8 +95,13 @@ function GlobalSearchBrowser:runSearch(query)
                 local entries = result and type(result.Entries) == "table" and result.Entries or nil
                 if entries then
                     for _, manga in ipairs(entries) do
+                        local label = mangaLabel(manga)
+                        if self.store:isBookmarked(src.key, manga.Key) then
+                            label = "★ " .. label
+                        end
                         table.insert(item_table, {
-                            text = "[" .. src.text .. "] " .. mangaLabel(manga),
+                            text = label,
+                            mandatory = src.name,
                             manga = manga,
                             source_path = src.path,
                             source_key = src.key,
@@ -110,6 +123,27 @@ function GlobalSearchBrowser:runSearch(query)
             end
         end)
     end)
+end
+
+function GlobalSearchBrowser:onMenuHold(item)
+    local manga = item.manga
+    local label = mangaLabel(manga)
+    local now_bookmarked
+    if self.store:isBookmarked(item.source_key, manga.Key) then
+        self.store:removeBookmark(item.source_key, manga.Key)
+        now_bookmarked = false
+    else
+        self.store:addBookmark(item.source_key, item.source_path, manga.Key, label, mangaCover(manga))
+        now_bookmarked = true
+    end
+    -- Update this row's marker in place rather than re-running the search.
+    item.text = now_bookmarked and ("★ " .. label) or label
+    self:updateItems()
+    UIManager:show(InfoMessage:new{
+        text = now_bookmarked and T(_("Added '%1' to library"), label) or T(_("Removed '%1' from library"), label),
+        timeout = 1.5,
+    })
+    return true
 end
 
 function GlobalSearchBrowser:onMenuSelect(item)

@@ -13,7 +13,9 @@ local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
-local SearchBrowser = Menu:extend{}
+local SearchBrowser = Menu:extend{
+    subtitle = _("Hold a result to add or remove it from your library"),
+}
 
 -- Manga.Title is a plain (non-pointer) Go string, so an absent title
 -- decodes as "" rather than null -- and "" is truthy in Lua, so this needs

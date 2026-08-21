@@ -1,5 +1,5 @@
 --[[--
-Aidoku settings: source management (installed sources, repository browser,
+git : source management (installed sources, repository browser,
 downloaded chapters), the chapter-prefetch and auto-advance preferences,
 storage limit/usage, FlareSolverr host, and the source repository URL.
 Reached from the Library screen's title bar, keeping the Library list
