@@ -1,0 +1,92 @@
+name: KOReader plugin release
+
+# Builds the aidoku.koplugin bundle for every embedded/Android target
+# koreader/build.sh supports (arm, arm64 -- both linux, since Kindle, Kobo,
+# PocketBook, reMarkable, Sony, Cervantes and Android all run a Linux
+# kernel and this project is pure Go / no cgo), then attaches one zip per
+# target to a GitHub release for the pushed tag.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          # jit_arch:GOARCH:GOARM -- kept in sync with koreader/build.sh
+          - { name: arm, goarch: arm, goarm: "7" }
+          - { name: arm64, goarch: arm64, goarm: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries for ${{ matrix.target.name }}
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.target.goarch }}
+          GOARM: ${{ matrix.target.goarm }}
+        run: |
+          set -euo pipefail
+          out_dir="staging/aidoku.koplugin/bin/${{ matrix.target.name }}"
+          mkdir -p "$out_dir"
+          for bin in aidoku-run aidoku-downloads; do
+            go build -trimpath -ldflags="-s -w" -o "$out_dir/$bin" "./cmd/$bin"
+            chmod +x "$out_dir/$bin"
+          done
+
+      - name: Assemble plugin bundle
+        # Copies everything except bin/ (the repo's bin/ is a gitignored
+        # local dev scratch dir -- the binaries just built above are what
+        # ships).
+        run: rsync -a --exclude='bin' koreader/aidoku.koplugin/ staging/aidoku.koplugin/
+
+      - name: Package zip
+        run: |
+          set -euo pipefail
+          cd staging
+          zip -r "../aidoku-koplugin-${{ matrix.target.name }}-${{ github.ref_name }}.zip" aidoku.koplugin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aidoku-koplugin-${{ matrix.target.name }}
+          path: aidoku-koplugin-${{ matrix.target.name }}-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ github.ref_name }}" dist/*.zip \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
