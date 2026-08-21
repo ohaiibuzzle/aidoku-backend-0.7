@@ -48,61 +48,116 @@ func extensionFor(data []byte) string {
 // stored (not deflated) since page images are already compressed formats;
 // deflating them again would only cost CPU for no size benefit.
 //
-// The archive is built at a temporary path in the same directory as path
-// and only renamed into place once fully written, so a process death or
-// write error partway through never leaves a corrupt file sitting at path
-// under its final name -- callers (e.g. a download index) that treat path's
-// existence as "this chapter is downloaded" would otherwise be lied to.
-// Same-directory keeps the rename same-filesystem, so it's a metadata-only
-// operation rather than a second copy of the data.
-func Write(path string, pages [][]byte) (err error) {
+// Write requires every page's bytes up front, so it holds the whole
+// chapter in memory at once. Callers assembling pages incrementally (e.g.
+// downloading them one at a time) should use NewWriter instead, which
+// writes each page to disk as soon as it arrives.
+func Write(path string, pages [][]byte) error {
+	w, err := NewWriter(path, len(pages))
+	if err != nil {
+		return err
+	}
+	for _, data := range pages {
+		if err := w.WritePage(data); err != nil {
+			w.Abort()
+			return err
+		}
+	}
+	return w.Close()
+}
+
+// Writer builds a CBZ archive one page at a time, so a caller streaming
+// pages in (e.g. downloading them from a source) never needs to hold more
+// than one page's bytes in memory -- unlike Write, which requires the
+// whole chapter up front. This matters on memory-constrained devices
+// (e.g. Kindle) where a long, high-resolution chapter buffered entirely in
+// RAM before the first byte hits disk can be enough to get the process
+// OOM-killed mid-download.
+//
+// The archive is built at a temporary path in the same directory as the
+// final path and only renamed into place by Close, so a process death or
+// write error partway through never leaves a corrupt file sitting at the
+// final path under its final name -- callers (e.g. a download index) that
+// treat that path's existence as "this chapter is downloaded" would
+// otherwise be lied to. Same-directory keeps the rename same-filesystem,
+// so it's a metadata-only operation rather than a second copy of the data.
+//
+// Every Writer must end with exactly one call to Close (success) or Abort
+// (WritePage failed, or the download was cancelled) -- never both.
+type Writer struct {
+	path    string
+	tmpPath string
+	tmp     *os.File
+	zw      *zip.Writer
+	width   int
+	n       int
+}
+
+// NewWriter creates a new Writer that will produce an archive at path once
+// Close is called. totalPages is the chapter's known page count, used only
+// to size the zero-padded entry names (e.g. 3 digits for "004.jpg") so
+// they stay lexicographically sorted the way every CBZ reader expects;
+// WritePage may be called more or fewer times than totalPages without
+// affecting correctness, since the padding width isn't otherwise load-bearing.
+func NewWriter(path string, totalPages int) (*Writer, error) {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".cbz-*.tmp")
 	if err != nil {
-		return fmt.Errorf("cbz: creating temp file in %s: %w", dir, err)
+		return nil, fmt.Errorf("cbz: creating temp file in %s: %w", dir, err)
 	}
-	tmpPath := tmp.Name()
-	defer func() {
-		// Only reached if we returned before the rename below; on success
-		// tmpPath no longer exists under this name, so Remove is a no-op.
-		os.Remove(tmpPath)
-	}()
+	width := len(strconv.Itoa(totalPages))
+	if width < 3 {
+		width = 3
+	}
+	return &Writer{
+		path:    path,
+		tmpPath: tmp.Name(),
+		tmp:     tmp,
+		zw:      zip.NewWriter(tmp),
+		width:   width,
+	}, nil
+}
 
-	if err := writeZip(tmp, pages); err != nil {
-		tmp.Close()
-		return err
+// WritePage appends the next page, in reading order, to the archive.
+// On error the Writer must not be reused -- the caller should call Abort.
+func (w *Writer) WritePage(data []byte) error {
+	w.n++
+	name := fmt.Sprintf("%0*d%s", w.width, w.n, extensionFor(data))
+	zf, err := w.zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Store})
+	if err != nil {
+		return fmt.Errorf("cbz: adding %s: %w", name, err)
 	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("cbz: closing %s: %w", tmpPath, err)
-	}
-
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("cbz: renaming %s to %s: %w", tmpPath, path, err)
+	if _, err := zf.Write(data); err != nil {
+		return fmt.Errorf("cbz: writing %s: %w", name, err)
 	}
 	return nil
 }
 
-func writeZip(f *os.File, pages [][]byte) (err error) {
-	zw := zip.NewWriter(f)
-	defer func() {
-		if cerr := zw.Close(); err == nil {
-			err = cerr
-		}
-	}()
-
-	width := len(strconv.Itoa(len(pages)))
-	if width < 3 {
-		width = 3
+// Close finishes the archive and atomically renames it into place at the
+// path passed to NewWriter. Call it only once every page has been written
+// successfully; on any WritePage error, call Abort instead so a partial
+// archive is never published under the final name.
+func (w *Writer) Close() error {
+	if err := w.zw.Close(); err != nil {
+		w.tmp.Close()
+		os.Remove(w.tmpPath)
+		return fmt.Errorf("cbz: finishing %s: %w", w.tmpPath, err)
 	}
-	for i, data := range pages {
-		name := fmt.Sprintf("%0*d%s", width, i+1, extensionFor(data))
-		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Store})
-		if err != nil {
-			return fmt.Errorf("cbz: adding %s: %w", name, err)
-		}
-		if _, err := w.Write(data); err != nil {
-			return fmt.Errorf("cbz: writing %s: %w", name, err)
-		}
+	if err := w.tmp.Close(); err != nil {
+		os.Remove(w.tmpPath)
+		return fmt.Errorf("cbz: closing %s: %w", w.tmpPath, err)
+	}
+	if err := os.Rename(w.tmpPath, w.path); err != nil {
+		os.Remove(w.tmpPath)
+		return fmt.Errorf("cbz: renaming %s to %s: %w", w.tmpPath, w.path, err)
 	}
 	return nil
+}
+
+// Abort discards the in-progress archive and removes its temp file. Call
+// it instead of Close when WritePage returned an error or the download
+// was cancelled partway through.
+func (w *Writer) Abort() {
+	w.tmp.Close()
+	os.Remove(w.tmpPath)
 }

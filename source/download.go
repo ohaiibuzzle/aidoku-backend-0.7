@@ -125,6 +125,12 @@ func (s *Source) downloadZipEntry(ctx context.Context, zipURL, filePath string, 
 // is generated from the manga title and chapter number/title. onProgress,
 // if non-nil, is called after each page finishes downloading (1-indexed
 // current, plus total). Returns the path the archive was written to.
+//
+// Pages are streamed straight to disk as they download rather than
+// buffered in memory for the whole chapter -- on a memory-constrained
+// device (e.g. Kindle), holding every page of a long, high-resolution
+// chapter in RAM at once can be enough to get the process OOM-killed
+// before a single byte reaches disk.
 func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, chapter models.Chapter, outputPath string, onProgress func(current, total int)) (string, error) {
 	pages, err := s.GetPageList(ctx, manga, chapter)
 	if err != nil {
@@ -134,23 +140,31 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 		return "", fmt.Errorf("source: chapter %q has no pages", chapter.Key)
 	}
 
+	if outputPath == "" {
+		outputPath = defaultCBZName(manga, chapter)
+	}
+	w, err := cbz.NewWriter(outputPath, len(pages))
+	if err != nil {
+		return "", err
+	}
+
 	zipCache := make(map[string][]byte)
-	data := make([][]byte, len(pages))
 	for i, page := range pages {
 		img, err := s.downloadPage(ctx, page, zipCache)
 		if err != nil {
+			w.Abort()
 			return "", fmt.Errorf("source: downloading page %d/%d: %w", i+1, len(pages), err)
 		}
-		data[i] = img
+		if err := w.WritePage(img); err != nil {
+			w.Abort()
+			return "", fmt.Errorf("source: writing page %d/%d: %w", i+1, len(pages), err)
+		}
 		if onProgress != nil {
 			onProgress(i+1, len(pages))
 		}
 	}
 
-	if outputPath == "" {
-		outputPath = defaultCBZName(manga, chapter)
-	}
-	if err := cbz.Write(outputPath, data); err != nil {
+	if err := w.Close(); err != nil {
 		return "", err
 	}
 	return outputPath, nil
