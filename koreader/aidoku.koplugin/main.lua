@@ -191,7 +191,7 @@ end
 function Aidoku:addToMainMenu(menu_items)
     if not self.ui.document then -- FileManager menu only
         menu_items.aidoku = {
-            text = _("Aidoku"),
+            text = _("AidokuRunner for KOReader"),
             sorting_hint = "search",
             callback = function()
                 self:onAidokuBrowseSources()

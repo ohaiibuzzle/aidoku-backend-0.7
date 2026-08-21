@@ -234,14 +234,8 @@ function MangaBrowser:downloadAndOpen(chapter)
             self.downloaded_keys[chapter.Key] = path
             self.downloads_engine:prune(self.store:downloadLimitBytes())
             self:refresh()
-            UIManager:show(ConfirmBox:new{
-                text = T(_("Downloaded to:\n%1\n\nRead now?"), path),
-                ok_text = _("Read now"),
-                ok_callback = function()
-                    self:prefetchAhead(chapter)
-                    self:openLocal(path)
-                end,
-            })
+            self:prefetchAhead(chapter)
+            self:openLocal(path)
         end)
     end)
 end

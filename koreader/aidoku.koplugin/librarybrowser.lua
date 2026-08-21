@@ -23,7 +23,7 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 local LibraryBrowser = Menu:extend{
-    title = _("Aidoku"),
+    title = _("Library"),
     title_bar_left_icon = "appbar.menu",
 }
 
