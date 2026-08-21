@@ -16,11 +16,11 @@ other first.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
-local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
+local Prefetch = require("prefetch")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local lfs = require("libs/libkoreader-lfs")
@@ -30,30 +30,8 @@ local _ = require("gettext")
 
 local MangaBrowser = Menu:extend{}
 
--- Manga/Chapter Title fields are plain (non-pointer) Go strings, so an
--- absent title decodes as "" rather than null -- and "" is truthy in Lua,
--- so an explicit emptiness check is needed, not just `x or fallback`.
-local function mangaLabel(manga)
-    if type(manga.Title) == "string" and manga.Title ~= "" then
-        return manga.Title
-    end
-    return manga.Key
-end
-
--- aidoku-run's JSON encodes Go's nil *string/*float32 fields as JSON null,
--- which KOReader's json module decodes as a function sentinel (not Lua nil,
--- since a table can't hold a nil value) -- see the comment on this in
--- wallabag.koplugin/main.lua. So these need an explicit type check rather
--- than a truthiness check.
-local function chapterLabel(chapter)
-    if type(chapter.Title) == "string" and chapter.Title ~= "" then
-        return chapter.Title
-    end
-    if type(chapter.ChapterNumber) == "number" then
-        return T(_("Chapter %1"), chapter.ChapterNumber)
-    end
-    return chapter.Key
-end
+local mangaLabel = Prefetch.mangaLabel
+local chapterLabel = Prefetch.chapterLabel
 
 function MangaBrowser:init()
     self.title = mangaLabel(self.manga)
@@ -176,35 +154,25 @@ end
 
 -- prefetchAhead silently downloads up to store:bufferChapters() upcoming
 -- chapters (in reading order, not display sort order) after chapter, so
--- they're likely already local by the time the reader reaches them. Runs
--- via Trapper with a false progress widget (see the note on this in
--- engine.lua's download()), so it doesn't interrupt whatever the user is
--- doing with a visible dialog.
+-- they're likely already local by the time the reader reaches them. See
+-- prefetch.lua -- shared with nextchapter.lua's end-of-book auto-advance,
+-- so the buffer keeps refilling as the user reads through, not just on the
+-- first chapter opened from this list.
 function MangaBrowser:prefetchAhead(chapter)
-    local n = self.store:bufferChapters()
-    if n <= 0 then
-        return
-    end
-    local upcoming = ChapterOrder.after(self.chapters, chapter.Key, n)
-    if #upcoming == 0 then
-        return
-    end
-    Trapper:wrap(function()
-        local any_new = false
-        for _, c in ipairs(upcoming) do
-            if self:downloadedPath(c.Key) == "" then
-                local filename = util.getSafeFilename(
-                    mangaLabel(self.manga) .. " - " .. chapterLabel(c) .. ".cbz", self.downloads_dir)
-                local out_path = self.downloads_dir .. "/" .. filename
-                local path = self.engine:download(self.source_path, self.manga.Key, c.Key, out_path, self.downloads_dir, true)
-                if path then
-                    self.downloaded_keys[c.Key] = path
-                    any_new = true
-                end
-            end
-        end
+    Prefetch.ahead({
+        engine = self.engine,
+        downloads_engine = self.downloads_engine,
+        store = self.store,
+        downloads_dir = self.downloads_dir,
+        source_path = self.source_path,
+        source_key = self.source_key,
+        manga = self.manga,
+    }, self.chapters, chapter.Key,
+    function(c, path)
+        self.downloaded_keys[c.Key] = path
+    end,
+    function(any_new)
         if any_new then
-            self.downloads_engine:prune(self.store:downloadLimitBytes())
             self:refresh()
         end
     end)

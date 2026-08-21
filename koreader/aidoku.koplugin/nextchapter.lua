@@ -11,6 +11,7 @@ local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
 local NetworkMgr = require("ui/network/manager")
+local Prefetch = require("prefetch")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local util = require("util")
@@ -19,22 +20,8 @@ local _ = require("gettext")
 
 local NextChapter = {}
 
-local function mangaLabel(manga)
-    if type(manga.Title) == "string" and manga.Title ~= "" then
-        return manga.Title
-    end
-    return manga.Key
-end
-
-local function chapterLabel(chapter)
-    if type(chapter.Title) == "string" and chapter.Title ~= "" then
-        return chapter.Title
-    end
-    if ChapterOrder.number(chapter) then
-        return T(_("Chapter %1"), chapter.ChapterNumber)
-    end
-    return chapter.Key
-end
+local mangaLabel = Prefetch.mangaLabel
+local chapterLabel = Prefetch.chapterLabel
 
 -- handle is called from Aidoku:onEndOfBook() with:
 --   engine, downloads_engine, store, downloads_dir, sources_dir -- same as
@@ -92,10 +79,25 @@ function NextChapter.handle(ctx, file_path)
                 return
             end
 
+            -- Re-primes the prefetch buffer on every auto-advance, not just
+            -- the first chapter opened from mangabrowser.lua's list --
+            -- otherwise the buffer never refills once the user reads past
+            -- what was originally prefetched. See prefetch.lua.
+            local prefetch_ctx = {
+                engine = ctx.engine,
+                downloads_engine = ctx.downloads_engine,
+                store = ctx.store,
+                downloads_dir = ctx.downloads_dir,
+                source_path = source_path,
+                source_key = entry.sourceKey,
+                manga = updated,
+            }
+
             local function fetchAndOpen()
                 local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
                 if existing ~= "" then
                     ctx.open_callback(existing)
+                    Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
                     return
                 end
                 local filename = util.getSafeFilename(
@@ -108,6 +110,7 @@ function NextChapter.handle(ctx, file_path)
                 end
                 ctx.downloads_engine:prune(ctx.store:downloadLimitBytes())
                 ctx.open_callback(path)
+                Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
             end
 
             if ctx.store:nextChapterMode() == "auto" then

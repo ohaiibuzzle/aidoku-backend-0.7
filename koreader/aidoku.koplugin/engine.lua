@@ -163,7 +163,10 @@ end
 -- silent (used for background chapter prefetch) passes false instead of a
 -- progress string, which Trapper:dismissablePopen() turns into a fully
 -- invisible, non-input-intercepting trap widget instead of a visible
--- "Downloading…" popup -- see ui/trapper.lua.
+-- "Downloading…" popup -- see ui/trapper.lua. It also runs the binary under
+-- a lower CPU priority (see the note on this in subprocess.lua's exec()),
+-- since a silent download is by definition a background prefetch, not
+-- something the user is actively waiting on.
 function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent)
     -- Not "silent and false or ...": that's the classic Lua and/or-ternary
     -- trap -- it misfires whenever the "true" branch value is itself falsy,
@@ -176,7 +179,7 @@ function Engine:download(source_path, manga_key, chapter_key, out_path, download
     if downloads_dir then
         table.insert(args, downloads_dir)
     end
-    return self.runner:exec(args, progress_text, self:sourceEnv())
+    return self.runner:exec(args, progress_text, self:sourceEnv(), silent)
 end
 
 return Engine
