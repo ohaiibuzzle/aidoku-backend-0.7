@@ -7,6 +7,7 @@ parent Go repo), and read them in KOReader.
 local DataStorage = require("datastorage")
 local Dispatcher = require("dispatcher") -- luacheck:ignore
 local InfoMessage = require("ui/widget/infomessage")
+local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local util = require("util")
@@ -15,9 +16,6 @@ local _ = require("gettext")
 local DownloadsEngine = require("downloadsengine")
 local Engine = require("engine")
 local Store = require("store")
-
--- The Aidoku Community Sources repository (see https://aidoku-community.github.io/sources/).
-local DEFAULT_REPO_URL = "https://aidoku-community.github.io/sources/index.min.json"
 
 local Aidoku = WidgetContainer:extend{
     name = "aidoku",
@@ -44,7 +42,6 @@ function Aidoku:init()
         }
     end)
     self.downloads_engine = DownloadsEngine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-downloads", self.downloads_dir)
-    self.repo_url = DEFAULT_REPO_URL
 
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
@@ -52,6 +49,27 @@ function Aidoku:init()
     self:hookHome()
     self:hookStatusFileBrowser()
     self:openPendingLibrary()
+end
+
+-- markCurrentChapterRead flags self.document's chapter as read (see
+-- store.lua's read_chapters), independent of next_chapter_mode -- unlike
+-- nextchapter.lua's own byPath lookup, this must run even when
+-- auto-advance is off, so it's a separate lookup rather than something
+-- threaded through NextChapter.handle(). downloads_engine:byPath() is a
+-- subprocess call, so it needs its own Trapper:wrap() coroutine here (see
+-- the note on this in downloadsengine.lua/nextchapter.lua) -- it can't run
+-- inline in the onEndOfBook monkey-patch below.
+function Aidoku:markCurrentChapterRead()
+    local file = self.document and self.document.file
+    if not file or file:sub(1, #self.downloads_dir) ~= self.downloads_dir then
+        return
+    end
+    Trapper:wrap(function()
+        local entry = self.downloads_engine:byPath(file)
+        if entry then
+            self.store:markChapterRead(entry.sourceKey, entry.mangaKey, entry.chapterKey)
+        end
+    end)
 end
 
 -- hookEndOfBook wires up auto-advance to the next chapter. It only applies
@@ -75,6 +93,7 @@ function Aidoku:hookEndOfBook()
     end
     local original_on_end_of_book = self.ui.status.onEndOfBook
     self.ui.status.onEndOfBook = function(status_self, ...)
+        self:markCurrentChapterRead()
         local NextChapter = require("nextchapter")
         local handled = NextChapter.handle({
             engine = self.engine,
@@ -197,7 +216,6 @@ function Aidoku:onAidokuBrowseSources()
         ui = self.ui,
         sources_dir = self.sources_dir,
         downloads_dir = self.downloads_dir,
-        repo_url = self.repo_url,
         is_popout = false,
         is_borderless = true,
         title_bar_fm_style = true,

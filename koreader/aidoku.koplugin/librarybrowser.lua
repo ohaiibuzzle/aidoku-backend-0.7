@@ -1,7 +1,8 @@
 --[[--
-Primary Aidoku screen: just the user's bookmarked manga. Source browsing,
-installs, downloads management, and preferences all live behind the title
-bar's settings button (see settingsbrowser.lua) so this list stays purely
+Primary Aidoku screen: just the user's bookmarked manga. The title bar's
+left "hamburger" button opens a small menu of Settings (source
+installs/downloads/preferences, see settingsbrowser.lua) and Search all
+sources (see globalsearchbrowser.lua), keeping this list itself purely
 the library. Tapping an entry opens MangaBrowser directly against its
 cached key -- no re-search needed.
 
@@ -11,6 +12,7 @@ see installedsources.lua and the downloads Go package doc), so opening one
 resolves the current path from the key first via findByKey.
 ]]
 
+local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
@@ -22,7 +24,7 @@ local _ = require("gettext")
 
 local LibraryBrowser = Menu:extend{
     title = _("Aidoku"),
-    title_bar_left_icon = "appbar.settings",
+    title_bar_left_icon = "appbar.menu",
 }
 
 function LibraryBrowser:init()
@@ -37,7 +39,7 @@ function LibraryBrowser:genItemTable()
     end
     if #item_table == 0 then
         table.insert(item_table, {
-            text = _("Your library is empty. Open settings (top left) to browse sources and search for manga."),
+            text = _("Your library is empty. Open the menu (top left) to search or browse sources."),
             dim = true,
             is_placeholder = true,
         })
@@ -50,20 +52,57 @@ function LibraryBrowser:refresh()
     self:updateItems()
 end
 
+-- The hamburger menu (see title_bar_left_icon above) groups the two
+-- screens that used to be separate title bar icons/list rows: Settings
+-- and Search all sources. Anchored under the hamburger icon itself
+-- (same technique as FileManager's own "+" dropdown -- see
+-- apps/filemanager/filemanager.lua's plus_dialog) rather than centered,
+-- so it reads as a small in-place menu instead of a full popup.
 function LibraryBrowser:onLeftButtonTap()
-    local SettingsBrowser = require("settingsbrowser")
-    UIManager:show(SettingsBrowser:new{
-        engine = self.engine,
-        store = self.store,
-        downloads_engine = self.downloads_engine,
-        ui = self.ui,
-        sources_dir = self.sources_dir,
-        downloads_dir = self.downloads_dir,
-        repo_url = self.repo_url,
-        is_popout = false,
-        is_borderless = true,
-        title_bar_fm_style = true,
-    })
+    local dialog
+    dialog = ButtonDialog:new{
+        shrink_unneeded_width = true,
+        anchor = function() return self.title_bar.left_button.image.dimen end,
+        buttons = {
+            {{
+                text = _("Settings"),
+                callback = function()
+                    UIManager:close(dialog)
+                    local SettingsBrowser = require("settingsbrowser")
+                    UIManager:show(SettingsBrowser:new{
+                        engine = self.engine,
+                        store = self.store,
+                        downloads_engine = self.downloads_engine,
+                        ui = self.ui,
+                        sources_dir = self.sources_dir,
+                        downloads_dir = self.downloads_dir,
+                        is_popout = false,
+                        is_borderless = true,
+                        title_bar_fm_style = true,
+                    })
+                end,
+            }},
+            {{
+                text = _("Search all sources"),
+                callback = function()
+                    UIManager:close(dialog)
+                    local GlobalSearchBrowser = require("globalsearchbrowser")
+                    UIManager:show(GlobalSearchBrowser:new{
+                        engine = self.engine,
+                        store = self.store,
+                        downloads_engine = self.downloads_engine,
+                        ui = self.ui,
+                        sources_dir = self.sources_dir,
+                        downloads_dir = self.downloads_dir,
+                        is_popout = false,
+                        is_borderless = true,
+                        title_bar_fm_style = true,
+                    })
+                end,
+            }},
+        },
+    }
+    UIManager:show(dialog)
 end
 
 -- migrateLegacyBookmark handles a bookmark saved before source_key existed

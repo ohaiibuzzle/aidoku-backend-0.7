@@ -1,8 +1,9 @@
 --[[--
-Top-level screen: lists locally installed .aix sources, plus entries to
-browse the source repository, search every installed source at once, and
+Top-level screen: lists locally installed .aix sources plus an entry to
 view downloaded chapters. Tapping an installed source opens SearchBrowser
-against it.
+against it. Browsing the source repository is the title bar's "+" button;
+searching every installed source at once is Library's "Global Search"
+entry (see librarybrowser.lua) rather than living here.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
@@ -16,10 +17,9 @@ local _ = require("gettext")
 
 local SourcesBrowser = Menu:extend{
     title = _("Aidoku sources"),
+    title_bar_left_icon = "plus",
 }
 
-local BROWSE_REPO_TEXT = _("Browse source repository…")
-local SEARCH_ALL_TEXT = _("Search all sources…")
 local DOWNLOADS_TEXT = _("Downloaded chapters")
 
 function SourcesBrowser:init()
@@ -36,13 +36,31 @@ end
 
 function SourcesBrowser:genItemTable()
     local item_table = {}
-    table.insert(item_table, { text = BROWSE_REPO_TEXT, is_repo_entry = true })
-    table.insert(item_table, { text = SEARCH_ALL_TEXT, is_search_all_entry = true })
     table.insert(item_table, { text = DOWNLOADS_TEXT, is_downloads_entry = true })
     for _, source in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
         table.insert(item_table, source)
     end
     return item_table
+end
+
+-- The "+" title bar button (see title_bar_left_icon above) is this
+-- screen's entry to the repository browser, replacing what used to be a
+-- "Browse source repository…" row in the list itself. Reads the URL fresh
+-- from the store (rather than a repo_url field threaded down from
+-- main.lua) so a change made in settingsbrowser.lua's "Source repository
+-- URL" setting takes effect immediately, even if this screen was already
+-- open when it changed.
+function SourcesBrowser:onLeftButtonTap()
+    local RepoBrowser = require("repobrowser")
+    UIManager:show(RepoBrowser:new{
+        engine = self.engine,
+        repo_url = self.store:repoURL(),
+        sources_dir = self.sources_dir,
+        is_popout = false,
+        is_borderless = true,
+        title_bar_fm_style = true,
+        refresh_callback = function() self:reload() end,
+    })
 end
 
 -- loadAndRefresh assumes it's already running inside a Trapper-wrapped
@@ -59,31 +77,7 @@ function SourcesBrowser:reload()
 end
 
 function SourcesBrowser:onMenuSelect(item)
-    if item.is_repo_entry then
-        local RepoBrowser = require("repobrowser")
-        UIManager:show(RepoBrowser:new{
-            engine = self.engine,
-            repo_url = self.repo_url,
-            sources_dir = self.sources_dir,
-            is_popout = false,
-            is_borderless = true,
-            title_bar_fm_style = true,
-            refresh_callback = function() self:reload() end,
-        })
-    elseif item.is_search_all_entry then
-        local GlobalSearchBrowser = require("globalsearchbrowser")
-        UIManager:show(GlobalSearchBrowser:new{
-            engine = self.engine,
-            store = self.store,
-            downloads_engine = self.downloads_engine,
-            ui = self.ui,
-            sources_dir = self.sources_dir,
-            downloads_dir = self.downloads_dir,
-            is_popout = false,
-            is_borderless = true,
-            title_bar_fm_style = true,
-        })
-    elseif item.is_downloads_entry then
+    if item.is_downloads_entry then
         local DownloadsBrowser = require("downloadsbrowser")
         UIManager:show(DownloadsBrowser:new{
             downloads_engine = self.downloads_engine,
@@ -112,7 +106,7 @@ function SourcesBrowser:onMenuSelect(item)
 end
 
 function SourcesBrowser:onMenuHold(item)
-    if item.is_repo_entry or item.is_search_all_entry or item.is_downloads_entry then
+    if item.is_downloads_entry then
         return true
     end
     local dialog

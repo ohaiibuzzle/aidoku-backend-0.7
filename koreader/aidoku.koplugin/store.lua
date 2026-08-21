@@ -70,6 +70,28 @@ function Store:libraryEntries()
     return entries
 end
 
+-- ===== Read chapters =====
+
+-- Marked only automatically, when the reader hits a chapter's end-of-book
+-- event (see main.lua's hookEndOfBook) -- there's no manual toggle. Keyed
+-- like library bookmarks (source_key + manga_key), plus chapter_key, so a
+-- chapter's read state survives its download being pruned/removed.
+local function chapterReadKey(source_key, manga_key, chapter_key)
+    return source_key .. "|" .. manga_key .. "|" .. chapter_key
+end
+
+function Store:isChapterRead(source_key, manga_key, chapter_key)
+    local read_chapters = self.settings:readSetting("read_chapters", {})
+    return read_chapters[chapterReadKey(source_key, manga_key, chapter_key)] == true
+end
+
+function Store:markChapterRead(source_key, manga_key, chapter_key)
+    local read_chapters = self.settings:readSetting("read_chapters", {})
+    read_chapters[chapterReadKey(source_key, manga_key, chapter_key)] = true
+    self.settings:saveSetting("read_chapters", read_chapters)
+    self.settings:flush()
+end
+
 -- ===== Preferences =====
 
 -- sortOrder is "desc" (source's native order, usually newest-first) or
@@ -129,6 +151,29 @@ end
 
 function Store:setDownloadLimitBytes(n)
     self.settings:saveSetting("download_limit_bytes", n)
+    self.settings:flush()
+end
+
+-- repoURL is the index.min.json URL RepoBrowser installs sources from.
+-- Stored value "" (the default) means the built-in Aidoku Community
+-- Sources repo -- resolved here rather than left to callers, since
+-- RepoBrowser always needs a real, non-empty URL to work with.
+Store.DEFAULT_REPO_URL = "https://aidoku-community.github.io/sources/index.min.json"
+
+function Store:repoURL()
+    local url = self.settings:readSetting("repo_url", "")
+    return url ~= "" and url or Store.DEFAULT_REPO_URL
+end
+
+-- Storing the literal default is normalized back to "" (unset), so a
+-- future change to Store.DEFAULT_REPO_URL isn't shadowed by a
+-- never-actually-customized value saved from an old default.
+function Store:setRepoURL(url)
+    url = url and url:gsub("^%s+", ""):gsub("%s+$", "") or ""
+    if url == Store.DEFAULT_REPO_URL then
+        url = ""
+    end
+    self.settings:saveSetting("repo_url", url)
     self.settings:flush()
 end
 

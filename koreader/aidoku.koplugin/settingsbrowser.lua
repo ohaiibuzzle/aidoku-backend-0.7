@@ -1,20 +1,21 @@
 --[[--
 Aidoku settings: source management (installed sources, repository browser,
 downloaded chapters), the chapter-prefetch and auto-advance preferences,
-storage limit/usage, and FlareSolverr host. Reached from the Library
-screen's title bar, keeping the Library list itself just the user's
-bookmarked manga.
+storage limit/usage, FlareSolverr host, and the source repository URL.
+Reached from the Library screen's title bar, keeping the Library list
+itself just the user's bookmarked manga.
 ]]
 
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
+local Store = require("store")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
 local SettingsBrowser = Menu:extend{
-    title = _("Aidoku settings"),
+    title = _("Settings"),
 }
 
 local MB = 1024 * 1024
@@ -43,12 +44,7 @@ end
 
 function SettingsBrowser:genItemTable()
     local limit = self.store:downloadLimitBytes()
-    local storage_text
-    if limit <= 0 then
-        storage_text = _("Storage limit: none")
-    else
-        storage_text = T(_("Storage limit: %1"), formatMB(limit))
-    end
+    local storage_text = limit <= 0 and _("none") or formatMB(limit)
     if self.usage_bytes then
         storage_text = storage_text .. T(_(" (using %1)"), formatMB(self.usage_bytes))
     end
@@ -56,15 +52,23 @@ function SettingsBrowser:genItemTable()
     local flaresolverr = self.store:flareSolverrHost()
     local flaresolverr_text = flaresolverr ~= "" and flaresolverr or _("not set")
 
+    local repo_url_text = self.store:repoURL() == Store.DEFAULT_REPO_URL and _("Default") or _("Custom")
+
     return {
         { text = _("Sources"), is_sources_entry = true },
-        { text = T(_("Prefetch next chapters: %1"), self.store:bufferChapters()), is_buffer_entry = true },
         {
-            text = T(_("Auto-advance at chapter end: %1"), MODE_LABELS[self.store:nextChapterMode()]),
+            text = _("Prefetch next chapters"),
+            mandatory = tostring(self.store:bufferChapters()),
+            is_buffer_entry = true,
+        },
+        {
+            text = _("Auto-advance at chapter end"),
+            mandatory = MODE_LABELS[self.store:nextChapterMode()],
             is_next_chapter_entry = true,
         },
-        { text = storage_text, is_storage_limit_entry = true },
-        { text = T(_("FlareSolverr host: %1"), flaresolverr_text), is_flaresolverr_entry = true },
+        { text = _("Storage limit"), mandatory = storage_text, is_storage_limit_entry = true },
+        { text = _("FlareSolverr host"), mandatory = flaresolverr_text, is_flaresolverr_entry = true },
+        { text = _("Source repository URL"), mandatory = repo_url_text, is_repo_url_entry = true },
     }
 end
 
@@ -172,6 +176,37 @@ function SettingsBrowser:promptFlareSolverrHost()
     dialog:onShowKeyboard()
 end
 
+function SettingsBrowser:promptRepoURL()
+    local dialog
+    dialog = InputDialog:new{
+        title = _("Source repository URL"),
+        description = T(
+            _("The index.min.json URL the repository browser installs sources from. Leave blank to reset to the default:\n%1"),
+            Store.DEFAULT_REPO_URL),
+        input = self.store:repoURL(),
+        input_hint = _("https://…/index.min.json"),
+        buttons = {{
+            {
+                text = _("Cancel"),
+                id = "close",
+                callback = function() UIManager:close(dialog) end,
+            },
+            {
+                text = _("Set"),
+                is_enter_default = true,
+                callback = function()
+                    local url = dialog:getInputText()
+                    UIManager:close(dialog)
+                    self.store:setRepoURL(url or "")
+                    self:refresh()
+                end,
+            },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
 function SettingsBrowser:cycleNextChapterMode()
     local current = self.store:nextChapterMode()
     local next_mode = MODE_ORDER[1]
@@ -195,7 +230,6 @@ function SettingsBrowser:onMenuSelect(item)
             ui = self.ui,
             sources_dir = self.sources_dir,
             downloads_dir = self.downloads_dir,
-            repo_url = self.repo_url,
             is_popout = false,
             is_borderless = true,
             title_bar_fm_style = true,
@@ -208,6 +242,8 @@ function SettingsBrowser:onMenuSelect(item)
         self:promptStorageLimit()
     elseif item.is_flaresolverr_entry then
         self:promptFlareSolverrHost()
+    elseif item.is_repo_url_entry then
+        self:promptRepoURL()
     end
     return true
 end

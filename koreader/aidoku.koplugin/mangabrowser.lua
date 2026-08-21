@@ -119,12 +119,19 @@ function MangaBrowser:genItemTable()
             table.insert(ordered, self.chapters[i])
         end
     end
-    for _, chapter in ipairs(ordered) do
-        local label = chapterLabel(chapter)
-        if self:downloadedPath(chapter.Key) ~= "" then
-            label = "✓ " .. label
+    for _idx, chapter in ipairs(ordered) do
+        local mandatory_parts = {}
+        if self.store:isChapterRead(self.source_key, self.manga.Key, chapter.Key) then
+            table.insert(mandatory_parts, _("Read"))
         end
-        table.insert(item_table, { text = label, chapter = chapter })
+        if self:downloadedPath(chapter.Key) ~= "" then
+            table.insert(mandatory_parts, "✓")
+        end
+        table.insert(item_table, {
+            text = chapterLabel(chapter),
+            mandatory = table.concat(mandatory_parts, " "),
+            chapter = chapter,
+        })
     end
     return item_table
 end
