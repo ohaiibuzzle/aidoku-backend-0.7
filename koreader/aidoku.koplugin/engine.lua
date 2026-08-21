@@ -167,11 +167,15 @@ end
 -- a lower CPU priority (see the note on this in subprocess.lua's exec()),
 -- since a silent download is by definition a background prefetch, not
 -- something the user is actively waiting on.
-function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent)
+--
+-- progress_text_override, if given, replaces the default "Downloading
+-- chapter…" text (e.g. mangabrowser.lua's bulk download uses it to show
+-- batch position, "Downloading 3/15: Chapter 9"). Ignored when silent.
+function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override)
     -- Not "silent and false or ...": that's the classic Lua and/or-ternary
     -- trap -- it misfires whenever the "true" branch value is itself falsy,
     -- which false always is.
-    local progress_text = _("Downloading chapter…")
+    local progress_text = progress_text_override or _("Downloading chapter…")
     if silent then
         progress_text = false
     end

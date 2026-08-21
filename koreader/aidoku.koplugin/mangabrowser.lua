@@ -1,8 +1,13 @@
 --[[--
-Shows one manga's chapter list, lets the user flip chapter sort order via a
-title bar button, and downloads a chapter as a CBZ (skipping the network
-entirely if it's already downloaded) then opens it. Bookmarking a manga to
-the library happens from searchbrowser.lua's result list, not here.
+Shows one manga's chapter list, and downloads a chapter as a CBZ (skipping
+the network entirely if it's already downloaded) then opens it. Bookmarking
+a manga to the library happens from searchbrowser.lua's result list, not
+here.
+
+The title bar's left "hamburger" button (same technique as
+librarybrowser.lua's own onLeftButtonTap) groups the chapter sort-order
+toggle and bulk-downloading the next N chapters from wherever the user last
+left off reading (see downloadNext()).
 
 reload() renders the local downloads index first (see the note there) and
 only opportunistically refreshes from the network's "manga" command (details
@@ -23,6 +28,7 @@ local ButtonDialog = require("ui/widget/buttondialog")
 local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
+local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
 local Prefetch = require("prefetch")
@@ -43,12 +49,10 @@ function MangaBrowser:init()
     self.chapters = {}
     self.downloaded_keys = {} -- chapter Key -> local path, refreshed by reload()
     self.item_table = {}
-    -- Sort-order toggle lives on the title bar's left button since it
-    -- applies to the whole list, not one row -- see Menu:onLeftButtonTap
-    -- in frontend/ui/widget/menu.lua. There's no dedicated "sort" icon in
-    -- KOReader's icon set, so move.up/move.down (already directional)
-    -- stand in, swapped each time the order flips.
-    self.title_bar_left_icon = self:sortIcon()
+    -- The hamburger menu (see onLeftButtonTap below) groups the sort-order
+    -- toggle and bulk-download -- same technique as librarybrowser.lua's
+    -- own title_bar_left_icon/onLeftButtonTap.
+    self.title_bar_left_icon = "appbar.menu"
     Menu.init(self)
     -- See the same note in repobrowser.lua's init(): defer past the
     -- caller's own UIManager:show(self), since reload()'s progress widget
@@ -56,17 +60,36 @@ function MangaBrowser:init()
     UIManager:nextTick(function() self:reload() end)
 end
 
-function MangaBrowser:sortIcon()
-    return self.store:sortOrder() == "asc" and "move.up" or "move.down"
-end
-
+-- The hamburger menu (see title_bar_left_icon above) groups the sort-order
+-- toggle (moved here from its own dedicated button -- its current state
+-- shows as this button's label, same as librarybrowser.lua's "Sort: X"
+-- convention, so no separate toast is needed on toggle) and bulk-downloading
+-- the next N chapters (see downloadNext()). Anchored under the hamburger
+-- icon itself, same technique as librarybrowser.lua:82-136.
 function MangaBrowser:onLeftButtonTap()
-    self.store:setSortOrder(self.store:sortOrder() == "asc" and "desc" or "asc")
-    self:refresh()
-    UIManager:show(InfoMessage:new{
-        text = self.store:sortOrder() == "asc" and _("Sorted: oldest first") or _("Sorted: newest first"),
-        timeout = 1.5,
-    })
+    local dialog
+    dialog = ButtonDialog:new{
+        shrink_unneeded_width = true,
+        anchor = function() return self.title_bar.left_button.image.dimen end,
+        buttons = {
+            {{
+                text = self.store:sortOrder() == "asc" and _("Sort: Oldest first") or _("Sort: Newest first"),
+                callback = function()
+                    UIManager:close(dialog)
+                    self.store:setSortOrder(self.store:sortOrder() == "asc" and "desc" or "asc")
+                    self:refresh()
+                end,
+            }},
+            {{
+                text = _("Download next chapters…"),
+                callback = function()
+                    UIManager:close(dialog)
+                    self:promptBulkDownload()
+                end,
+            }},
+        },
+    }
+    UIManager:show(dialog)
 end
 
 -- downloadedPath returns the local CBZ path for chapter_key if it's
@@ -203,6 +226,151 @@ function MangaBrowser:prefetchAhead(chapter)
             self:refresh()
         end
     end)
+end
+
+-- findLastReadChapter returns the Key of the last chapter (in ordered,
+-- ascending reading order) marked read via store:markChapterRead (set only
+-- on end-of-book -- see the note on this in store.lua), or nil if none of
+-- them are. There's no direct "last read chapter" pointer in store.lua
+-- (only this per-chapter boolean and a separate manga-level lastReadAt
+-- timestamp used for library sorting) -- this is how downloadNext() finds
+-- where to resume.
+function MangaBrowser:findLastReadChapter(ordered)
+    local last_key
+    for _, c in ipairs(ordered) do
+        if self.store:isChapterRead(self.source_key, self.manga.Key, c.Key) then
+            last_key = c.Key
+        end
+    end
+    return last_key
+end
+
+-- downloadNext downloads up to n chapters in reading order, resuming from
+-- just after the last chapter marked read (or from the very first chapter
+-- if none are). Chapters already downloaded within that range are skipped
+-- (not re-downloaded) but still counted as part of the batch. Unlike
+-- prefetchAhead's silent background buffer, this is a visible,
+-- user-initiated action -- each chapter gets Engine:download's normal
+-- progress popup (dismissable/cancellable -- see the note on this in
+-- engine.lua), shown with the batch's position via progress_text_override,
+-- and cancelling one stops the whole batch rather than skipping to the
+-- next chapter.
+function MangaBrowser:downloadNext(n)
+    local ordered = ChapterOrder.orderedByReading(self.chapters)
+    if #ordered == 0 then
+        UIManager:show(InfoMessage:new{ text = _("No numbered chapters to download."), timeout = 2 })
+        return
+    end
+
+    local last_key = self:findLastReadChapter(ordered)
+    local upcoming
+    if last_key then
+        upcoming = ChapterOrder.after(self.chapters, last_key, n)
+    else
+        -- ChapterOrder.after returns {} for a nil current_key rather than
+        -- falling back to the start (it only ever looks for a match) --
+        -- "nothing read yet" has to be handled here instead.
+        upcoming = {}
+        for i = 1, math.min(n, #ordered) do
+            table.insert(upcoming, ordered[i])
+        end
+    end
+    if #upcoming == 0 then
+        UIManager:show(InfoMessage:new{ text = _("You're all caught up -- no next chapter yet."), timeout = 2 })
+        return
+    end
+
+    local needs_download = false
+    for _, c in ipairs(upcoming) do
+        if self:downloadedPath(c.Key) == "" then
+            needs_download = true
+            break
+        end
+    end
+    if not needs_download then
+        -- The whole requested range is already local -- skip the network
+        -- gate below entirely rather than prompting to connect for a batch
+        -- that turns out to be a no-op.
+        UIManager:show(InfoMessage:new{ text = _("Already downloaded."), timeout = 2 })
+        return
+    end
+
+    NetworkMgr:runWhenConnected(function()
+        Trapper:wrap(function()
+            local downloaded_any = false
+            for i, c in ipairs(upcoming) do
+                if self:downloadedPath(c.Key) ~= "" then
+                    downloaded_any = true
+                else
+                    local filename = mangaLabel(self.manga) .. " - " .. chapterLabel(c) .. ".cbz"
+                    filename = util.getSafeFilename(filename, self.downloads_dir)
+                    local out_path = self.downloads_dir .. "/" .. filename
+                    local progress = T(_("Downloading %1/%2: %3"), i, #upcoming, chapterLabel(c))
+                    local path, err = self.engine:download(
+                        self.source_path, self.manga.Key, c.Key, out_path, self.downloads_dir, false, progress)
+                    if not path then
+                        if err == _("Cancelled") then
+                            -- Distinct from the "Download failed" every
+                            -- other caller shows on cancel -- cancelling a
+                            -- bulk action isn't an error, it's the user
+                            -- stopping partway through on purpose.
+                            UIManager:show(InfoMessage:new{
+                                text = T(_("Cancelled -- downloaded %1 of %2 chapters."), i - 1, #upcoming),
+                            })
+                        else
+                            UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), err) })
+                        end
+                        break
+                    end
+                    self.downloaded_keys[c.Key] = path
+                    downloaded_any = true
+                end
+            end
+            if downloaded_any then
+                self.downloads_engine:prune(self.store:downloadLimitBytes())
+            end
+            self:refresh()
+        end)
+    end)
+end
+
+-- promptBulkDownload asks how many upcoming chapters to download (see
+-- downloadNext()), reusing settingsbrowser.lua's numeric InputDialog shape.
+function MangaBrowser:promptBulkDownload()
+    if #self.chapters == 0 then
+        -- reload() populates self.chapters asynchronously (deferred via
+        -- UIManager:nextTick past init()) -- the hamburger menu can in
+        -- principle be opened before that's landed.
+        UIManager:show(InfoMessage:new{ text = _("No chapters loaded yet -- try again in a moment."), timeout = 2 })
+        return
+    end
+    local dialog
+    dialog = InputDialog:new{
+        title = _("Download next chapters"),
+        description = _("How many chapters to download, starting after the last one you've read (or from the first chapter if you haven't read any yet)."),
+        input = "5",
+        input_type = "number",
+        buttons = {{
+            {
+                text = _("Cancel"),
+                id = "close",
+                callback = function() UIManager:close(dialog) end,
+            },
+            {
+                text = _("Download"),
+                is_enter_default = true,
+                callback = function()
+                    local n = tonumber(dialog:getInputText())
+                    UIManager:close(dialog)
+                    if n and n >= 1 then
+                        self:downloadNext(math.floor(n))
+                    end
+                end,
+            },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
 end
 
 function MangaBrowser:openLocal(path)
