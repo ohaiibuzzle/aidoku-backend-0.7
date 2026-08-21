@@ -32,9 +32,30 @@ function LibraryBrowser:init()
     Menu.init(self)
 end
 
+-- entryKey resolves a library entry's identity for lastReadAt lookups --
+-- same source_key-with-source_path-fallback as onMenuHold's removeBookmark
+-- key, needed because a never-opened legacy bookmark (see
+-- migrateLegacyBookmark) has no source_key yet.
+local function entryKey(entry)
+    return (entry.source_key and entry.source_key ~= "") and entry.source_key or entry.source_path
+end
+
+function LibraryBrowser:sortedLibraryEntries()
+    local entries = self.store:libraryEntries()
+    local order = self.store:librarySortOrder()
+    if order == "last_read" then
+        table.sort(entries, function(a, b)
+            return self.store:lastReadAt(entryKey(a), a.manga_key) > self.store:lastReadAt(entryKey(b), b.manga_key)
+        end)
+    else
+        table.sort(entries, function(a, b) return a.title:lower() < b.title:lower() end)
+    end
+    return entries
+end
+
 function LibraryBrowser:genItemTable()
     local item_table = {}
-    for _, entry in ipairs(self.store:libraryEntries()) do
+    for _, entry in ipairs(self:sortedLibraryEntries()) do
         table.insert(item_table, { text = entry.title, library_entry = entry })
     end
     if #item_table == 0 then
@@ -98,6 +119,15 @@ function LibraryBrowser:onLeftButtonTap()
                         is_borderless = true,
                         title_bar_fm_style = true,
                     })
+                end,
+            }},
+            {{
+                text = self.store:librarySortOrder() == "last_read" and _("Sort: Last read") or _("Sort: Name"),
+                callback = function()
+                    UIManager:close(dialog)
+                    local next_order = self.store:librarySortOrder() == "last_read" and "name" or "last_read"
+                    self.store:setLibrarySortOrder(next_order)
+                    self:refresh()
                 end,
             }},
         },

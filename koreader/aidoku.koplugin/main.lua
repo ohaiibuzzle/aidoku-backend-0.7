@@ -36,9 +36,11 @@ function Aidoku:init()
     -- for armv7 Kindles/Kobos, "arm64" for aarch64 devices/desktops).
     self.store = Store.new()
     self.engine = Engine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-run", function()
+        local concurrency = self.store:networkConcurrency()
         return {
             FLARESOLVERR_HOST = self.store:flareSolverrHost(),
             AIDOKU_SETTINGS_DIR = self.settings_dir,
+            NETWORK_CONCURRENCY = concurrency > 0 and tostring(concurrency) or "",
         }
     end)
     self.downloads_engine = DownloadsEngine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-downloads", self.downloads_dir)

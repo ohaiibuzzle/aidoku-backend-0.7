@@ -6,12 +6,26 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
+
+// NetworkConcurrencyFromEnv returns the configured Net.MaxConcurrency value
+// from the NETWORK_CONCURRENCY environment variable, or 0 (meaning
+// "unset, use defaultSendAllMaxConcurrency") if it's absent or not a
+// positive integer.
+func NetworkConcurrencyFromEnv() int {
+	n, err := strconv.Atoi(os.Getenv("NETWORK_CONCURRENCY"))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
 
 type netResult int32
 
@@ -150,7 +164,25 @@ type Net struct {
 	SourceKey             string
 	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
 
+	// MaxConcurrency bounds how many requests sendAll runs at once. <= 0
+	// (the default) falls back to defaultSendAllMaxConcurrency.
+	MaxConcurrency int
+
 	rateLimit RateLimit
+}
+
+// defaultSendAllMaxConcurrency is used when Net.MaxConcurrency is unset.
+// Each goroutine's underlying HTTP round trip can pin an OS thread, and this
+// project targets devices with as little as 256MB RAM (see CLAUDE.md) — an
+// unbounded fan-out over a large descriptor batch would spin up one thread
+// per descriptor with no cap.
+const defaultSendAllMaxConcurrency = 8
+
+func (n *Net) maxConcurrency() int {
+	if n.MaxConcurrency > 0 {
+		return n.MaxConcurrency
+	}
+	return defaultSendAllMaxConcurrency
 }
 
 func (n *Net) flareSolverr() *flareSolverrRetryer {
@@ -470,10 +502,13 @@ func (n *Net) sendAll(ctx context.Context, m api.Module, descriptorsOffset, leng
 
 	errs := make([]int32, length)
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, n.maxConcurrency())
 	for idx, d := range descriptors {
 		wg.Add(1)
+		sem <- struct{}{}
 		go func(idx int, descriptor int32) {
 			defer wg.Done()
+			defer func() { <-sem }()
 			errs[idx] = int32(n.send(ctx, descriptor))
 		}(idx, d)
 	}

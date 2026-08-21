@@ -85,6 +85,9 @@ instead of a shared temp file, so values set with `+"`settings set`"+` survive
 across invocations and processes -- set this to a real per-install directory
 for anything other than one-off CLI testing.
 
+NETWORK_CONCURRENCY, if set to a positive integer, bounds how many requests
+a guest's net.send_all call runs at once (default 8).
+
 The <source-dir> argument is required but ignored by the `+"`cookie`"+` and `+"`repo`"+`
 subcommands, which don't operate on a loaded source. `+"`manifest`"+` does use it, but
 reads source.json directly rather than loading the source.`)
@@ -129,6 +132,7 @@ func run(dir, command string, args []string) error {
 		OnFlareSolverrCookies: func(u *url.URL, cookies []*http.Cookie) {
 			persistCookies(cookiePath, cookies)
 		},
+		NetworkConcurrency: host.NetworkConcurrencyFromEnv(),
 	}, settings)
 	if err != nil {
 		return fmt.Errorf("loading source: %w", err)

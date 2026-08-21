@@ -46,6 +46,11 @@ type Config struct {
 	// caller additionally persist them somewhere durable (e.g. a cookie
 	// store on disk) across process restarts.
 	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
+
+	// NetworkConcurrency bounds how many requests a guest's net.send_all
+	// call runs at once (see host.Net.MaxConcurrency). <= 0 (the default)
+	// falls back to the host package's own default.
+	NetworkConcurrency int
 }
 
 // Interpreter loads and runs a single compiled Aidoku source .wasm module.
@@ -142,6 +147,7 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 		SourceKey:             sourceKey,
 		FlareSolverr:          flareSolverr,
 		OnFlareSolverrCookies: config.OnFlareSolverrCookies,
+		MaxConcurrency:        config.NetworkConcurrency,
 	}
 
 	htmlLib := host.NewHtml(i.store)

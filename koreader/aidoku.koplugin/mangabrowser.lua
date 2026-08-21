@@ -179,6 +179,7 @@ function MangaBrowser:prefetchAhead(chapter)
 end
 
 function MangaBrowser:openLocal(path)
+    self.store:markLastRead(self.source_key, self.manga.Key)
     UIManager:close(self)
     if self.ui.document then
         self.ui:switchDocument(path)

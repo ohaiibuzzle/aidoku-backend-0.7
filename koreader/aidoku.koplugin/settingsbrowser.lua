@@ -54,8 +54,14 @@ function SettingsBrowser:genItemTable()
 
     local repo_url_text = self.store:repoURL() == Store.DEFAULT_REPO_URL and _("Default") or _("Custom")
 
+    local concurrency = self.store:networkConcurrency()
+    local concurrency_text = concurrency > 0 and tostring(concurrency) or _("Default (8)")
+
     return {
+        -- Navigation entry to the source-management screen.
         { text = _("Sources"), is_sources_entry = true },
+
+        -- Day-to-day reading behavior.
         {
             text = _("Prefetch next chapters"),
             mandatory = tostring(self.store:bufferChapters()),
@@ -66,9 +72,14 @@ function SettingsBrowser:genItemTable()
             mandatory = MODE_LABELS[self.store:nextChapterMode()],
             is_next_chapter_entry = true,
         },
+
+        -- Storage.
         { text = _("Storage limit"), mandatory = storage_text, is_storage_limit_entry = true },
-        { text = _("FlareSolverr host"), mandatory = flaresolverr_text, is_flaresolverr_entry = true },
+
+        -- Network/source configuration, roughly least to most obscure.
         { text = _("Source repository URL"), mandatory = repo_url_text, is_repo_url_entry = true },
+        { text = _("Network concurrency"), mandatory = concurrency_text, is_network_concurrency_entry = true },
+        { text = _("FlareSolverr host"), mandatory = flaresolverr_text, is_flaresolverr_entry = true },
     }
 end
 
@@ -147,35 +158,6 @@ function SettingsBrowser:promptStorageLimit()
     dialog:onShowKeyboard()
 end
 
-function SettingsBrowser:promptFlareSolverrHost()
-    local dialog
-    dialog = InputDialog:new{
-        title = _("FlareSolverr host"),
-        description = _("e.g. localhost:8191 -- used to solve Cloudflare challenges for sources that need it. Leave blank to disable."),
-        input = self.store:flareSolverrHost(),
-        input_hint = _("host:port"),
-        buttons = {{
-            {
-                text = _("Cancel"),
-                id = "close",
-                callback = function() UIManager:close(dialog) end,
-            },
-            {
-                text = _("Set"),
-                is_enter_default = true,
-                callback = function()
-                    local host = dialog:getInputText()
-                    UIManager:close(dialog)
-                    self.store:setFlareSolverrHost(host and host:gsub("^%s+", ""):gsub("%s+$", "") or "")
-                    self:refresh()
-                end,
-            },
-        }},
-    }
-    UIManager:show(dialog)
-    dialog:onShowKeyboard()
-end
-
 function SettingsBrowser:promptRepoURL()
     local dialog
     dialog = InputDialog:new{
@@ -198,6 +180,71 @@ function SettingsBrowser:promptRepoURL()
                     local url = dialog:getInputText()
                     UIManager:close(dialog)
                     self.store:setRepoURL(url or "")
+                    self:refresh()
+                end,
+            },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+function SettingsBrowser:promptNetworkConcurrency()
+    local current = self.store:networkConcurrency()
+    local dialog
+    dialog = InputDialog:new{
+        title = _("Network concurrency"),
+        description = _("How many requests a source can run at once via net.send_all. Leave blank or 0 to use the default (8). Higher values may use more memory."),
+        input = current > 0 and tostring(current) or "",
+        input_type = "number",
+        buttons = {{
+            {
+                text = _("Cancel"),
+                id = "close",
+                callback = function() UIManager:close(dialog) end,
+            },
+            {
+                text = _("Set"),
+                is_enter_default = true,
+                callback = function()
+                    local text = dialog:getInputText()
+                    local n = tonumber(text)
+                    UIManager:close(dialog)
+                    if text == "" then
+                        self.store:setNetworkConcurrency(0)
+                        self:refresh()
+                    elseif n and n > 0 then
+                        self.store:setNetworkConcurrency(math.floor(n))
+                        self:refresh()
+                    end
+                end,
+            },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+function SettingsBrowser:promptFlareSolverrHost()
+    local dialog
+    dialog = InputDialog:new{
+        title = _("FlareSolverr host"),
+        description = _("e.g. localhost:8191 -- used to solve Cloudflare challenges for sources that need it. Leave blank to disable."),
+        input = self.store:flareSolverrHost(),
+        input_hint = _("host:port"),
+        buttons = {{
+            {
+                text = _("Cancel"),
+                id = "close",
+                callback = function() UIManager:close(dialog) end,
+            },
+            {
+                text = _("Set"),
+                is_enter_default = true,
+                callback = function()
+                    local host = dialog:getInputText()
+                    UIManager:close(dialog)
+                    self.store:setFlareSolverrHost(host and host:gsub("^%s+", ""):gsub("%s+$", "") or "")
                     self:refresh()
                 end,
             },
@@ -240,10 +287,12 @@ function SettingsBrowser:onMenuSelect(item)
         self:cycleNextChapterMode()
     elseif item.is_storage_limit_entry then
         self:promptStorageLimit()
-    elseif item.is_flaresolverr_entry then
-        self:promptFlareSolverrHost()
     elseif item.is_repo_url_entry then
         self:promptRepoURL()
+    elseif item.is_network_concurrency_entry then
+        self:promptNetworkConcurrency()
+    elseif item.is_flaresolverr_entry then
+        self:promptFlareSolverrHost()
     end
     return true
 end

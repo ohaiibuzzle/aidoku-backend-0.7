@@ -70,6 +70,41 @@ function Store:libraryEntries()
     return entries
 end
 
+-- librarySortOrder is "name" (alphabetical, the default) or "last_read"
+-- (most recently read chapter first, via lastReadAt below) -- see
+-- librarybrowser.lua's hamburger menu, where it's toggled.
+function Store:librarySortOrder()
+    return self.settings:readSetting("library_sort_order", "name")
+end
+
+function Store:setLibrarySortOrder(order)
+    self.settings:saveSetting("library_sort_order", order)
+    self.settings:flush()
+end
+
+-- lastReadAt/markLastRead track os.time() of the last chapter opened for a
+-- given manga, for the "last_read" library sort above. Recorded whenever a
+-- chapter is opened (mangabrowser.lua's openLocal), regardless of whether
+-- the manga is bookmarked -- entries for manga never added to the library
+-- are simply never looked up. Keyed like library bookmarks (source_key +
+-- manga_key), separate from read_chapters (which is per-chapter and
+-- boolean, not timestamped).
+local function lastReadKey(source_key, manga_key)
+    return source_key .. "|" .. manga_key
+end
+
+function Store:lastReadAt(source_key, manga_key)
+    local last_read = self.settings:readSetting("last_read", {})
+    return last_read[lastReadKey(source_key, manga_key)] or 0
+end
+
+function Store:markLastRead(source_key, manga_key)
+    local last_read = self.settings:readSetting("last_read", {})
+    last_read[lastReadKey(source_key, manga_key)] = os.time()
+    self.settings:saveSetting("last_read", last_read)
+    self.settings:flush()
+end
+
 -- ===== Read chapters =====
 
 -- Marked only automatically, when the reader hits a chapter's end-of-book
@@ -140,6 +175,20 @@ end
 
 function Store:setFlareSolverrHost(host)
     self.settings:saveSetting("flaresolverr_host", host)
+    self.settings:flush()
+end
+
+-- networkConcurrency bounds how many requests a source's net.send_all call
+-- runs at once (see runtime/host/net.go's Net.MaxConcurrency). <= 0 (the
+-- default) means "unset" -- engine.lua injects this into every
+-- source-running command's environment regardless, and the Go side falls
+-- back to its own default (8) when unset or non-positive.
+function Store:networkConcurrency()
+    return self.settings:readSetting("network_concurrency", 0)
+end
+
+function Store:setNetworkConcurrency(n)
+    self.settings:saveSetting("network_concurrency", n)
     self.settings:flush()
 end
 
