@@ -22,6 +22,32 @@ local Aidoku = WidgetContainer:extend{
     is_doc_only = false,
 }
 
+-- binArch returns the plugin's bin/ subdirectory for the running device.
+-- jit.arch (LuaJIT's arch name) matches Go's GOARCH for arm64 and x86-64
+-- ("x64"), but unlike GOARCH it doesn't distinguish ARM versions -- it
+-- reports "arm" on both armv6 and armv7 hardware. koreader/build.sh ships
+-- separate armv6/armv7 binaries (older Kindles -- Kindle 4, Touch, PW1 --
+-- are ARMv6; newer Kindles and Kobos are ARMv7), so on "arm" we read
+-- /proc/cpuinfo's "CPU architecture" line to pick between them, falling
+-- back to the more common armv7 if that's ever unavailable/unparseable.
+local function binArch()
+    if jit.arch ~= "arm" then
+        return jit.arch
+    end
+    local cpuinfo = io.open("/proc/cpuinfo", "r")
+    if cpuinfo then
+        for line in cpuinfo:lines() do
+            local ver = line:match("^CPU architecture%s*:%s*(%d+)")
+            if ver then
+                cpuinfo:close()
+                return tonumber(ver) <= 6 and "armv6" or "armv7"
+            end
+        end
+        cpuinfo:close()
+    end
+    return "armv7"
+end
+
 function Aidoku:init()
     self.sources_dir = DataStorage:getDataDir() .. "/aidoku/sources"
     self.downloads_dir = DataStorage:getDataDir() .. "/aidoku/downloads"
@@ -31,11 +57,12 @@ function Aidoku:init()
     util.makePath(self.settings_dir)
 
     -- self.path is set by KOReader's plugin loader to this plugin's own
-    -- directory. jit.arch (LuaJIT, which KOReader always runs on) names
-    -- match Go's GOARCH for the targets koreader/build.sh produces ("arm"
-    -- for armv7 Kindles/Kobos, "arm64" for aarch64 devices/desktops).
+    -- directory; bin_arch (see binArch() above) names match the targets
+    -- koreader/build.sh produces ("armv6"/"armv7" for Kindles/Kobos,
+    -- "arm64"/"x64" for aarch64/x86-64 devices and desktops).
+    local bin_arch = binArch()
     self.store = Store.new()
-    self.engine = Engine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-run", function()
+    self.engine = Engine.new(self.path .. "/bin/" .. bin_arch .. "/aidoku-run", function()
         local concurrency = self.store:networkConcurrency()
         return {
             FLARESOLVERR_HOST = self.store:flareSolverrHost(),
@@ -43,7 +70,7 @@ function Aidoku:init()
             NETWORK_CONCURRENCY = concurrency > 0 and tostring(concurrency) or "",
         }
     end)
-    self.downloads_engine = DownloadsEngine.new(self.path .. "/bin/" .. jit.arch .. "/aidoku-downloads", self.downloads_dir)
+    self.downloads_engine = DownloadsEngine.new(self.path .. "/bin/" .. bin_arch .. "/aidoku-downloads", self.downloads_dir)
 
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
