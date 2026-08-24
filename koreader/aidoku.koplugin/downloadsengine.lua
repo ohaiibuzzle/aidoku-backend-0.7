@@ -22,7 +22,11 @@ null-decodes-as-a-function-sentinel gotcha documented in mangabrowser.lua.
 Calls run with an invisible progress widget (SQLite queries against a local
 file are near-instant, not worth a visible spinner), but still go through
 subprocess.lua's Runner/Trapper machinery -- see its docs for why that
-matters even for a fast command.
+matters even for a fast command. Every call below passes nil, not false, for
+that widget's text argument -- see the note on this in engine.lua's
+Engine:download() -- so a tap landing on the (invisible) widget during the
+call still reaches whatever's underneath afterward instead of being
+silently dropped.
 ]]
 
 local Runner = require("subprocess")
@@ -47,7 +51,7 @@ end
 -- why entries are keyed by that instead.
 function DownloadsEngine:path(source_key, manga_key, chapter_key)
     local result, err = self.runner:execJSON(
-        { self.downloads_dir, "path", source_key, manga_key, chapter_key }, false)
+        { self.downloads_dir, "path", source_key, manga_key, chapter_key }, nil)
     if not result then
         return "", err
     end
@@ -58,7 +62,7 @@ end
 -- reader), find which (source, manga, chapter) it is. Returns nil if path
 -- isn't indexed.
 function DownloadsEngine:byPath(file_path)
-    local result, err = self.runner:execJSON({ self.downloads_dir, "by-path", file_path }, false)
+    local result, err = self.runner:execJSON({ self.downloads_dir, "by-path", file_path }, nil)
     if not result then
         return nil, err
     end
@@ -71,7 +75,7 @@ end
 -- remove deletes both the index entry and its backing file (a no-op, not
 -- an error, if it doesn't exist). source_key: see path() above.
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
-    return self.runner:exec({ self.downloads_dir, "remove", source_key, manga_key, chapter_key }, false)
+    return self.runner:exec({ self.downloads_dir, "remove", source_key, manga_key, chapter_key }, nil)
 end
 
 -- reassociate repoints every downloaded-chapter entry under old_source_key
@@ -80,7 +84,7 @@ end
 -- entries were moved.
 function DownloadsEngine:reassociate(old_source_key, new_source_key)
     local result, err = self.runner:execJSON(
-        { self.downloads_dir, "reassociate", old_source_key, new_source_key }, false)
+        { self.downloads_dir, "reassociate", old_source_key, new_source_key }, nil)
     if not result then
         return 0, err
     end
@@ -89,7 +93,7 @@ end
 
 -- list returns every downloaded chapter, most recently downloaded first.
 function DownloadsEngine:list()
-    local result, err = self.runner:execJSON({ self.downloads_dir, "list" }, false)
+    local result, err = self.runner:execJSON({ self.downloads_dir, "list" }, nil)
     if not result then
         return nil, err
     end
@@ -98,7 +102,7 @@ end
 
 -- totalBytes returns the sum of every indexed download's size.
 function DownloadsEngine:totalBytes()
-    local result, err = self.runner:execJSON({ self.downloads_dir, "total" }, false)
+    local result, err = self.runner:execJSON({ self.downloads_dir, "total" }, nil)
     if not result then
         return 0, err
     end
@@ -112,7 +116,7 @@ function DownloadsEngine:prune(limit_bytes)
     if not limit_bytes or limit_bytes <= 0 then
         return {}
     end
-    local result, err = self.runner:execJSON({ self.downloads_dir, "prune", tostring(math.floor(limit_bytes)) }, false)
+    local result, err = self.runner:execJSON({ self.downloads_dir, "prune", tostring(math.floor(limit_bytes)) }, nil)
     if not result then
         return nil, err
     end

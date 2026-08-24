@@ -100,6 +100,7 @@ function LibraryBrowser:onLeftButtonTap()
                         is_popout = false,
                         is_borderless = true,
                         title_bar_fm_style = true,
+                        refresh_callback = function() self:refresh() end,
                     })
                 end,
             }},
@@ -118,6 +119,7 @@ function LibraryBrowser:onLeftButtonTap()
                         is_popout = false,
                         is_borderless = true,
                         title_bar_fm_style = true,
+                        refresh_callback = function() self:refresh() end,
                     })
                 end,
             }},
@@ -187,6 +189,7 @@ function LibraryBrowser:onMenuSelect(item)
             ui = self.ui,
             source_path = found.path,
             source_key = source_key,
+            source_name = found.name,
             downloads_dir = self.downloads_dir,
             manga = { Key = entry.manga_key, Title = entry.title },
             is_popout = false,

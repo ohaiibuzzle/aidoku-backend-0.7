@@ -280,6 +280,7 @@ function SettingsBrowser:onMenuSelect(item)
             is_popout = false,
             is_borderless = true,
             title_bar_fm_style = true,
+            refresh_callback = self.refresh_callback,
         })
     elseif item.is_buffer_entry then
         self:promptBufferChapters()

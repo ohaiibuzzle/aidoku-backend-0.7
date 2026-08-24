@@ -46,6 +46,7 @@ local chapterLabel = Prefetch.chapterLabel
 
 function MangaBrowser:init()
     self.title = mangaLabel(self.manga)
+    self.subtitle = self.source_name
     self.chapters = {}
     self.downloaded_keys = {} -- chapter Key -> local path, refreshed by reload()
     self.item_table = {}
@@ -398,8 +399,13 @@ function MangaBrowser:downloadAndOpen(chapter)
             self.downloaded_keys[chapter.Key] = path
             self.downloads_engine:prune(self.store:downloadLimitBytes())
             self:refresh()
-            self:prefetchAhead(chapter)
             self:openLocal(path)
+            -- Deferred so the reader's own widget/gesture setup finishes and
+            -- is topmost before prefetch's Trapper-wrapped subprocess calls
+            -- start stacking dismissablePopen widgets on top of it -- doing
+            -- this inline was swallowing the first several page-turn taps
+            -- after opening a freshly-downloaded chapter.
+            UIManager:nextTick(function() self:prefetchAhead(chapter) end)
         end)
     end)
 end
@@ -408,7 +414,9 @@ function MangaBrowser:onMenuSelect(item)
     local existing = self:downloadedPath(item.chapter.Key)
     if existing ~= "" then
         self:openLocal(existing)
-        self:prefetchAhead(item.chapter)
+        -- See the note on this in downloadAndOpen() -- deferred so it
+        -- doesn't steal early page-turn taps from the just-opened reader.
+        UIManager:nextTick(function() self:prefetchAhead(item.chapter) end)
         return true
     end
 

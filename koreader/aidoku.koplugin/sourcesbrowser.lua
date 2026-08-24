@@ -95,11 +95,13 @@ function SourcesBrowser:onMenuSelect(item)
             ui = self.ui,
             source_path = item.path,
             source_key = item.key,
+            source_name = item.name,
             downloads_dir = self.downloads_dir,
             title = item.text,
             is_popout = false,
             is_borderless = true,
             title_bar_fm_style = true,
+            refresh_callback = self.refresh_callback,
         })
     end
     return true

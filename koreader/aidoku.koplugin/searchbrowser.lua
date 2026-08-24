@@ -155,6 +155,7 @@ function SearchBrowser:onMenuSelect(item)
         ui = self.ui,
         source_path = self.source_path,
         source_key = self.source_key,
+        source_name = self.source_name,
         downloads_dir = self.downloads_dir,
         manga = item.manga,
         is_popout = false,
@@ -181,6 +182,9 @@ function SearchBrowser:onMenuHold(item)
     -- Update this row's marker in place rather than re-running the search.
     item.text = now_bookmarked and ("★ " .. label) or label
     self:updateItems()
+    if self.refresh_callback then
+        self.refresh_callback()
+    end
     UIManager:show(InfoMessage:new{
         text = now_bookmarked and T(_("Added '%1' to library"), label) or T(_("Removed '%1' from library"), label),
         timeout = 1.5,

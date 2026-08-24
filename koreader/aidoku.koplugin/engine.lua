@@ -62,7 +62,7 @@ end
 -- this is what installedsources.lua uses to identify and display every
 -- installed source, not just one.
 function Engine:manifest(source_path)
-    return self.runner:execJSON({ source_path, "manifest" }, false)
+    return self.runner:execJSON({ source_path, "manifest" }, nil)
 end
 
 -- encodeFilterValues JSON-encodes filter_values (an array of tables shaped
@@ -128,7 +128,7 @@ end
 -- namespaces it under internally) -- nil if neither an explicit override nor
 -- a manifest default exists.
 function Engine:settingsGet(source_path, key)
-    local result, err = self.runner:execJSON({ source_path, "settings", "get", key }, false, self:sourceEnv())
+    local result, err = self.runner:execJSON({ source_path, "settings", "get", key }, nil, self:sourceEnv())
     if not result then
         return nil, err
     end
@@ -146,7 +146,7 @@ function Engine:settingsSet(source_path, key, setting_type, values)
     for _, v in ipairs(values) do
         table.insert(args, v)
     end
-    return self.runner:exec(args, false, self:sourceEnv())
+    return self.runner:exec(args, nil, self:sourceEnv())
 end
 
 function Engine:mangaUpdate(source_path, manga_key)
@@ -160,13 +160,24 @@ end
 -- it's optional only because the bare CLI is also used standalone/without
 -- an index (see cmd/aidoku-run/main.go's own usage text).
 --
--- silent (used for background chapter prefetch) passes false instead of a
--- progress string, which Trapper:dismissablePopen() turns into a fully
--- invisible, non-input-intercepting trap widget instead of a visible
--- "Downloading…" popup -- see ui/trapper.lua. It also runs the binary under
--- a lower CPU priority (see the note on this in subprocess.lua's exec()),
--- since a silent download is by definition a background prefetch, not
--- something the user is actively waiting on.
+-- silent (used for background chapter prefetch) passes nil instead of a
+-- progress string, which Trapper:dismissablePopen() turns into an invisible
+-- trap widget instead of a visible "Downloading…" popup -- see
+-- ui/trapper.lua. Deliberately nil, not false: dismissablePopen() only
+-- treats an invisible trap widget as dismiss-and-drop (resend_event=false,
+-- silently eating whatever tap dismissed it) when the progress argument is
+-- false *exactly* -- nil gets the default resend_event=true, so a tap that
+-- lands on the invisible widget while a chapter downloads in the background
+-- still reaches the reader afterward instead of vanishing. Passing false
+-- here was the actual cause of a bug where enabling prefetch made the
+-- reader swallow one page-turn tap per buffered chapter right after opening
+-- one -- confirmed by testing on device, and initially misdiagnosed as a
+-- widget-stacking/timing issue (deferring the prefetch call with
+-- UIManager:nextTick, still done in mangabrowser.lua/nextchapter.lua,
+-- didn't fix it, since the swallowing wasn't about timing at all). It also
+-- runs the binary under a lower CPU priority (see the note on this in
+-- subprocess.lua's exec()), since a silent download is by definition a
+-- background prefetch, not something the user is actively waiting on.
 --
 -- progress_text_override, if given, replaces the default "Downloading
 -- chapter…" text (e.g. mangabrowser.lua's bulk download uses it to show
@@ -177,7 +188,7 @@ function Engine:download(source_path, manga_key, chapter_key, out_path, download
     -- which false always is.
     local progress_text = progress_text_override or _("Downloading chapter…")
     if silent then
-        progress_text = false
+        progress_text = nil
     end
     local args = { source_path, "download", manga_key, chapter_key, out_path }
     if downloads_dir then

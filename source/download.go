@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/cbz"
@@ -128,9 +129,14 @@ func (s *Source) downloadZipEntry(ctx context.Context, zipURL, filePath string, 
 
 // DownloadChapterCBZ downloads every page of chapter and writes them, in
 // order, to a CBZ archive at outputPath. If outputPath is "", a filename
-// is generated from the manga title and chapter number/title. onProgress,
-// if non-nil, is called after each page finishes downloading (1-indexed
-// current, plus total). Returns the path the archive was written to.
+// is generated from the manga title and chapter number/title; otherwise
+// outputPath's base filename is still run through sanitizeFilename (its
+// directory component is left untouched), since manga/chapter titles often
+// end up baked into that filename by the caller and can contain characters
+// illegal on the target filesystem (e.g. FAT32/exFAT, common on e-readers).
+// onProgress, if non-nil, is called after each page finishes downloading
+// (1-indexed current, plus total). Returns the path the archive was
+// written to.
 //
 // Pages are streamed straight to disk as they download rather than
 // buffered in memory for the whole chapter -- on a memory-constrained
@@ -148,6 +154,10 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 
 	if outputPath == "" {
 		outputPath = defaultCBZName(manga, chapter)
+	} else {
+		dir, base := filepath.Split(outputPath)
+		ext := filepath.Ext(base)
+		outputPath = filepath.Join(dir, sanitizeFilename(strings.TrimSuffix(base, ext))+ext)
 	}
 	w, err := cbz.NewWriter(outputPath, len(pages))
 	if err != nil {

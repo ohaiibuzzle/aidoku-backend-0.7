@@ -106,8 +106,14 @@ function NextChapter.handle(ctx, file_path)
                     -- not just the first chapter opened from
                     -- mangabrowser.lua's list -- otherwise the buffer never
                     -- refills once the user reads past what was originally
-                    -- prefetched. See prefetch.lua.
-                    Prefetch.ahead(prefetch_ctx, local_chapters, local_next.Key)
+                    -- prefetched. See prefetch.lua. Deferred to the next
+                    -- tick (see the same note in mangabrowser.lua's
+                    -- downloadAndOpen()) so its Trapper-wrapped subprocess
+                    -- calls don't steal the first page-turn taps from the
+                    -- reader that ctx.open_callback just switched to.
+                    UIManager:nextTick(function()
+                        Prefetch.ahead(prefetch_ctx, local_chapters, local_next.Key)
+                    end)
                 end
                 if ctx.store:nextChapterMode() == "auto" then
                     openLocalNext()
@@ -151,7 +157,10 @@ function NextChapter.handle(ctx, file_path)
             local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
             if existing ~= "" then
                 ctx.open_callback(existing)
-                Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
+                -- See the deferral note on openLocalNext() above.
+                UIManager:nextTick(function()
+                    Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
+                end)
                 return
             end
             local filename = util.getSafeFilename(
@@ -164,7 +173,10 @@ function NextChapter.handle(ctx, file_path)
             end
             ctx.downloads_engine:prune(ctx.store:downloadLimitBytes())
             ctx.open_callback(path)
-            Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
+            -- See the deferral note on openLocalNext() above.
+            UIManager:nextTick(function()
+                Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
+            end)
         end
 
         if ctx.store:nextChapterMode() == "auto" then
