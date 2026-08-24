@@ -1,12 +1,16 @@
 --[[--
 Lists installed .aix sources in a sources directory, as
-{text = "<display name> (<languages>)", name = "<display name>",
-path = "<sources_dir>/<file>.aix", key = "<source's manifest id>"}
-entries -- shared by sourcesbrowser.lua (one source, uses text),
-globalsearchbrowser.lua (every source at once, uses name -- a result row
-already carries the manga title, so repeating each source's full
-language list per result there is just noise), and librarybrowser.lua
-(resolving a bookmark's stored key back to a live path via findByKey).
+{text = "<display name> (<languages>)", mandatory = "v<version>",
+name = "<display name>", path = "<sources_dir>/<file>.aix",
+key = "<source's manifest id>", version = <int, or nil if unreadable>}
+entries -- shared by sourcesbrowser.lua (one source, uses text/mandatory,
+inserting entries directly as its own Menu item_table), globalsearchbrowser.lua
+(every source at once, uses name -- a result row already carries the manga
+title, so repeating each source's full language list per result there is
+just noise), librarybrowser.lua (resolving a bookmark's stored key back to a
+live path via findByKey), and repobrowser.lua (matching a repo entry's id
+against key to detect an already-installed/updatable source -- see the note
+on this in repobrowser.lua's reload()).
 
 Both key and text come straight from the source's own source.json (via
 engine:manifest(), which reads it without loading the source's WASM module
@@ -56,11 +60,14 @@ function InstalledSources.list(sources_dir, engine)
                 key = manifest.key
             end
             local name = displayName(entry, manifest)
+            local version = manifest and manifest.version
             table.insert(sources, {
                 text = displayText(name, manifest),
+                mandatory = version and ("v" .. tostring(version)) or nil,
                 name = name,
                 path = path,
                 key = key,
+                version = version,
             })
         end
     end
