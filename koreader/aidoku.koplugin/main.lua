@@ -48,10 +48,31 @@ local function binArch()
     return "armv7"
 end
 
+-- dataSubdir builds an absolute-or-relative path under DataStorage's data
+-- dir, normalized to never start with "./". DataStorage:getDataDir() isn't
+-- guaranteed to return an absolute path -- confirmed on a real Kindle whose
+-- launcher cd's into an absolute KOREADER_DIR and then execs a *relative*
+-- "./reader.lua", where it returns the bare "." -- which would otherwise
+-- make this "./aidoku/<name>". KOReader itself strips/never adds that "./"
+-- when it records a document's own path (e.g. self.document.file, or a
+-- .sdr's doc_path), so leaving it in self.downloads_dir would make every
+-- `file:sub(1, #self.downloads_dir) == self.downloads_dir` prefix check
+-- below (and in nextchapter.lua) silently never match -- which is exactly
+-- what happened: read-chapter marking, next-chapter advance, and returning
+-- to the Library after closing a book all silently no-op'd on that device,
+-- with no error, because every single one of those checks is gated on this
+-- same comparison. Stripping the "./" here (rather than fixing each
+-- comparison site) fixes all of them at the source and is a no-op for I/O
+-- itself -- "aidoku/downloads/x" and "./aidoku/downloads/x" name the same
+-- file from the same working directory.
+local function dataSubdir(name)
+    return (DataStorage:getDataDir() .. "/aidoku/" .. name):gsub("^%./", "")
+end
+
 function Aidoku:init()
-    self.sources_dir = DataStorage:getDataDir() .. "/aidoku/sources"
-    self.downloads_dir = DataStorage:getDataDir() .. "/aidoku/downloads"
-    self.settings_dir = DataStorage:getDataDir() .. "/aidoku/settings"
+    self.sources_dir = dataSubdir("sources")
+    self.downloads_dir = dataSubdir("downloads")
+    self.settings_dir = dataSubdir("settings")
     util.makePath(self.sources_dir)
     util.makePath(self.downloads_dir)
     util.makePath(self.settings_dir)
