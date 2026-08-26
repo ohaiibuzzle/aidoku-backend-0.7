@@ -17,6 +17,7 @@ local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
+local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
@@ -30,6 +31,17 @@ local LibraryBrowser = Menu:extend{
 function LibraryBrowser:init()
     self.item_table = self:genItemTable()
     Menu.init(self)
+    OpenWidgets.push(self)
+end
+
+-- Every top-level Aidoku screen (see openwidgets.lua) unregisters itself
+-- here so main.lua's hookClose can close any that are still open before
+-- FileManager/ReaderUI itself closes -- otherwise a screen left open when
+-- KOReader exits stays on UIManager's window stack forever, silently
+-- blocking KOReader from actually quitting.
+function LibraryBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 -- entryKey resolves a library entry's identity for lastReadAt lookups --

@@ -8,6 +8,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
+local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
@@ -39,6 +40,7 @@ function SearchBrowser:init()
     self.available_filters = nil -- fetched once, see reloadFilters()
     self.filter_values = {} -- filter ID -> value table, see filterbrowser.lua
     Menu.init(self)
+    OpenWidgets.push(self)
     -- init() runs during SearchBrowser:new{}, before the caller's own
     -- UIManager:show(self) -- showing the InputDialog here would get
     -- painted first and then buried under this Menu when the caller shows
@@ -47,6 +49,12 @@ function SearchBrowser:init()
         self:reloadFilters()
         self:promptQuery()
     end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function SearchBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 -- reloadFilters fetches this source's filters once (not re-fetched on every

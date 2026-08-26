@@ -8,6 +8,7 @@ itself just the user's bookmarked manga.
 
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
+local OpenWidgets = require("openwidgets")
 local Store = require("store")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
@@ -35,11 +36,18 @@ function SettingsBrowser:init()
     self.usage_bytes = nil -- fetched async, see reloadUsage()
     self.item_table = self:genItemTable()
     Menu.init(self)
+    OpenWidgets.push(self)
     -- init() runs during SettingsBrowser:new{}, before the caller's own
     -- UIManager:show(self) -- see the same note in repobrowser.lua's
     -- init() for why the usage fetch must be deferred rather than done
     -- here.
     UIManager:nextTick(function() self:reloadUsage() end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function SettingsBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 function SettingsBrowser:genItemTable()

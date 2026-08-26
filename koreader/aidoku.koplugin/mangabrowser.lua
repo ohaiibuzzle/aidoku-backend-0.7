@@ -31,6 +31,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
+local OpenWidgets = require("openwidgets")
 local Prefetch = require("prefetch")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
@@ -55,10 +56,17 @@ function MangaBrowser:init()
     -- own title_bar_left_icon/onLeftButtonTap.
     self.title_bar_left_icon = "appbar.menu"
     Menu.init(self)
+    OpenWidgets.push(self)
     -- See the same note in repobrowser.lua's init(): defer past the
     -- caller's own UIManager:show(self), since reload()'s progress widget
     -- would otherwise show (and get buried) first.
     UIManager:nextTick(function() self:reload() end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function MangaBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 -- The hamburger menu (see title_bar_left_icon above) groups the sort-order

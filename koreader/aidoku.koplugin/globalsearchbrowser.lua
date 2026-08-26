@@ -14,6 +14,7 @@ local InputDialog = require("ui/widget/inputdialog")
 local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
+local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
@@ -42,11 +43,18 @@ end
 function GlobalSearchBrowser:init()
     self.item_table = {}
     Menu.init(self)
+    OpenWidgets.push(self)
     -- init() runs during GlobalSearchBrowser:new{}, before the caller's own
     -- UIManager:show(self) -- see the same note in searchbrowser.lua's
     -- init() for why the query prompt must be deferred rather than shown
     -- here.
     UIManager:nextTick(function() self:promptQuery() end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function GlobalSearchBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 function GlobalSearchBrowser:promptQuery()

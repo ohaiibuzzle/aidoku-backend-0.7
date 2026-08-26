@@ -15,6 +15,7 @@ local _ = require("gettext")
 
 local DownloadsEngine = require("downloadsengine")
 local Engine = require("engine")
+local OpenWidgets = require("openwidgets")
 local Store = require("store")
 
 local Aidoku = WidgetContainer:extend{
@@ -97,6 +98,7 @@ function Aidoku:init()
     self.ui.menu:registerToMainMenu(self)
     self:hookEndOfBook()
     self:hookShowFileManager()
+    self:hookClose()
     self:openPendingLibrary()
 end
 
@@ -193,6 +195,32 @@ function Aidoku:hookShowFileManager()
             require("pendinglibrary").open = true
         end
         return original_show_file_manager(ui_self, file, ...)
+    end
+end
+
+-- hookClose closes any Aidoku screen still open (see openwidgets.lua) right
+-- before self.ui itself closes -- covering Exit, Restart, and the Reader<->
+-- FileManager handoff alike, since all three route through onClose(). Each
+-- Aidoku screen (LibraryBrowser, MangaBrowser, ...) is its own independent
+-- UIManager top-level widget, not a child of self.ui -- drilling from one
+-- screen into another only closes the screen being left, not its
+-- ancestors (e.g. opening a chapter closes MangaBrowser but leaves
+-- LibraryBrowser sitting on the window stack, just buried under the
+-- Reader). UIManager's own run loop only stops once its window stack is
+-- completely empty, so a screen left open when self.ui closes -- most
+-- visibly, when Exit is invoked while reading -- silently blocks KOReader
+-- from actually quitting: closing self.ui alone empties it down to just
+-- that leftover screen, which then resurfaces on screen instead of
+-- KOReader exiting, and has to be closed by hand before the app-level exit
+-- can complete. Applies to both FileManager and ReaderUI instances (unlike
+-- hookEndOfBook/hookShowFileManager, which are ReaderUI-only), since either
+-- one closing can be the point where a leftover screen would otherwise be
+-- exposed.
+function Aidoku:hookClose()
+    local original_on_close = self.ui.onClose
+    self.ui.onClose = function(ui_self, ...)
+        OpenWidgets.closeAll()
+        return original_on_close(ui_self, ...)
     end
 end
 

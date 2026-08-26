@@ -14,6 +14,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
+local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
@@ -26,6 +27,7 @@ local RepoBrowser = Menu:extend{
 function RepoBrowser:init()
     self.item_table = {}
     Menu.init(self)
+    OpenWidgets.push(self)
     -- init() runs during RepoBrowser:new{}, before the caller's own
     -- UIManager:show(self) -- NetworkMgr:runWhenConnected() calls back
     -- synchronously when already online, so without this the progress
@@ -34,6 +36,12 @@ function RepoBrowser:init()
     UIManager:nextTick(function()
         NetworkMgr:runWhenConnected(function() self:reload() end)
     end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function RepoBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 function RepoBrowser:reload()

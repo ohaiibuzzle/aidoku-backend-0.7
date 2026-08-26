@@ -7,6 +7,7 @@ entry.
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
+local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
@@ -19,10 +20,17 @@ local DownloadsBrowser = Menu:extend{
 function DownloadsBrowser:init()
     self.item_table = {}
     Menu.init(self)
+    OpenWidgets.push(self)
     -- init() runs during DownloadsBrowser:new{}, before the caller's own
     -- UIManager:show(self) -- see the same note in repobrowser.lua's
     -- init() for why this must be deferred rather than loaded here.
     UIManager:nextTick(function() self:reload() end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function DownloadsBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 function DownloadsBrowser:genItemTable(entries)

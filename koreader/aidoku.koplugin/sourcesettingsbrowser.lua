@@ -13,6 +13,7 @@ handful of settings a source typically has, unlike a chapter list).
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
+local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
@@ -56,7 +57,14 @@ function SourceSettingsBrowser:init()
     self.values = {}
     self.item_table = {}
     Menu.init(self)
+    OpenWidgets.push(self)
     UIManager:nextTick(function() self:reload() end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function SourceSettingsBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 function SourceSettingsBrowser:reload()

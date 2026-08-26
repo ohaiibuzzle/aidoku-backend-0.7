@@ -17,6 +17,7 @@ unset convention; verify against a real check filter before relying on it.
 ]]
 
 local Menu = require("ui/widget/menu")
+local OpenWidgets = require("openwidgets")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -58,7 +59,14 @@ function FilterBrowser:init()
     self.values = self.initial_values or {}
     self.item_table = {}
     Menu.init(self)
+    OpenWidgets.push(self)
     self:refresh()
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function FilterBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 -- --- summaries ---

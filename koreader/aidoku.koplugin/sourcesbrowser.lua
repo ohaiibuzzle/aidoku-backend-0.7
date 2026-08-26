@@ -10,6 +10,7 @@ local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
+local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
@@ -25,6 +26,7 @@ local DOWNLOADS_TEXT = _("Downloaded chapters")
 function SourcesBrowser:init()
     self.item_table = {}
     Menu.init(self)
+    OpenWidgets.push(self)
     -- init() runs during SourcesBrowser:new{}, before the caller's own
     -- UIManager:show(self) -- see the same note in repobrowser.lua's
     -- init() for why this must be deferred rather than loaded here.
@@ -32,6 +34,12 @@ function SourcesBrowser:init()
     -- source's manifest via a subprocess call (see installedsources.lua)
     -- instead of just listing files.
     UIManager:nextTick(function() self:reload() end)
+end
+
+-- See librarybrowser.lua's onCloseWidget for why this is needed.
+function SourcesBrowser:onCloseWidget()
+    Menu.onCloseWidget(self)
+    OpenWidgets.remove(self)
 end
 
 function SourcesBrowser:genItemTable()
