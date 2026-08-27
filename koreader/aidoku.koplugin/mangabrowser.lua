@@ -311,12 +311,12 @@ function MangaBrowser:downloadNext(n)
                 if self:downloadedPath(c.Key) ~= "" then
                     downloaded_any = true
                 else
-                    local filename = mangaLabel(self.manga) .. " - " .. chapterLabel(c) .. ".cbz"
-                    filename = util.getSafeFilename(filename, self.downloads_dir)
-                    local out_path = self.downloads_dir .. "/" .. filename
+                    local chapter_filename = util.getSafeFilename(chapterLabel(c) .. ".cbz", self.downloads_dir)
+                    local out_path = self.downloads_dir .. "/" .. chapter_filename
+                    local manga_dir_name = mangaLabel(self.manga) .. " [" .. self.source_key .. "]"
                     local progress = T(_("Downloading %1/%2: %3"), i, #upcoming, chapterLabel(c))
                     local path, err = self.engine:download(
-                        self.source_path, self.manga.Key, c.Key, out_path, self.downloads_dir, false, progress)
+                        self.source_path, self.manga.Key, c.Key, out_path, self.downloads_dir, false, progress, manga_dir_name)
                     if not path then
                         if err == _("Cancelled") then
                             -- Distinct from the "Download failed" every
@@ -395,11 +395,12 @@ end
 function MangaBrowser:downloadAndOpen(chapter)
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
-            local filename = mangaLabel(self.manga) .. " - " .. chapterLabel(chapter) .. ".cbz"
-            filename = util.getSafeFilename(filename, self.downloads_dir)
-            local out_path = self.downloads_dir .. "/" .. filename
+            local chapter_filename = util.getSafeFilename(chapterLabel(chapter) .. ".cbz", self.downloads_dir)
+            local out_path = self.downloads_dir .. "/" .. chapter_filename
+            local manga_dir_name = mangaLabel(self.manga) .. " [" .. self.source_key .. "]"
 
-            local path, err = self.engine:download(self.source_path, self.manga.Key, chapter.Key, out_path, self.downloads_dir)
+            local path, err = self.engine:download(
+                self.source_path, self.manga.Key, chapter.Key, out_path, self.downloads_dir, nil, nil, manga_dir_name)
             if not path then
                 UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), err) })
                 return

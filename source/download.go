@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -134,6 +135,18 @@ func (s *Source) downloadZipEntry(ctx context.Context, zipURL, filePath string, 
 // directory component is left untouched), since manga/chapter titles often
 // end up baked into that filename by the caller and can contain characters
 // illegal on the target filesystem (e.g. FAT32/exFAT, common on e-readers).
+//
+// mangaDirName, if non-empty (and outputPath is non-empty), inserts a new,
+// sanitized directory named after it between outputPath's given directory
+// (treated as an already-safe, caller-owned root -- e.g. the downloads
+// directory -- and left untouched) and the chapter file, creating it if
+// needed. This travels as its own parameter rather than being folded into
+// outputPath by the caller because this function can't safely tell "a
+// title-derived path segment that needs sanitizing and owning" apart from
+// "a real, pre-existing directory the caller controls" by inspecting
+// outputPath alone -- see CLAUDE.md's "Filesystem-safe filenames" section
+// for why an unconditional, single point of sanitization matters here.
+//
 // onProgress, if non-nil, is called after each page finishes downloading
 // (1-indexed current, plus total). Returns the path the archive was
 // written to.
@@ -143,7 +156,7 @@ func (s *Source) downloadZipEntry(ctx context.Context, zipURL, filePath string, 
 // device (e.g. Kindle), holding every page of a long, high-resolution
 // chapter in RAM at once can be enough to get the process OOM-killed
 // before a single byte reaches disk.
-func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, chapter models.Chapter, outputPath string, onProgress func(current, total int)) (string, error) {
+func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, chapter models.Chapter, outputPath, mangaDirName string, onProgress func(current, total int)) (string, error) {
 	pages, err := s.GetPageList(ctx, manga, chapter)
 	if err != nil {
 		return "", fmt.Errorf("source: getting page list: %w", err)
@@ -152,12 +165,9 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 		return "", fmt.Errorf("source: chapter %q has no pages", chapter.Key)
 	}
 
-	if outputPath == "" {
-		outputPath = defaultCBZName(manga, chapter)
-	} else {
-		dir, base := filepath.Split(outputPath)
-		ext := filepath.Ext(base)
-		outputPath = filepath.Join(dir, sanitizeFilename(strings.TrimSuffix(base, ext))+ext)
+	outputPath, err = resolveOutputPath(outputPath, mangaDirName, manga, chapter)
+	if err != nil {
+		return "", err
 	}
 	w, err := cbz.NewWriter(outputPath, len(pages))
 	if err != nil {
@@ -188,6 +198,32 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 
 func defaultCBZName(manga models.Manga, chapter models.Chapter) string {
 	return sanitizeFilename(fmt.Sprintf("%s - %s", MangaLabel(manga), ChapterLabel(chapter))) + ".cbz"
+}
+
+// resolveOutputPath computes the final, sanitized path DownloadChapterCBZ
+// should write to and makes sure its directory exists, creating a
+// mangaDirName subdirectory along the way if one was requested. Split out
+// from DownloadChapterCBZ so this path/filesystem logic -- the only new
+// behavior a manga-folder feature actually needs -- can be unit tested
+// without a working page-fetching Source (network/WASM), which this
+// package's existing tests have no fixture for.
+func resolveOutputPath(outputPath, mangaDirName string, manga models.Manga, chapter models.Chapter) (string, error) {
+	if outputPath == "" {
+		outputPath = defaultCBZName(manga, chapter)
+	} else {
+		dir, base := filepath.Split(outputPath)
+		if mangaDirName != "" {
+			dir = filepath.Join(dir, sanitizeFilename(mangaDirName))
+		}
+		ext := filepath.Ext(base)
+		outputPath = filepath.Join(dir, sanitizeFilename(strings.TrimSuffix(base, ext))+ext)
+	}
+	if dir := filepath.Dir(outputPath); dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", fmt.Errorf("source: creating %s: %w", dir, err)
+		}
+	}
+	return outputPath, nil
 }
 
 // MangaLabel is manga's display title, falling back to its key when it has

@@ -155,10 +155,11 @@ end
 
 -- downloads_dir, if given, is passed through to aidoku-run so it records
 -- the download into the SQLite index there itself, in the same process
--- that writes the CBZ -- see the comment on this in
--- cmd/aidoku-downloads/main.go. Every call from this plugin should pass it;
--- it's optional only because the bare CLI is also used standalone/without
--- an index (see cmd/aidoku-run/main.go's own usage text).
+-- that writes the CBZ -- see CLAUDE.md's "Recording stays inside the
+-- writer" section and the downloads Go package doc. Every call from this
+-- plugin should pass it; it's optional only because the bare CLI is also
+-- used standalone/without an index (see cmd/aidoku-run/main.go's own usage
+-- text).
 --
 -- silent (used for background chapter prefetch) passes nil instead of a
 -- progress string, which Trapper:dismissablePopen() turns into an invisible
@@ -182,7 +183,17 @@ end
 -- progress_text_override, if given, replaces the default "Downloading
 -- chapter…" text (e.g. mangabrowser.lua's bulk download uses it to show
 -- batch position, "Downloading 3/15: Chapter 9"). Ignored when silent.
-function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override)
+--
+-- manga_dir_name, if given, makes aidoku-run create a subdirectory named
+-- after it (sanitized Go-side, same authority as the chapter filename
+-- itself -- see source.DownloadChapterCBZ's doc comment and CLAUDE.md's
+-- "Filesystem-safe filenames" section) under out_path's own directory, and
+-- write the archive inside that instead -- see mangabrowser.lua for the
+-- naming convention. Requires downloads_dir to also be given, since it
+-- occupies the next positional CLI argument after it; passing one without
+-- the other inserts an empty placeholder so the arguments after it don't
+-- shift.
+function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name)
     -- Not "silent and false or ...": that's the classic Lua and/or-ternary
     -- trap -- it misfires whenever the "true" branch value is itself falsy,
     -- which false always is.
@@ -191,8 +202,11 @@ function Engine:download(source_path, manga_key, chapter_key, out_path, download
         progress_text = nil
     end
     local args = { source_path, "download", manga_key, chapter_key, out_path }
-    if downloads_dir then
-        table.insert(args, downloads_dir)
+    if downloads_dir or manga_dir_name then
+        table.insert(args, downloads_dir or "")
+    end
+    if manga_dir_name then
+        table.insert(args, manga_dir_name)
     end
     return self.runner:exec(args, progress_text, self:sourceEnv(), silent)
 end

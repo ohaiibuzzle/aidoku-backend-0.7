@@ -50,16 +50,15 @@ chapters as CBZ, and read them without leaving KOReader.
    the source repository and install a source, or **Search all sources** to
    search across everything you've already installed.
 
-The plugin bundles prebuilt `aidoku-run`/`aidoku-downloads` binaries for
-`arm` (armv7 Kindle/Kobo) and `arm64` (aarch64 devices and desktop Linux)
-under `bin/`. If you're on a different architecture, or want the latest
-code, build them yourself:
+The plugin bundles a prebuilt `aidoku-run` binary for `arm` (armv7 Kindle/Kobo)
+and `arm64` (aarch64 devices and desktop Linux) under `bin/`. If you're on a
+different architecture, or want the latest code, build it yourself:
 
 ```sh
 ./koreader/build.sh
 ```
 
-This cross-compiles both CLIs for both targets and drops them into
+This cross-compiles `aidoku-run` for every supported target and drops it into
 `aidoku.koplugin/bin/<arch>/`, ready to copy alongside the Lua files.
 
 ## Repository layout
@@ -71,13 +70,12 @@ This repo is both a Go library and the KOReader plugin's backend:
 | [`source/`](source) | Loads a `.aix` (or a plain directory) — manifest, WASM, filters/settings — and boots the QuickJS runtime for it. |
 | [`runtime/`](runtime) | The QuickJS interpreter wrapper and host bindings (net, storage, defaults, webview, FlareSolverr, cookies) that sources call into. |
 | [`models/`](models) | Mirrors of AidokuRunner's Swift models, with both binary (postcard) and JSON encode/decode. |
-| [`downloads/`](downloads) | SQLite-backed index of downloaded chapters. |
+| [`downloads/`](downloads) | SQLite-backed index of downloaded chapters. `Open`/`Record` are the only methods `aidoku-run` still calls; the KOReader plugin reads/deletes from the same file directly. |
 | [`settingsstore/`](settingsstore) | Flat JSON key/value store, namespaced per source. |
 | [`repo/`](repo) | Fetches/parses a source-repository index and installs `.aix` files. |
 | [`cbz/`](cbz) | Writes pages to a `.cbz` atomically. |
 | [`cmd/aidoku-run`](cmd/aidoku-run) | CLI test harness: loads one source and runs a command against it (`search`, `download`, `manga`, `filters`, `settings`, ...). Not a daemon — every invocation loads the source fresh. |
-| [`cmd/aidoku-downloads`](cmd/aidoku-downloads) | CLI over the downloads SQLite index (query/deletion only). |
-| [`koreader/aidoku.koplugin`](koreader/aidoku.koplugin) | The KOReader plugin — Lua UI that shells out to both binaries above. |
+| [`koreader/aidoku.koplugin`](koreader/aidoku.koplugin) | The KOReader plugin — Lua UI that shells out to `aidoku-run`, and talks directly to its own SQLite files (downloads index, library/history) via KOReader's bundled SQLite binding. |
 
 ### Building and testing the Go side
 
@@ -98,14 +96,9 @@ go run ./cmd/aidoku-run <source-dir-or-.aix> search "one piece"
 go run ./cmd/aidoku-run <source-dir-or-.aix> download <manga-id> <chapter-id> <out-dir>
 ```
 
-`aidoku-downloads` queries the same SQLite index the plugin (or `aidoku-run
-download`) writes to:
-
-```sh
-go run ./cmd/aidoku-downloads <downloads-dir> list
-```
-
-See each command's `-h`/no-args output for the full command set.
+See `aidoku-run`'s `-h`/no-args output for the full command set. The downloads
+SQLite index it writes to (`<downloads-dir>/index.db`) is a plain SQLite file —
+inspect it directly with `sqlite3 <downloads-dir>/index.db` if needed.
 
 ## Status
 

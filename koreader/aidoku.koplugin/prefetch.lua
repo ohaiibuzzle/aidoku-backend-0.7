@@ -59,10 +59,12 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
         local any_new = false
         for _, c in ipairs(upcoming) do
             if ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key) == "" then
-                local filename = util.getSafeFilename(
-                    Prefetch.mangaLabel(ctx.manga) .. " - " .. Prefetch.chapterLabel(c) .. ".cbz", ctx.downloads_dir)
-                local out_path = ctx.downloads_dir .. "/" .. filename
-                local path = ctx.engine:download(ctx.source_path, ctx.manga.Key, c.Key, out_path, ctx.downloads_dir, true)
+                local chapter_filename = util.getSafeFilename(
+                    Prefetch.chapterLabel(c) .. ".cbz", ctx.downloads_dir)
+                local out_path = ctx.downloads_dir .. "/" .. chapter_filename
+                local manga_dir_name = Prefetch.mangaLabel(ctx.manga) .. " [" .. ctx.source_key .. "]"
+                local path = ctx.engine:download(
+                    ctx.source_path, ctx.manga.Key, c.Key, out_path, ctx.downloads_dir, true, nil, manga_dir_name)
                 if path then
                     any_new = true
                     if on_downloaded then

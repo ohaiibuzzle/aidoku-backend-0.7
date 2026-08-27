@@ -1,7 +1,8 @@
 --[[--
-Generic "shell out to a bundled binary, decode JSON stdout" runner, shared
-by engine.lua (aidoku-run) and downloadsengine.lua (aidoku-downloads) so the
-Trapper/shell-quoting/stderr-capture plumbing exists in exactly one place.
+Generic "shell out to a bundled binary, decode JSON stdout" runner, used by
+engine.lua to talk to aidoku-run. downloadsengine.lua and store.lua's
+library/history methods do NOT use this -- they talk to their own SQLite
+files directly via lua-ljsqlite3, synchronously, no subprocess involved.
 
 Every method here calls Trapper:dismissablePopen(), which must run inside a
 coroutine started by Trapper:wrap() to show progress/allow cancellation --

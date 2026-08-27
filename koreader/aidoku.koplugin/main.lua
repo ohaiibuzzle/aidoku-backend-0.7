@@ -7,7 +7,6 @@ parent Go repo), and read them in KOReader.
 local DataStorage = require("datastorage")
 local Dispatcher = require("dispatcher") -- luacheck:ignore
 local InfoMessage = require("ui/widget/infomessage")
-local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local util = require("util")
@@ -83,7 +82,7 @@ function Aidoku:init()
     -- koreader/build.sh produces ("armv6"/"armv7" for Kindles/Kobos,
     -- "arm64"/"x64" for aarch64/x86-64 devices and desktops).
     local bin_arch = binArch()
-    self.store = Store.new()
+    self.store = Store.new(dataSubdir(""))
     self.engine = Engine.new(self.path .. "/bin/" .. bin_arch .. "/aidoku-run", function()
         local concurrency = self.store:networkConcurrency()
         return {
@@ -92,7 +91,7 @@ function Aidoku:init()
             NETWORK_CONCURRENCY = concurrency > 0 and tostring(concurrency) or "",
         }
     end)
-    self.downloads_engine = DownloadsEngine.new(self.path .. "/bin/" .. bin_arch .. "/aidoku-downloads", self.downloads_dir)
+    self.downloads_engine = DownloadsEngine.new(self.downloads_dir)
 
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
@@ -107,20 +106,17 @@ end
 -- nextchapter.lua's own byPath lookup, this must run even when
 -- auto-advance is off, so it's a separate lookup rather than something
 -- threaded through NextChapter.handle(). downloads_engine:byPath() is a
--- subprocess call, so it needs its own Trapper:wrap() coroutine here (see
--- the note on this in downloadsengine.lua/nextchapter.lua) -- it can't run
--- inline in the onEndOfBook monkey-patch below.
+-- synchronous SQLite read (see downloadsengine.lua), so no Trapper:wrap()
+-- coroutine is needed here.
 function Aidoku:markCurrentChapterRead()
     local file = self.document and self.document.file
     if not file or file:sub(1, #self.downloads_dir) ~= self.downloads_dir then
         return
     end
-    Trapper:wrap(function()
-        local entry = self.downloads_engine:byPath(file)
-        if entry then
-            self.store:markChapterRead(entry.sourceKey, entry.mangaKey, entry.chapterKey)
-        end
-    end)
+    local entry = self.downloads_engine:byPath(file)
+    if entry then
+        self.store:markChapterRead(entry.sourceKey, entry.mangaKey, entry.chapterKey)
+    end
 end
 
 -- hookEndOfBook wires up auto-advance to the next chapter. It only applies
@@ -260,9 +256,15 @@ function Aidoku:addToMainMenu(menu_items)
 end
 
 function Aidoku:onAidokuBrowseSources()
-    if not self.engine:isAvailable() or not self.downloads_engine:isAvailable() then
+    if not self.engine:isAvailable() then
         UIManager:show(InfoMessage:new{
-            text = _("The bundled aidoku-run/aidoku-downloads binaries were not found. Run koreader/build.sh in the aidokurunner-go repo to build and bundle them before using this plugin."),
+            text = _("The bundled aidoku-run binary was not found. Run koreader/build.sh in the aidokurunner-go repo to build and bundle it before using this plugin."),
+        })
+        return
+    end
+    if not self.downloads_engine:isAvailable() then
+        UIManager:show(InfoMessage:new{
+            text = _("Could not open the downloads database. Check that the storage device is writable."),
         })
         return
     end

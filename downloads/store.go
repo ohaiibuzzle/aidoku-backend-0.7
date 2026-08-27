@@ -5,6 +5,17 @@
 // project) rather than a flat file, since callers (e.g. a KOReader plugin)
 // query it on nearly every screen and re-parsing a growing JSON blob each
 // time doesn't scale.
+//
+// Record is the only method any Go binary in this repo still calls (from
+// cmd/aidoku-run's "download" command, in the same process that writes the
+// CBZ -- see the package's callers for why that atomicity matters). The
+// KOReader plugin no longer goes through a Go CLI for the rest of this
+// package's API (there used to be a cmd/aidoku-downloads for exactly that);
+// it opens this same index.db file directly via KOReader's bundled
+// lua-ljsqlite3 binding and reimplements Path/ByPath/Remove/List/TotalBytes/
+// Prune/Reassociate's queries in Lua. The Go versions stay here, fully
+// tested, as this package's public API for any other embedder -- they are
+// not dead code, just no longer this repo's only caller.
 package downloads
 
 import (
@@ -48,7 +59,14 @@ func Open(dir string) (*Store, error) {
 		return nil, fmt.Errorf("downloads: creating %s: %w", dir, err)
 	}
 	dbPath := filepath.Join(dir, "index.db")
-	db, err := sql.Open("sqlite", dbPath)
+	// _busy_timeout: the KOReader plugin now opens this same file directly
+	// (via lua-ljsqlite3) for reads/deletes while this process holds it open
+	// for a write -- without a busy timeout a concurrent writer/reader would
+	// get SQLITE_BUSY immediately instead of retrying. No _journal_mode=WAL
+	// here: some real target hardware (older Kindle kernels) can't safely
+	// mmap for WAL, and this package has no way to detect that -- see
+	// CLAUDE.md.
+	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("downloads: opening %s: %w", dbPath, err)
 	}

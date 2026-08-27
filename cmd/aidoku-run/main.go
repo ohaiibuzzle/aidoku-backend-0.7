@@ -68,10 +68,12 @@ commands:
                                      with a space, multiselect takes each value as one selection)
   manga <key>                       call get_manga_update (details + chapters)
   pages <manga-key> <chapter-key>   call get_manga_update then get_page_list for the matching chapter
-  download <manga-key> <chapter-key> [output.cbz] [downloads-index-dir]
+  download <manga-key> <chapter-key> [output.cbz] [downloads-index-dir] [manga-dir-name]
                                      download every page of a chapter and combine them into a CBZ archive;
                                      if downloads-index-dir is given, also records the download into its
-                                     SQLite index there (see the downloads package / aidoku-downloads)
+                                     SQLite index there (see the downloads package); if manga-dir-name is
+                                     given, output.cbz's directory gets a new sanitized subdirectory named
+                                     after it created, and the archive is written inside that instead
   cookie load <cookies.txt>          load cookies from a Netscape cookies.txt file (cf_clearance etc.)
   cookie list                        show stored cookie domains
   repo list <index-url>              fetch a source-repository index (index.min.json) and list its sources
@@ -312,7 +314,11 @@ func run(dir, command string, args []string) error {
 		if len(args) > 2 {
 			outputPath = args[2]
 		}
-		path, err := src.DownloadChapterCBZ(ctx, *updated, *chapter, outputPath, func(current, total int) {
+		mangaDirName := ""
+		if len(args) > 4 {
+			mangaDirName = args[4]
+		}
+		path, err := src.DownloadChapterCBZ(ctx, *updated, *chapter, outputPath, mangaDirName, func(current, total int) {
 			fmt.Fprintf(os.Stderr, "[download] page %d/%d\n", current, total)
 		})
 		if err != nil {

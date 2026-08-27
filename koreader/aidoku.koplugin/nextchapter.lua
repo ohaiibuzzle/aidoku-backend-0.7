@@ -163,10 +163,12 @@ function NextChapter.handle(ctx, file_path)
                 end)
                 return
             end
-            local filename = util.getSafeFilename(
-                mangaLabel(updated) .. " - " .. chapterLabel(next_chapter) .. ".cbz", ctx.downloads_dir)
-            local out_path = ctx.downloads_dir .. "/" .. filename
-            local path, dl_err = ctx.engine:download(source_path, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir)
+            local chapter_filename = util.getSafeFilename(
+                chapterLabel(next_chapter) .. ".cbz", ctx.downloads_dir)
+            local out_path = ctx.downloads_dir .. "/" .. chapter_filename
+            local manga_dir_name = mangaLabel(updated) .. " [" .. entry.sourceKey .. "]"
+            local path, dl_err = ctx.engine:download(
+                source_path, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir, nil, nil, manga_dir_name)
             if not path then
                 UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
                 return

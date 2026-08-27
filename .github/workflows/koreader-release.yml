@@ -56,10 +56,8 @@ jobs:
           set -euo pipefail
           out_dir="staging/aidoku.koplugin/bin/${{ matrix.target.name }}"
           mkdir -p "$out_dir"
-          for bin in aidoku-run aidoku-downloads; do
-            go build -trimpath -ldflags="-s -w" -o "$out_dir/$bin" "./cmd/$bin"
-            chmod +x "$out_dir/$bin"
-          done
+          go build -trimpath -ldflags="-s -w" -o "$out_dir/aidoku-run" ./cmd/aidoku-run
+          chmod +x "$out_dir/aidoku-run"
 
       - name: Assemble plugin bundle
         # Copies everything except bin/ (the repo's bin/ is a gitignored
