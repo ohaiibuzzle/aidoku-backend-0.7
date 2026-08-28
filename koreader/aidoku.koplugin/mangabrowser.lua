@@ -185,6 +185,10 @@ end
 -- connected; if not, it skips straight past that rather than popping a
 -- "connect to network?" prompt, since the point is to let already-downloaded
 -- content just work without a network fuss.
+--
+-- Every exit path ends with promptResume() (see below) so the "Resume
+-- reading?" prompt appears once chapter data is actually ready, whether that
+-- data came from the offline/local-only path or the online refresh.
 function MangaBrowser:reload()
     Trapper:wrap(function()
         local all = self:reloadDownloadedKeys()
@@ -194,6 +198,7 @@ function MangaBrowser:reload()
         self:refresh()
 
         if not NetworkMgr:isConnected() then
+            self:promptResume()
             return
         end
 
@@ -202,13 +207,53 @@ function MangaBrowser:reload()
             if #self.chapters == 0 then
                 UIManager:show(InfoMessage:new{ text = T(_("Could not load chapters:\n%1"), err) })
             end
+            self:promptResume()
             return
         end
         self.manga = updated
         self.chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
         self:reloadDownloadedKeys()
         self:refresh()
+        self:promptResume()
     end)
+end
+
+-- resumeChapter returns the chapter to offer resuming into: the one right
+-- after the last chapter marked read (see findLastReadChapter above), same
+-- resume point "Download next chapters…" already uses. nil if nothing's
+-- been read yet (nothing to "continue") or the reader is already caught up
+-- -- both cases mean promptResume() below shows nothing.
+function MangaBrowser:resumeChapter()
+    local ordered = ChapterOrder.orderedByReading(self.chapters)
+    if #ordered == 0 then
+        return nil
+    end
+    local last_key = self:findLastReadChapter(ordered)
+    if not last_key then
+        return nil
+    end
+    local upcoming = ChapterOrder.after(self.chapters, last_key, 1)
+    return upcoming[1]
+end
+
+-- promptResume shows a "Resume reading from <chapter>?" confirmation once
+-- reload() has finished loading chapter data (see the note there). Accepting
+-- runs the exact same open path as tapping that chapter's row would
+-- (onMenuSelect) -- download-if-needed, open, prefetch-ahead -- so there's
+-- no separate open logic to keep in sync.
+function MangaBrowser:promptResume()
+    local chapter = self:resumeChapter()
+    if not chapter then
+        return
+    end
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Resume reading from %1?"), chapterLabel(chapter)),
+        ok_text = _("Resume"),
+        cancel_text = _("Not now"),
+        ok_callback = function()
+            self:onMenuSelect({ chapter = chapter })
+        end,
+    })
 end
 
 -- prefetchAhead silently downloads up to store:bufferChapters() upcoming
