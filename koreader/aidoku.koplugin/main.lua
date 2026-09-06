@@ -12,6 +12,7 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local util = require("util")
 local _ = require("gettext")
 
+local ChapterCache = require("chaptercache")
 local DownloadsEngine = require("downloadsengine")
 local Engine = require("engine")
 local OpenWidgets = require("openwidgets")
@@ -272,7 +273,14 @@ function Aidoku:addToMainMenu(menu_items)
     end
 end
 
+-- Every entry into Library -- a fresh open from the FileManager menu, or
+-- the Reader->FileManager handoff reopening it via openPendingLibrary()
+-- above -- wipes chaptercache.lua, so a manga's chapter list refreshes for
+-- real next time it's opened rather than staying pinned to whatever was
+-- cached from an earlier read session. See chaptercache.lua's own note for
+-- why it stays valid across chapter-to-chapter advances within one session.
 function Aidoku:onAidokuBrowseSources()
+    ChapterCache.clear()
     if not self.engine:isAvailable() then
         UIManager:show(InfoMessage:new{
             text = _("The bundled aidoku-run binary was not found. Run koreader/build.sh in the aidokurunner-go repo to build and bundle it before using this plugin."),

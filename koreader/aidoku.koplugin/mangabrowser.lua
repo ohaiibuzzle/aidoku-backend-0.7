@@ -25,6 +25,7 @@ other first.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
+local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
@@ -180,11 +181,13 @@ end
 -- reload() always shows what's already downloaded first, straight from the
 -- local downloads index -- no network involved -- so this manga's
 -- downloaded chapters stay browsable/openable even fully offline. It then
--- opportunistically refreshes from the network (fetching the real chapter
--- list, titles, and any chapters not yet downloaded) only if already
--- connected; if not, it skips straight past that rather than popping a
--- "connect to network?" prompt, since the point is to let already-downloaded
--- content just work without a network fuss.
+-- opportunistically refreshes (fetching the real chapter list, titles, and
+-- any chapters not yet downloaded) either from ChapterCache -- if
+-- nextchapter.lua or a previous reload() already fetched this manga this
+-- session, see chaptercache.lua -- or, on a cache miss, from the network,
+-- but only if already connected; if not, it skips straight past that rather
+-- than popping a "connect to network?" prompt, since the point is to let
+-- already-downloaded content just work without a network fuss.
 --
 -- Every exit path ends with promptResume() (see below) so the "Resume
 -- reading?" prompt appears once chapter data is actually ready, whether that
@@ -197,18 +200,23 @@ function MangaBrowser:reload()
         end
         self:refresh()
 
-        if not NetworkMgr:isConnected() then
-            self:promptResume()
-            return
-        end
-
-        local updated, err = self.engine:mangaUpdate(self.source_path, self.manga.Key)
+        local updated = ChapterCache.get(self.source_key, self.manga.Key)
         if not updated then
-            if #self.chapters == 0 then
-                UIManager:show(InfoMessage:new{ text = T(_("Could not load chapters:\n%1"), err) })
+            if not NetworkMgr:isConnected() then
+                self:promptResume()
+                return
             end
-            self:promptResume()
-            return
+
+            local err
+            updated, err = self.engine:mangaUpdate(self.source_path, self.manga.Key)
+            if not updated then
+                if #self.chapters == 0 then
+                    UIManager:show(InfoMessage:new{ text = T(_("Could not load chapters:\n%1"), err) })
+                end
+                self:promptResume()
+                return
+            end
+            ChapterCache.set(self.source_key, self.manga.Key, updated)
         end
         self.manga = updated
         self.chapters = type(updated.Chapters) == "table" and updated.Chapters or {}

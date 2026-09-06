@@ -9,6 +9,7 @@ or silently proceeds to open (or, for the network fallback, download then
 open) the next chapter in reading order.
 ]]
 
+local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
@@ -142,10 +143,21 @@ function NextChapter.handle(ctx, file_path)
             return
         end
 
-        local updated, err = ctx.engine:mangaUpdate(source_path, entry.mangaKey)
+        -- ChapterCache first -- see chaptercache.lua and the note on
+        -- mangabrowser.lua's reload(), which is usually what populated it
+        -- for this manga already, since opening a chapter list goes through
+        -- there before any chapter can be read at all. On a miss (e.g. this
+        -- manga was only ever advanced through via downloaded chapters
+        -- before now), fall back to the network fetch as before.
+        local updated = ChapterCache.get(entry.sourceKey, entry.mangaKey)
         if not updated then
-            UIManager:show(InfoMessage:new{ text = T(_("Could not check for next chapter:\n%1"), err) })
-            return
+            local err
+            updated, err = ctx.engine:mangaUpdate(source_path, entry.mangaKey)
+            if not updated then
+                UIManager:show(InfoMessage:new{ text = T(_("Could not check for next chapter:\n%1"), err) })
+                return
+            end
+            ChapterCache.set(entry.sourceKey, entry.mangaKey, updated)
         end
         local chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
         local upcoming = ChapterOrder.after(chapters, entry.chapterKey, 1)
