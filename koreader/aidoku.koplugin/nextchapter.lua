@@ -102,6 +102,9 @@ function NextChapter.handle(ctx, file_path)
             if existing ~= "" then
                 local function openLocalNext()
                     ctx.open_callback(existing)
+                    if ctx.store:isEphemeralMode() then
+                        ctx.downloads_engine:removeAllExcept(existing)
+                    end
                     -- Re-primes the prefetch buffer on every auto-advance,
                     -- not just the first chapter opened from
                     -- mangabrowser.lua's list -- otherwise the buffer never
@@ -157,6 +160,9 @@ function NextChapter.handle(ctx, file_path)
             local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
             if existing ~= "" then
                 ctx.open_callback(existing)
+                if ctx.store:isEphemeralMode() then
+                    ctx.downloads_engine:removeAllExcept(existing)
+                end
                 -- See the deferral note on openLocalNext() above.
                 UIManager:nextTick(function()
                     Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
@@ -173,8 +179,15 @@ function NextChapter.handle(ctx, file_path)
                 UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
                 return
             end
-            ctx.downloads_engine:prune(ctx.store:downloadLimitBytes())
+            -- See the same note on skipping prune() under Ephemeral Mode in
+            -- mangabrowser.lua's downloadAndOpen.
+            if not ctx.store:isEphemeralMode() then
+                ctx.downloads_engine:prune(ctx.store:downloadLimitBytes())
+            end
             ctx.open_callback(path)
+            if ctx.store:isEphemeralMode() then
+                ctx.downloads_engine:removeAllExcept(path)
+            end
             -- See the deferral note on openLocalNext() above.
             UIManager:nextTick(function()
                 Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)

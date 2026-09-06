@@ -35,7 +35,7 @@ function Prefetch.chapterLabel(chapter)
     return chapter.Key
 end
 
--- ahead silently downloads up to ctx.store:bufferChapters() upcoming
+-- ahead silently downloads up to ctx.store:effectiveBufferChapters() upcoming
 -- chapters (in reading order, not display sort order) after chapter_key,
 -- so they're likely already local by the time the reader reaches them.
 --
@@ -47,7 +47,7 @@ end
 -- downloaded_keys cache in sync). on_complete(any_new), if given, is called
 -- once after the pass finishes.
 function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
-    local n = ctx.store:bufferChapters()
+    local n = ctx.store:effectiveBufferChapters()
     if n <= 0 then
         return
     end

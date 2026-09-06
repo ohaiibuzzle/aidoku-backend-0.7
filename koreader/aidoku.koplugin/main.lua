@@ -71,10 +71,8 @@ end
 
 function Aidoku:init()
     self.sources_dir = dataSubdir("sources")
-    self.downloads_dir = dataSubdir("downloads")
     self.settings_dir = dataSubdir("settings")
     util.makePath(self.sources_dir)
-    util.makePath(self.downloads_dir)
     util.makePath(self.settings_dir)
 
     -- self.path is set by KOReader's plugin loader to this plugin's own
@@ -91,7 +89,10 @@ function Aidoku:init()
             NETWORK_CONCURRENCY = concurrency > 0 and tostring(concurrency) or "",
         }
     end)
-    self.downloads_engine = DownloadsEngine.new(self.downloads_dir)
+
+    -- Must run after self.store exists -- see refreshDownloadsDir()'s own doc
+    -- comment for why this isn't just done once here.
+    self:refreshDownloadsDir()
 
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
@@ -99,6 +100,22 @@ function Aidoku:init()
     self:hookShowFileManager()
     self:hookClose()
     self:openPendingLibrary()
+end
+
+-- refreshDownloadsDir (re)computes self.downloads_dir/self.downloads_engine
+-- from the current Ephemeral Mode setting -- see CLAUDE.md's Ephemeral Mode
+-- section. Called from init() (first run) and again from
+-- settingsbrowser.lua's toggleEphemeralMode() (self.aidoku:refreshDownloadsDir())
+-- so flipping the toggle redirects downloads immediately, in the same
+-- FileManager session, rather than only on the next time this whole plugin
+-- instance is constructed -- is_doc_only = false means that's only guaranteed
+-- on a FileManager<->ReaderUI transition, which doesn't happen just from
+-- opening Settings off the already-open Library screen.
+function Aidoku:refreshDownloadsDir()
+    self.downloads_dir = self.store:isEphemeralMode()
+        and self.store:ephemeralPath() or dataSubdir("downloads")
+    util.makePath(self.downloads_dir)
+    self.downloads_engine = DownloadsEngine.new(self.downloads_dir)
 end
 
 -- markCurrentChapterRead flags self.document's chapter as read (see
@@ -271,6 +288,7 @@ function Aidoku:onAidokuBrowseSources()
 
     local LibraryBrowser = require("librarybrowser")
     UIManager:show(LibraryBrowser:new{
+        aidoku = self,
         engine = self.engine,
         store = self.store,
         downloads_engine = self.downloads_engine,

@@ -29,6 +29,7 @@ local LibraryBrowser = Menu:extend{
 }
 
 function LibraryBrowser:init()
+    self.subtitle = self.store:isEphemeralMode() and _("Ephemeral Mode") or ""
     self.item_table = self:genItemTable()
     Menu.init(self)
     OpenWidgets.push(self)
@@ -83,6 +84,11 @@ end
 function LibraryBrowser:refresh()
     self.item_table = self:genItemTable()
     self:updateItems()
+    -- Picks up an Ephemeral Mode toggle from Settings immediately (via its
+    -- refresh_callback below), without needing this whole screen rebuilt.
+    if self.title_bar then
+        self.title_bar:setSubTitle(self.store:isEphemeralMode() and _("Ephemeral Mode") or "", true)
+    end
 end
 
 -- The hamburger menu (see title_bar_left_icon above) groups the two
@@ -103,6 +109,7 @@ function LibraryBrowser:onLeftButtonTap()
                     UIManager:close(dialog)
                     local SettingsBrowser = require("settingsbrowser")
                     UIManager:show(SettingsBrowser:new{
+                        aidoku = self.aidoku,
                         engine = self.engine,
                         store = self.store,
                         downloads_engine = self.downloads_engine,
@@ -112,7 +119,16 @@ function LibraryBrowser:onLeftButtonTap()
                         is_popout = false,
                         is_borderless = true,
                         title_bar_fm_style = true,
-                        refresh_callback = function() self:refresh() end,
+                        refresh_callback = function()
+                            -- Toggling Ephemeral Mode in Settings calls
+                            -- self.aidoku:refreshDownloadsDir() immediately --
+                            -- resync our own copies so the next manga opened
+                            -- from this Library screen downloads to the right
+                            -- place, not the one cached at our own :init().
+                            self.downloads_dir = self.aidoku.downloads_dir
+                            self.downloads_engine = self.aidoku.downloads_engine
+                            self:refresh()
+                        end,
                     })
                 end,
             }},

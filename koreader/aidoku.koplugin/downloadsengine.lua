@@ -38,7 +38,9 @@ vocabbuilder.koplugin/db.lua's own `tonumber(db_conn:rowexec(...))` usage) --
 every numeric field read below is explicitly tonumber()'d.
 ]]
 
+local DocSettings = require("docsettings")
 local SQ3 = require("lua-ljsqlite3/init")
+local ffiUtil = require("ffi/util")
 local lfs = require("libs/libkoreader-lfs")
 
 local DownloadsEngine = {}
@@ -130,8 +132,19 @@ function DownloadsEngine:byPath(file_path)
     return rowToEntry(row)
 end
 
--- remove deletes both the index entry and its backing file (a no-op, not
--- an error, if it doesn't exist). source_key: see path() above.
+-- remove deletes the index entry, its backing file, and its KOReader
+-- reading-progress sidecar (a no-op, not an error, if any of these don't
+-- exist). source_key: see path() above.
+--
+-- The sidecar (.sdr) cleanup is deliberately unconditional, not just an
+-- Ephemeral Mode thing: once a chapter's file is gone there's nothing left
+-- to resume, so a leftover .sdr is always dead weight. DocSettings:getSidecarDir
+-- is used rather than guessing "<path minus extension>.sdr" ourselves, since
+-- the user's own document_metadata_folder setting can relocate sidecars away
+-- from the document (see docsettings.lua) -- guessing the path would silently
+-- miss those. Best-effort: a purgeDir failure here doesn't fail the whole
+-- remove(), since the file itself (the part that actually matters) is
+-- already gone by that point.
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
     local path = self:path(source_key, manga_key, chapter_key)
     if path == "" then
@@ -147,6 +160,10 @@ function DownloadsEngine:remove(source_key, manga_key, chapter_key)
         if not ok then
             return false, err
         end
+    end
+    local sidecar_dir = DocSettings:getSidecarDir(path)
+    if sidecar_dir ~= "" and lfs.attributes(sidecar_dir, "mode") == "directory" then
+        ffiUtil.purgeDir(sidecar_dir)
     end
     return true
 end
@@ -200,6 +217,20 @@ function DownloadsEngine:prune(limit_bytes)
         end
     end
     return removed
+end
+
+-- removeAllExcept deletes every indexed download except the one at keep_path
+-- (index entry + file), or everything if keep_path is nil. Used by Ephemeral
+-- Mode: to purge the RAM-disk directory when the mode is turned off (keep_path
+-- = nil), and to drop the previous chapter right after a new one opens
+-- (keep_path = the newly opened path) -- see mangabrowser.lua/nextchapter.lua/
+-- settingsbrowser.lua.
+function DownloadsEngine:removeAllExcept(keep_path)
+    for _, e in ipairs(self:list()) do
+        if e.path ~= keep_path then
+            self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
+        end
+    end
 end
 
 -- reassociate repoints every downloaded-chapter entry under old_source_key

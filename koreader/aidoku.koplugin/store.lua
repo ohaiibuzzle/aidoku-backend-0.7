@@ -316,6 +316,22 @@ function Store:setBufferChapters(n)
     self.settings:flush()
 end
 
+-- effectiveBufferChapters is what prefetch.lua's Prefetch.ahead should
+-- actually fetch ahead right now: the saved bufferChapters() normally, but
+-- capped to at most 1 under Ephemeral Mode -- enough to keep reading
+-- seamless (the next chapter is always ready) without defeating the point of
+-- Ephemeral Mode by buffering a whole stack of chapters. If the user had
+-- prefetch off (0) to begin with, it stays off -- this only ever caps down,
+-- never re-enables a disabled setting. See CLAUDE.md's Ephemeral Mode
+-- section.
+function Store:effectiveBufferChapters()
+    local n = self:bufferChapters()
+    if self:isEphemeralMode() and n > 1 then
+        return 1
+    end
+    return n
+end
+
 -- nextChapterMode is "off", "ask", or "auto" (the default), governing
 -- whether reaching the end of a chapter offers/auto-advances to the next.
 function Store:nextChapterMode()
@@ -365,6 +381,29 @@ end
 
 function Store:setDownloadLimitBytes(n)
     self.settings:saveSetting("download_limit_bytes", n)
+    self.settings:flush()
+end
+
+-- isEphemeralMode/ephemeralPath: see main.lua's Aidoku:init() for how these
+-- redirect self.downloads_dir/self.downloads_engine to a RAM-disk-style path
+-- instead of the persistent downloads dir. ephemeralPath defaults to
+-- "/dev/shm" but is never validated here -- settingsbrowser.lua's
+-- promptEphemeralPath() checks writability before saving a new value.
+function Store:isEphemeralMode()
+    return self.settings:readSetting("ephemeral_mode", false)
+end
+
+function Store:setEphemeralMode(enabled)
+    self.settings:saveSetting("ephemeral_mode", enabled)
+    self.settings:flush()
+end
+
+function Store:ephemeralPath()
+    return self.settings:readSetting("ephemeral_path", "/dev/shm")
+end
+
+function Store:setEphemeralPath(path)
+    self.settings:saveSetting("ephemeral_path", path)
     self.settings:flush()
 end
 

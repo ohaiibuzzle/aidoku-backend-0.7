@@ -451,9 +451,19 @@ function MangaBrowser:downloadAndOpen(chapter)
                 return
             end
             self.downloaded_keys[chapter.Key] = path
-            self.downloads_engine:prune(self.store:downloadLimitBytes())
+            -- The storage-limit prune is a persistent-storage concept -- under
+            -- Ephemeral Mode, removeAllExcept() below already keeps at most
+            -- ~1-2 chapters resident, and running prune() on top of that risks
+            -- deleting the chapter just downloaded before it's even opened, if
+            -- the user's saved limit happens to be smaller than that.
+            if not self.store:isEphemeralMode() then
+                self.downloads_engine:prune(self.store:downloadLimitBytes())
+            end
             self:refresh()
             self:openLocal(path)
+            if self.store:isEphemeralMode() then
+                self.downloads_engine:removeAllExcept(path)
+            end
             -- Deferred so the reader's own widget/gesture setup finishes and
             -- is topmost before prefetch's Trapper-wrapped subprocess calls
             -- start stacking dismissablePopen widgets on top of it -- doing
@@ -468,6 +478,14 @@ function MangaBrowser:onMenuSelect(item)
     local existing = self:downloadedPath(item.chapter.Key)
     if existing ~= "" then
         self:openLocal(existing)
+        -- Under Ephemeral Mode this chapter is commonly one Prefetch already
+        -- fetched ahead of time (see CLAUDE.md), so it's opened from here,
+        -- not downloadAndOpen() -- needs the same cleanup call, or a
+        -- prefetched-then-opened chapter would never get its predecessor
+        -- cleaned up at all.
+        if self.store:isEphemeralMode() then
+            self.downloads_engine:removeAllExcept(existing)
+        end
         -- See the note on this in downloadAndOpen() -- deferred so it
         -- doesn't steal early page-turn taps from the just-opened reader.
         UIManager:nextTick(function() self:prefetchAhead(item.chapter) end)
