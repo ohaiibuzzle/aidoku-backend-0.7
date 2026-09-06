@@ -320,7 +320,7 @@ end
 function MangaBrowser:downloadNext(n)
     local ordered = ChapterOrder.orderedByReading(self.chapters)
     if #ordered == 0 then
-        UIManager:show(InfoMessage:new{ text = _("No numbered chapters to download."), timeout = 2 })
+        UIManager:show(InfoMessage:new{ text = _("No chapters to download."), timeout = 2 })
         return
     end
 

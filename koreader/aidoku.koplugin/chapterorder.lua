@@ -15,18 +15,48 @@ function ChapterOrder.number(chapter)
     return type(chapter.ChapterNumber) == "number" and chapter.ChapterNumber or nil
 end
 
--- orderedByReading returns the chapters that have a ChapterNumber, sorted
--- ascending. Chapters without one can't be reliably placed in a reading
--- sequence and are dropped -- next-chapter navigation isn't meaningful for
--- them anyway.
+-- orderedByReading returns all of chapters in ascending reading order.
+-- Network chapter lists arrive newest-first by convention (see fromEntries
+-- below), so this starts by reversing to oldest-first.
+--
+-- Not every chapter carries a ChapterNumber -- e.g. en.weebcentral lists
+-- whole-volume bundle downloads ("Volume 2") as separate entries alongside
+-- individually numbered chapters, with only a VolumeNumber set and no
+-- ChapterNumber. VolumeNumber isn't on the same numeric axis as
+-- ChapterNumber (a volume can bundle any range of chapters), so it can't be
+-- used as a substitute sort key -- but the source's own list order already
+-- places a bundle row where it chronologically belongs relative to the
+-- surrounding numbered chapters. So: chapters with a ChapterNumber are
+-- sorted ascending among themselves, then re-threaded back into their
+-- original (reversed) positional slots, leaving every unnumbered chapter
+-- pinned wherever the source placed it rather than dropped or shoved to one
+-- end. This is what lets ChapterOrder.after() treat a Volume-bundle entry as
+-- a normal step in the sequence instead of an invisible gap next-chapter/
+-- prefetch can't cross.
 function ChapterOrder.orderedByReading(chapters)
-    local ordered = {}
-    for _, c in ipairs(chapters) do
+    local positional = {}
+    for i = #chapters, 1, -1 do
+        table.insert(positional, chapters[i])
+    end
+
+    local numbered = {}
+    for _, c in ipairs(positional) do
         if ChapterOrder.number(c) then
+            table.insert(numbered, c)
+        end
+    end
+    table.sort(numbered, function(a, b) return a.ChapterNumber < b.ChapterNumber end)
+
+    local ordered = {}
+    local ni = 1
+    for _, c in ipairs(positional) do
+        if ChapterOrder.number(c) then
+            table.insert(ordered, numbered[ni])
+            ni = ni + 1
+        else
             table.insert(ordered, c)
         end
     end
-    table.sort(ordered, function(a, b) return a.ChapterNumber < b.ChapterNumber end)
     return ordered
 end
 
@@ -95,7 +125,7 @@ function ChapterOrder.fromEntries(entries, source_key, manga_key)
 end
 
 -- after returns up to `count` chapters immediately following current_key in
--- reading order. Empty if current_key is last, unrecognized, or unnumbered.
+-- reading order. Empty if current_key is last or unrecognized.
 function ChapterOrder.after(chapters, current_key, count)
     local ordered = ChapterOrder.orderedByReading(chapters)
     local idx
