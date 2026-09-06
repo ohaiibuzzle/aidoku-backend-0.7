@@ -94,6 +94,24 @@ function NextChapter.handle(ctx, file_path)
         local all = ctx.downloads_engine:list()
         local local_chapters = ChapterOrder.fromEntries(all, entry.sourceKey, entry.mangaKey)
         local local_next = ChapterOrder.after(local_chapters, entry.chapterKey, 1)[1]
+
+        -- local_chapters only ever contains chapters already downloaded, by
+        -- construction -- so ChapterOrder.after(local_chapters, ...) inside
+        -- openLocalNext below can never find anything past the newest local
+        -- chapter, making Prefetch.ahead a guaranteed no-op every time this
+        -- branch runs. Confirmed on-device: with bufferChapters() == 1, that
+        -- silently killed prefetch on every other chapter transition (every
+        -- transition landing on a chapter that only exists locally because
+        -- the *previous* transition's network-fallback prefetch fetched it),
+        -- so the buffer only ever advanced on alternating chapters instead
+        -- of every one. ChapterCache's full network chapter list (populated
+        -- by mangabrowser.lua's reload() before any chapter could be opened
+        -- at all) doesn't have that limitation -- use it for the
+        -- Prefetch.ahead call when available, falling back to local_chapters
+        -- only on a cache miss (no network chapter list to prefetch against
+        -- at all, so there's nothing better to offer here).
+        local cached = ChapterCache.get(entry.sourceKey, entry.mangaKey)
+        local prefetch_chapters = (cached and type(cached.Chapters) == "table") and cached.Chapters or local_chapters
         if local_next then
             -- Re-resolve the path rather than trusting the entry we just
             -- filtered from: covers the (rare) case of a stale index row
@@ -116,7 +134,7 @@ function NextChapter.handle(ctx, file_path)
                     -- calls don't steal the first page-turn taps from the
                     -- reader that ctx.open_callback just switched to.
                     UIManager:nextTick(function()
-                        Prefetch.ahead(prefetch_ctx, local_chapters, local_next.Key)
+                        Prefetch.ahead(prefetch_ctx, prefetch_chapters, local_next.Key)
                     end)
                 end
                 if ctx.store:nextChapterMode() == "auto" then

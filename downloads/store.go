@@ -6,16 +6,20 @@
 // query it on nearly every screen and re-parsing a growing JSON blob each
 // time doesn't scale.
 //
-// Record is the only method any Go binary in this repo still calls (from
-// cmd/aidoku-run's "download" command, in the same process that writes the
-// CBZ -- see the package's callers for why that atomicity matters). The
-// KOReader plugin no longer goes through a Go CLI for the rest of this
-// package's API (there used to be a cmd/aidoku-downloads for exactly that);
-// it opens this same index.db file directly via KOReader's bundled
-// lua-ljsqlite3 binding and reimplements Path/ByPath/Remove/List/TotalBytes/
-// Prune/Reassociate's queries in Lua. The Go versions stay here, fully
-// tested, as this package's public API for any other embedder -- they are
-// not dead code, just no longer this repo's only caller.
+// Record, Path, and AcquireLock (see lock.go) are the only methods any Go
+// binary in this repo still calls, all from cmd/aidoku-run's "download"
+// command: AcquireLock and Path together let one invocation detect (after
+// blocking on another already-in-flight download of the exact same
+// chapter) that there's nothing left for it to do, and Record indexes a
+// freshly written CBZ, in the same process that wrote it -- see the
+// package's callers for why that atomicity matters. The KOReader plugin no
+// longer goes through a Go CLI for the rest of this package's API (there
+// used to be a cmd/aidoku-downloads for exactly that); it opens this same
+// index.db file directly via KOReader's bundled lua-ljsqlite3 binding and
+// reimplements Path/ByPath/Remove/List/TotalBytes/Prune/Reassociate's
+// queries in Lua. The Go versions stay here, fully tested, as this
+// package's public API for any other embedder -- they are not dead code,
+// just no longer this repo's only caller.
 package downloads
 
 import (

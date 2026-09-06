@@ -314,10 +314,43 @@ func run(dir, command string, args []string) error {
 		if len(args) > 2 {
 			outputPath = args[2]
 		}
+		downloadsDir := ""
+		if len(args) > 3 {
+			downloadsDir = args[3]
+		}
 		mangaDirName := ""
 		if len(args) > 4 {
 			mangaDirName = args[4]
 		}
+
+		// Only an indexed download (downloadsDir given) can even check
+		// whether this chapter is already local, so the cross-process lock
+		// -- which exists purely to prevent two invocations from
+		// downloading the same indexed chapter at once, see
+		// downloads.AcquireLock's doc -- only applies then. A bare,
+		// non-indexed download (downloadsDir == "") has nothing to
+		// deduplicate against and stays lock-free, same as before.
+		if downloadsDir != "" {
+			lock, err := downloads.AcquireLock(downloadsDir, src.Key, updated.Key, chapter.Key)
+			if err != nil {
+				return fmt.Errorf("acquiring download lock: %w", err)
+			}
+			defer lock.Release()
+
+			// Whoever held this lock before us may have just finished
+			// downloading this exact chapter while we were blocked
+			// waiting for it -- re-check the index now that we own the
+			// lock, rather than unconditionally re-fetching every page a
+			// concurrent invocation already fetched. os.Stat guards
+			// against a stale row whose file was since deleted out from
+			// under it (see mangabrowser.lua's downloadedPath for the
+			// same defensive re-check on the Lua side).
+			if existing, err := existingDownload(downloadsDir, src.Key, updated.Key, chapter.Key); err == nil && existing != "" {
+				fmt.Println(existing)
+				return nil
+			}
+		}
+
 		path, err := src.DownloadChapterCBZ(ctx, *updated, *chapter, outputPath, mangaDirName, func(current, total int) {
 			fmt.Fprintf(os.Stderr, "[download] page %d/%d\n", current, total)
 		})
@@ -330,8 +363,8 @@ func run(dir, command string, args []string) error {
 		// the two-step "download, then separately tell an index about it"
 		// a caller could otherwise do has a window for exactly that kind of
 		// inconsistency.
-		if len(args) > 3 && args[3] != "" {
-			if err := recordDownload(args[3], src.Key, dir, *updated, *chapter, path); err != nil {
+		if downloadsDir != "" {
+			if err := recordDownload(downloadsDir, src.Key, dir, *updated, *chapter, path); err != nil {
 				return fmt.Errorf("recording download: %w", err)
 			}
 		}
@@ -357,6 +390,27 @@ func recordDownload(downloadsDir, sourceKey, sourcePath string, manga models.Man
 	defer store.Close()
 	_, err = store.Record(sourceKey, sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber)
 	return err
+}
+
+// existingDownload returns the already-recorded local path for
+// (sourceKey, mangaKey, chapterKey) at downloadsDir, or "" if it isn't
+// indexed or its file has since gone missing (a stale row, treated the same
+// as "not downloaded" rather than an error -- see mangabrowser.lua's
+// downloadedPath for the same defensive re-check on the Lua side).
+func existingDownload(downloadsDir, sourceKey, mangaKey, chapterKey string) (string, error) {
+	store, err := downloads.Open(downloadsDir)
+	if err != nil {
+		return "", fmt.Errorf("opening downloads index: %w", err)
+	}
+	defer store.Close()
+	path, err := store.Path(sourceKey, mangaKey, chapterKey)
+	if err != nil || path == "" {
+		return "", err
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		return "", nil
+	}
+	return path, nil
 }
 
 func printJSON(v any) error {
