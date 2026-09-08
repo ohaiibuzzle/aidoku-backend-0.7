@@ -62,14 +62,52 @@ func (s *Store) save() error {
 		}
 		tagged[k] = tv
 	}
-	data, err := json.MarshalIndent(tagged, "", "  ")
+	data, err := json.Marshal(tagged)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, data, 0o644)
+
+	// Write to a temp file in the same directory and rename into place
+	// (same pattern as cbz.Writer.Close), so a crash or power loss
+	// partway through a write never leaves settings.json truncated or
+	// corrupt -- Open would otherwise fail to unmarshal it and abort
+	// every subsequent command until someone manually deletes the file.
+	tmp, err := os.CreateTemp(dir, ".settings-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	// os.CreateTemp always creates with 0600, not the 0644 os.WriteFile
+	// used previously; chmod explicitly so the rename doesn't silently
+	// tighten settings.json's permissions as a side effect of this change.
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, s.path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 // taggedValue preserves the exact Go type of a stored value across a JSON

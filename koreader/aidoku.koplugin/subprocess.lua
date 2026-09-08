@@ -13,7 +13,6 @@ single Trapper:wrap(), not just the call, since Trapper:wrap() returns as
 soon as the wrapped function first yields rather than when it finishes.
 ]]
 
-local DataStorage = require("datastorage")
 local Trapper = require("ui/trapper")
 local json = require("json")
 local lfs = require("libs/libkoreader-lfs")
@@ -109,7 +108,13 @@ end
 -- {VAR = value} exported into the command's environment (e.g.
 -- FLARESOLVERR_HOST). See buildCommand() for low_priority.
 function Runner:exec(args, progress_text, env, low_priority)
-    local stderr_path = DataStorage:getDataDir() .. "/cache/" .. self.stderr_log_name
+    -- /tmp rather than DataStorage's cache dir: this file is truncated and
+    -- recreated on every single subprocess call (including cheap, frequent
+    -- ones like per-source manifest reads) and is only ever read back on
+    -- failure, so keeping it off persistent storage avoids pure write churn
+    -- on eMMC. Matches the same tmpfs precedent cmd/aidoku-run's own cookie
+    -- file uses on the Go side (os.TempDir()).
+    local stderr_path = "/tmp/" .. self.stderr_log_name
     local cmd = buildCommand(self.bin_path, stderr_path, args, env, low_priority)
 
     local completed, output = Trapper:dismissablePopen(cmd, progress_text)

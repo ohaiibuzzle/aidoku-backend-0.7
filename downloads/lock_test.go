@@ -6,16 +6,14 @@ import (
 )
 
 func TestAcquireLockSerializesSameChapter(t *testing.T) {
-	dir := t.TempDir()
-
-	first, err := AcquireLock(dir, "src", "manga", "ch1")
+	first, err := AcquireLock("src", "manga", "ch1")
 	if err != nil {
 		t.Fatalf("AcquireLock: %v", err)
 	}
 
 	acquired := make(chan struct{})
 	go func() {
-		second, err := AcquireLock(dir, "src", "manga", "ch1")
+		second, err := AcquireLock("src", "manga", "ch1")
 		if err != nil {
 			t.Errorf("second AcquireLock: %v", err)
 			return
@@ -42,15 +40,13 @@ func TestAcquireLockSerializesSameChapter(t *testing.T) {
 }
 
 func TestAcquireLockDoesNotSerializeDifferentChapters(t *testing.T) {
-	dir := t.TempDir()
-
-	first, err := AcquireLock(dir, "src", "manga", "ch1")
+	first, err := AcquireLock("src", "manga", "ch1")
 	if err != nil {
 		t.Fatalf("AcquireLock ch1: %v", err)
 	}
 	defer first.Release()
 
-	second, err := AcquireLock(dir, "src", "manga", "ch2")
+	second, err := AcquireLock("src", "manga", "ch2")
 	if err != nil {
 		t.Fatalf("AcquireLock ch2 blocked on an unrelated chapter's lock: %v", err)
 	}

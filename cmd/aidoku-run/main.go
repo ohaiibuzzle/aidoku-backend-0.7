@@ -331,7 +331,7 @@ func run(dir, command string, args []string) error {
 		// non-indexed download (downloadsDir == "") has nothing to
 		// deduplicate against and stays lock-free, same as before.
 		if downloadsDir != "" {
-			lock, err := downloads.AcquireLock(downloadsDir, src.Key, updated.Key, chapter.Key)
+			lock, err := downloads.AcquireLock(src.Key, updated.Key, chapter.Key)
 			if err != nil {
 				return fmt.Errorf("acquiring download lock: %w", err)
 			}
