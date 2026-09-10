@@ -19,6 +19,7 @@ import (
 	"github.com/tetratelabs/wazero/api"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
+	"github.com/ohaiibuzzle/aidokurunner-go/postcard"
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime/host"
 )
 
@@ -88,7 +89,7 @@ func (noopSettingsStore) SetValue(string, any) error { return nil }
 // implemented host namespaces (env, std; more are added as later phases
 // land) onto it.
 func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config) (*Interpreter, error) {
-	rt := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfigInterpreter())
+	rt := wazero.NewRuntime(ctx)
 
 	printHandler := config.PrintHandler
 	if printHandler == nil {
@@ -346,8 +347,22 @@ func (i *Interpreter) StoreValue(v any) int32       { return i.store.Store(v) }
 func (i *Interpreter) Fetch(descriptor int32) any   { return i.store.Fetch(descriptor) }
 func (i *Interpreter) RemoveValue(descriptor int32) { i.store.Remove(descriptor) }
 
+// storeString stores s so a guest read_string call (raw UTF-8, no framing)
+// can fetch it back -- only get_search_manga_list's query decodes a string
+// argument this way. Every other string-argument guest hook decodes via the
+// generic postcard read (see storeEncodedString).
 func (i *Interpreter) storeString(s string) int32 { return i.store.Store(s) }
-func (i *Interpreter) storeBytes(b []byte) int32  { return i.store.Store(b) }
+
+// storeEncodedString postcard-encodes s before storing it, for guest hooks
+// that decode a string argument via the generic postcard read (matching
+// Swift's store.storeEncoded(String)) rather than read_string.
+func (i *Interpreter) storeEncodedString(s string) int32 {
+	w := postcard.NewWriter()
+	w.WriteString(s)
+	return i.store.Store(w.Bytes())
+}
+
+func (i *Interpreter) storeBytes(b []byte) int32 { return i.store.Store(b) }
 
 // --- Guest call protocol ---
 

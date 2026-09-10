@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -51,13 +52,9 @@ func (s *Source) downloadURL(ctx context.Context, rawURL string, headers models.
 	if rawURL == "" {
 		return nil, fmt.Errorf("source: page has empty URL")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	req, err := s.buildImageRequest(ctx, rawURL, headers)
 	if err != nil {
-		return nil, fmt.Errorf("source: building request for %s: %w", rawURL, err)
-	}
-	req.Header.Set("User-Agent", defaultPageUserAgent)
-	for k, v := range headers {
-		req.Header.Set(k, v)
+		return nil, err
 	}
 
 	resp, err := host.SharedHTTPClient().Do(req)
@@ -74,6 +71,37 @@ func (s *Source) downloadURL(ctx context.Context, rawURL string, headers models.
 		return nil, fmt.Errorf("source: reading %s: %w", rawURL, err)
 	}
 	return data, nil
+}
+
+// buildImageRequest builds the outgoing HTTP request for a page-content URL
+// (a single image, or a ZipFile page's containing zip -- downloadZipEntry
+// reaches here via downloadURL too, since it's the same class of fetch).
+func (s *Source) buildImageRequest(ctx context.Context, rawURL string, headers models.PageContext) (*http.Request, error) {
+	netReq, err := s.GetImageRequest(ctx, rawURL, &headers)
+	if err == nil {
+		req, err := netReq.ToHTTPRequest(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("source: building guest-supplied request for %s: %w", rawURL, err)
+		}
+		if req.Header.Get("User-Agent") == "" {
+			req.Header.Set("User-Agent", defaultPageUserAgent)
+		}
+		return req, nil
+	}
+	var srcErr *models.SourceError
+	if !errors.As(err, &srcErr) || srcErr.Kind != models.SourceErrorUnimplemented {
+		return nil, fmt.Errorf("source: getting image request for %s: %w", rawURL, err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("source: building request for %s: %w", rawURL, err)
+	}
+	req.Header.Set("User-Agent", defaultPageUserAgent)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	return req, nil
 }
 
 func (s *Source) resolveImageRef(ref models.ImageRef) ([]byte, error) {

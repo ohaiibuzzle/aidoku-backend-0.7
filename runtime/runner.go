@@ -302,7 +302,7 @@ func (i *Interpreter) GetImageRequest(ctx context.Context, url string, pageConte
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	urlPtr := i.storeString(url)
+	urlPtr := i.storeEncodedString(url)
 	defer i.RemoveValue(urlPtr)
 
 	contextPtr := int32(-1)
@@ -400,7 +400,7 @@ func (i *Interpreter) GetBaseURL(ctx context.Context) (*string, error) {
 func (i *Interpreter) HandleNotification(ctx context.Context, notification string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	ptr := i.storeString(notification)
+	ptr := i.storeEncodedString(notification)
 	defer i.RemoveValue(ptr)
 	fn := i.module.ExportedFunction("handle_notification")
 	if fn == nil {
@@ -413,7 +413,7 @@ func (i *Interpreter) HandleNotification(ctx context.Context, notification strin
 func (i *Interpreter) HandleDeepLink(ctx context.Context, url string) (*models.DeepLinkResult, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	ptr := i.storeString(url)
+	ptr := i.storeEncodedString(url)
 	defer i.RemoveValue(ptr)
 	data, err := i.call(ctx, "handle_deep_link", api.EncodeI32(ptr))
 	if err != nil {
@@ -425,11 +425,11 @@ func (i *Interpreter) HandleDeepLink(ctx context.Context, url string) (*models.D
 func (i *Interpreter) HandleBasicLogin(ctx context.Context, key, username, password string) (bool, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	keyPtr := i.storeString(key)
+	keyPtr := i.storeEncodedString(key)
 	defer i.RemoveValue(keyPtr)
-	userPtr := i.storeString(username)
+	userPtr := i.storeEncodedString(username)
 	defer i.RemoveValue(userPtr)
-	passPtr := i.storeString(password)
+	passPtr := i.storeEncodedString(password)
 	defer i.RemoveValue(passPtr)
 
 	data, err := i.call(ctx, "handle_basic_login", api.EncodeI32(keyPtr), api.EncodeI32(userPtr), api.EncodeI32(passPtr))
@@ -450,7 +450,7 @@ func (i *Interpreter) HandleWebLogin(ctx context.Context, key string, cookies ma
 		values = append(values, v)
 	}
 
-	keyPtr := i.storeString(key)
+	keyPtr := i.storeEncodedString(key)
 	defer i.RemoveValue(keyPtr)
 
 	kw := postcard.NewWriter()
@@ -474,12 +474,12 @@ func (i *Interpreter) HandleMigration(ctx context.Context, kind models.KeyKind, 
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	mangaKeyPtr := i.storeString(mangaKey)
+	mangaKeyPtr := i.storeEncodedString(mangaKey)
 	defer i.RemoveValue(mangaKeyPtr)
 
 	chapterKeyPtr := int32(-1)
 	if chapterKey != nil {
-		chapterKeyPtr = i.storeString(*chapterKey)
+		chapterKeyPtr = i.storeEncodedString(*chapterKey)
 		defer i.RemoveValue(chapterKeyPtr)
 	}
 
