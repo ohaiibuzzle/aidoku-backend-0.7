@@ -6,13 +6,16 @@ Reached from the Library screen's title bar, keeping the Library list
 itself just the user's bookmarked manga.
 ]]
 
+local ConfirmBox = require("ui/widget/confirmbox")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
 local OpenWidgets = require("openwidgets")
+local PathChooser = require("ui/widget/pathchooser")
 local Store = require("store")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
+local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local util = require("util")
 local T = require("ffi/util").template
 local _ = require("gettext")
@@ -68,11 +71,13 @@ function SettingsBrowser:genItemTable()
     local concurrency = self.store:networkConcurrency()
     local concurrency_text = concurrency > 0 and tostring(concurrency) or _("Default (8)")
 
+    -- Section header rows are dim + is_placeholder (unselectable, see
+    -- onMenuSelect) purely to visually group the settings below -- they
+    -- carry no state of their own.
     return {
-        -- Navigation entry to the source-management screen.
         { text = _("Sources"), mandatory=">", is_sources_entry = true },
 
-        -- Day-to-day reading behavior.
+        { text = _(""), dim = true, bold = true, is_placeholder = true },
         {
             text = _("Prefetch next chapters"),
             mandatory = self.store:isEphemeralMode()
@@ -86,19 +91,14 @@ function SettingsBrowser:genItemTable()
             is_next_chapter_entry = true,
         },
 
-        -- Storage.
         { text = _("Storage limit"), mandatory = storage_text, is_storage_limit_entry = true },
 
         -- Network/source configuration, roughly least to most obscure.
         { text = _("Source repository URL"), mandatory = repo_url_text, is_repo_url_entry = true },
         { text = _("Network concurrency"), mandatory = concurrency_text, is_network_concurrency_entry = true },
-        { text = _("FlareSolverr host"), mandatory = flaresolverr_text, is_flaresolverr_entry = true },
-
-        -- Kept last, past a spacer row: this changes *where* (or whether)
-        -- anything gets saved at all, unlike every setting above it, so it
-        -- shouldn't be mistakable for an ordinary reading/storage/network
-        -- preference sitting next to it.
-        { text = "", dim = true, is_placeholder = true },
+        
+        -- Advanced settings that *most users* don't need to touch.
+        { text = _(""), dim = true, bold = true, is_placeholder = true },
         {
             text = _("Ephemeral Mode"),
             mandatory = self.store:isEphemeralMode() and _("On") or _("Off"),
@@ -109,6 +109,9 @@ function SettingsBrowser:genItemTable()
             mandatory = self.store:ephemeralPath(),
             is_ephemeral_path_entry = true,
         },
+        { text = _("FlareSolverr host"), mandatory = flaresolverr_text, is_flaresolverr_entry = true },
+        { text = _("Import cookies"), is_import_cookies_entry = true },
+        { text = _("Clear stored cookies"), is_clear_cookies_entry = true },
     }
 end
 
@@ -296,6 +299,44 @@ end
 -- construction time everywhere they're threaded. self.refresh_callback
 -- (threaded in from librarybrowser.lua) both resyncs LibraryBrowser's own
 -- copies of those fields and updates the Library subtitle immediately.
+function SettingsBrowser:importCookies()
+    local chooser
+    chooser = PathChooser:new{
+        title = _("Long-press a cookies.txt to import it"),
+        path = filemanagerutil.getHomeFolder(),
+        select_directory = false,
+        select_file = true,
+        onConfirm = function(cookies_path)
+            Trapper:wrap(function()
+                local ok, err = self.engine:cookieLoad(cookies_path)
+                if ok then
+                    UIManager:show(InfoMessage:new{ text = ok, timeout = 3 })
+                else
+                    UIManager:show(InfoMessage:new{ text = T(_("Import failed:\n%1"), err) })
+                end
+            end)
+        end,
+    }
+    UIManager:show(chooser)
+end
+
+function SettingsBrowser:confirmClearCookies()
+    UIManager:show(ConfirmBox:new{
+        text = _("Clear all cookies stored for every source? This can't be undone."),
+        ok_text = _("Clear"),
+        ok_callback = function()
+            Trapper:wrap(function()
+                local ok, err = self.engine:cookieClear()
+                if ok then
+                    UIManager:show(InfoMessage:new{ text = _("Cookies cleared."), timeout = 2 })
+                else
+                    UIManager:show(InfoMessage:new{ text = T(_("Could not clear cookies:\n%1"), err) })
+                end
+            end)
+        end,
+    })
+end
+
 function SettingsBrowser:toggleEphemeralMode()
     local enabling = not self.store:isEphemeralMode()
     if not enabling then
@@ -427,6 +468,10 @@ function SettingsBrowser:onMenuSelect(item)
         self:promptNetworkConcurrency()
     elseif item.is_flaresolverr_entry then
         self:promptFlareSolverrHost()
+    elseif item.is_import_cookies_entry then
+        self:importCookies()
+    elseif item.is_clear_cookies_entry then
+        self:confirmClearCookies()
     end
     return true
 end

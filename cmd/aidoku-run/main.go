@@ -74,18 +74,22 @@ commands:
                                      SQLite index there (see the downloads package); if manga-dir-name is
                                      given, output.cbz's directory gets a new sanitized subdirectory named
                                      after it created, and the archive is written inside that instead
-  cookie load <cookies.txt>          load cookies from a Netscape cookies.txt file (cf_clearance etc.)
+  cookie load <cookies.txt>          load cookies from a Netscape cookies.txt file (cf_clearance etc.);
+                                     merges into the store by domain+name, leaving other cookies for the
+                                     same domain (and every other domain) untouched
   cookie list                        show stored cookie domains
+  cookie clear                       erase every stored cookie
   repo list <index-url>              fetch a source-repository index (index.min.json) and list its sources
   repo install <index-url> <source-id> <dest-dir>
                                      download a source's .aix from a repository index into dest-dir
 Cookies stored with `+"`cookie load`"+` are injected into a source's requests
 for the matching domain on every command, helping get past Cloudflare.
 
-AIDOKU_SETTINGS_DIR, if set, persists settings under <dir>/settings.json
-instead of a shared temp file, so values set with `+"`settings set`"+` survive
-across invocations and processes -- set this to a real per-install directory
-for anything other than one-off CLI testing.
+AIDOKU_SETTINGS_DIR, if set, persists settings under <dir>/settings.json and
+stored cookies under <dir>/cookies.json, instead of shared temp files, so
+values set with `+"`settings set`"+`/`+"`cookie load`"+` survive across
+invocations and processes -- set this to a real per-install directory for
+anything other than one-off CLI testing.
 
 NETWORK_CONCURRENCY, if set to a positive integer, bounds how many requests
 a guest's net.send_all call runs at once (default 8).
@@ -111,6 +115,9 @@ func run(dir, command string, args []string) error {
 	}
 
 	cookiePath := filepath.Join(os.TempDir(), "aidoku-run-cookies.json")
+	if dir := os.Getenv("AIDOKU_SETTINGS_DIR"); dir != "" {
+		cookiePath = filepath.Join(dir, "cookies.json")
+	}
 
 	// If command is "cookie", handle it before loading the source (which is
 	// otherwise only needed so its base URLs are known for display/command
@@ -583,9 +590,8 @@ func handleRepo(ctx context.Context, args []string) error {
 
 func handleCookie(path string, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: cookie load <cookies.txt> | cookie list")
+		return fmt.Errorf("usage: cookie load <cookies.txt> | cookie list | cookie clear")
 	}
-	f := readCookieFile(path)
 	switch args[0] {
 	case "load":
 		if len(args) < 2 {
@@ -599,25 +605,19 @@ func handleCookie(path string, args []string) error {
 		if err != nil {
 			return err
 		}
-		entries := entriesFromNetscape(cookies)
-		if len(entries) == 0 {
+		if len(cookies) == 0 {
 			fmt.Println("no usable (non-expired) cookies in that file")
 			return nil
 		}
-		byDomain := map[string][]cookieEntry{}
-		for _, e := range entries {
-			byDomain[e.Domain] = append(byDomain[e.Domain], e)
-		}
-		for d, es := range byDomain {
-			f[d] = es
-		}
-		if err := writeCookieFile(path, f); err != nil {
-			return err
-		}
-		fmt.Printf("loaded %d cookie(s) from %s\n", len(entries), args[1])
+		// persistCookies merges by domain+name, so an import only ever
+		// replaces same-named cookies -- it never wipes other cookies
+		// already stored for that domain (or any other domain).
+		persistCookies(path, cookies)
+		fmt.Printf("loaded %d cookie(s) from %s\n", len(cookies), args[1])
 		return nil
 
 	case "list":
+		f := readCookieFile(path)
 		if len(f) == 0 {
 			fmt.Println("(no cookies stored)")
 			return nil
@@ -636,6 +636,13 @@ func handleCookie(path string, args []string) error {
 				fmt.Printf("%s\t%s\n", scoped, e.Name+"="+e.Value)
 			}
 		}
+		return nil
+
+	case "clear":
+		if err := writeCookieFile(path, cookieFile{}); err != nil {
+			return err
+		}
+		fmt.Println("cleared all stored cookies")
 		return nil
 
 	default:

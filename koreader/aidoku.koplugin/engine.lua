@@ -51,6 +51,19 @@ function Engine:repoInstall(index_url, source_id, dest_dir)
     return self.runner:exec({ "-", "repo", "install", index_url, source_id, dest_dir }, _("Installing…"))
 end
 
+-- cookieLoad/cookieClear pass self:sourceEnv() (unlike repoList/repoInstall
+-- above) so AIDOKU_SETTINGS_DIR is set on the subprocess -- that's what
+-- makes aidoku-run persist the cookie store under the plugin's own settings
+-- dir instead of a shared temp file (see cmd/aidoku-run/main.go's
+-- cookiePath).
+function Engine:cookieLoad(cookies_path)
+    return self.runner:exec({ "-", "cookie", "load", cookies_path }, _("Loading cookies…"), self:sourceEnv())
+end
+
+function Engine:cookieClear()
+    return self.runner:exec({ "-", "cookie", "clear" }, nil, self:sourceEnv())
+end
+
 function Engine:info(source_path)
     return self.runner:execJSON({ source_path, "info" }, _("Loading source…"), self:sourceEnv())
 end
