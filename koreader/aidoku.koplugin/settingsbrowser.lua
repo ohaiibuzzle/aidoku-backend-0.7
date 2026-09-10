@@ -286,19 +286,6 @@ function SettingsBrowser:promptFlareSolverrHost()
     dialog:onShowKeyboard()
 end
 
--- toggleEphemeralMode flips the setting directly, no dialog (same shape as
--- cycleNextChapterMode below). Turning it off purges whatever's left in the
--- RAM-disk dir first, while self.downloads_engine still points at it -- see
--- CLAUDE.md's Ephemeral Mode section.
---
--- self.aidoku:refreshDownloadsDir() (see main.lua) redirects downloads
--- immediately rather than only on this plugin instance's next init() --
--- without it, a download started right after toggling in this same
--- FileManager session would still land in the old location, since
--- self.downloads_dir/self.downloads_engine are plain fields copied once at
--- construction time everywhere they're threaded. self.refresh_callback
--- (threaded in from librarybrowser.lua) both resyncs LibraryBrowser's own
--- copies of those fields and updates the Library subtitle immediately.
 function SettingsBrowser:importCookies()
     local chooser
     chooser = PathChooser:new{
@@ -337,6 +324,12 @@ function SettingsBrowser:confirmClearCookies()
     })
 end
 
+-- toggleEphemeralMode flips the setting directly (no dialog). Turning it
+-- off purges the RAM-disk dir first, while self.downloads_engine still
+-- points at it. self.aidoku:refreshDownloadsDir() redirects downloads
+-- immediately rather than only on next init() -- self.downloads_dir/
+-- downloads_engine are plain fields copied at construction, so
+-- refresh_callback also resyncs LibraryBrowser's copies.
 function SettingsBrowser:toggleEphemeralMode()
     local enabling = not self.store:isEphemeralMode()
     if not enabling then

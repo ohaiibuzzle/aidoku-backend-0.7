@@ -66,18 +66,14 @@ local function commandExists(name)
     return command_exists_cache[name]
 end
 
--- buildCommand assembles the full shell command line for args: env
--- assignments and an optional low-priority prefix ahead of the quoted
--- binary and its (also quoted) arguments, stderr redirected to a capture
--- file. Returns the command string and the stderr path it redirects to.
+-- buildCommand assembles the shell command line: env assignments, an
+-- optional low-priority prefix, the quoted binary and args, stderr
+-- redirected to a capture file.
 --
--- low_priority, if true and "nice" is available (see commandExists()),
--- runs the binary under "nice -n 19" so a background op (chapter prefetch)
--- writing a CBZ doesn't steal CPU from whatever the reader is doing in the
--- foreground. Checked at runtime rather than assumed, and skipped silently
--- if absent, rather than "ionice"-style unconditional prefixing -- a
--- missing tool in the prefix would fail the whole command, not just leave
--- it at normal priority.
+-- low_priority, if true and "nice" is available, runs under "nice -n 19"
+-- so a background prefetch doesn't steal CPU from the foreground reader --
+-- checked at runtime and skipped silently if absent, rather than risking
+-- a missing-tool failure of the whole command.
 local function buildCommand(bin_path, stderr_path, args, env, low_priority)
     local parts = {}
     if env then

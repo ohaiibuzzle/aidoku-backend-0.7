@@ -1,41 +1,14 @@
 --[[--
-DownloadsEngine talks directly to <downloads_dir>/index.db, the SQLite-backed
-index of which local CBZ file backs a given (source, manga, chapter) --
-written by downloads/store.go, read here via KOReader's bundled lua-ljsqlite3
-FFI binding (the same one vocabbuilder.koplugin/db.lua and
-coverbrowser.koplugin/bookinfomanager.lua use directly). This replaces a
-former design that shelled out to a separate aidoku-downloads binary for
-every query -- see CLAUDE.md's "Recording stays inside the writer" section.
-
-Deliberately no record() method here, same as before: a download is indexed
-by aidoku-run's own "download" command (via engine.lua's Engine:download) in
-the same process that writes the CBZ, not as a separate step from here.
-
-Schema ownership: Go's downloads.Open() (run by aidoku-run on every
-download) is the sole authority for this file's schema and migrations. This
-file never issues CREATE TABLE/ALTER TABLE/PRAGMA journal_mode -- only reads
-and row-level writes against a schema Go already owns. A fresh install where
-aidoku-run has never run yet may have no `downloads` table at all; every
-method below treats that as "empty", never as an error (see tableExists()).
-
-Concurrency: aidoku-run (a one-shot process, invoked only for an actual
-download) and this file's connection can both be touching index.db at once.
-Both sides set a busy timeout so a rare, brief lock conflict is retried
-rather than surfacing as an error. Neither side forces WAL mode -- some real
-target hardware (older Kindle kernels) can't safely mmap for WAL, and there's
-no reliable way to detect that from the Go side, so index.db stays on
-SQLite's default rollback-journal mode. See CLAUDE.md.
-
-Every field that could be "absent" comes back as a zero value (empty
-string/array/0), never nil, matching the old JSON-CLI convention every caller
-already depends on. The one exception is chapterNumber/volumeNumber, which
-are nil-means-absent, same as the network chapter list's ChapterNumber --
-decode them via chapterorder.lua's ChapterOrder.fromEntry.
-
-lua-ljsqlite3 quirk worth noting: numeric columns come back through
-stmt:step() as Lua strings, not numbers (confirmed against
-vocabbuilder.koplugin/db.lua's own `tonumber(db_conn:rowexec(...))` usage) --
-every numeric field read below is explicitly tonumber()'d.
+DownloadsEngine reads/writes <downloads_dir>/index.db directly via
+lua-ljsqlite3 -- no record() method here: a download is indexed by
+aidoku-run's own "download" command, in the same process that writes the
+CBZ, so a killed/failed download can never leave the index pointing at a
+missing file. Go's downloads.Open() solely owns the schema; this file only
+does reads/row writes and treats a missing `downloads` table as empty, not
+an error (a fresh install may never have run aidoku-run yet). No WAL (some
+Kindle kernels can't mmap for it), just a busy timeout on both sides for
+lock contention. Numeric columns come back as Lua strings, not numbers --
+always tonumber() them.
 ]]
 
 local DocSettings = require("docsettings")
@@ -133,18 +106,12 @@ function DownloadsEngine:byPath(file_path)
 end
 
 -- remove deletes the index entry, its backing file, and its KOReader
--- reading-progress sidecar (a no-op, not an error, if any of these don't
--- exist). source_key: see path() above.
---
--- The sidecar (.sdr) cleanup is deliberately unconditional, not just an
--- Ephemeral Mode thing: once a chapter's file is gone there's nothing left
--- to resume, so a leftover .sdr is always dead weight. DocSettings:getSidecarDir
--- is used rather than guessing "<path minus extension>.sdr" ourselves, since
--- the user's own document_metadata_folder setting can relocate sidecars away
--- from the document (see docsettings.lua) -- guessing the path would silently
--- miss those. Best-effort: a purgeDir failure here doesn't fail the whole
--- remove(), since the file itself (the part that actually matters) is
--- already gone by that point.
+-- reading-progress sidecar (all no-ops, not errors, if already absent).
+-- Sidecar cleanup is unconditional (not just Ephemeral Mode), using
+-- DocSettings:getSidecarDir rather than a guessed "<path>.sdr" path since
+-- the user's document_metadata_folder setting can relocate sidecars away
+-- from the document. Best-effort: a purgeDir failure doesn't fail
+-- remove() itself.
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
     local path = self:path(source_key, manga_key, chapter_key)
     if path == "" then

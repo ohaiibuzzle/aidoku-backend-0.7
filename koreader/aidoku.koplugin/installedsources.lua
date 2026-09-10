@@ -3,24 +3,14 @@ Lists installed .aix sources in a sources directory, as
 {text = "<display name> (<languages>)", mandatory = "v<version>",
 name = "<display name>", path = "<sources_dir>/<file>.aix",
 key = "<source's manifest id>", version = <int, or nil if unreadable>}
-entries -- shared by sourcesbrowser.lua (one source, uses text/mandatory,
-inserting entries directly as its own Menu item_table), globalsearchbrowser.lua
-(every source at once, uses name -- a result row already carries the manga
-title, so repeating each source's full language list per result there is
-just noise), librarybrowser.lua (resolving a bookmark's stored key back to a
-live path via findByKey), and repobrowser.lua (matching a repo entry's id
-against key to detect an already-installed/updatable source -- see the note
-on this in repobrowser.lua's reload()).
+entries -- shared by sourcesbrowser.lua, globalsearchbrowser.lua,
+librarybrowser.lua (findByKey), and repobrowser.lua.
 
-Both key and text come straight from the source's own source.json (via
-engine:manifest(), which reads it without loading the source's WASM module
--- see cmd/aidoku-run's `manifest` command), not guessed from the
-installed file's name: the manifest id is the ground truth for identity
-(and, unlike a filename convention, can't go stale if a source ever stops
-following one), and the filename never had a human-readable name to show
-in the first place. This costs one cheap subprocess call per installed
-source on every list() -- no caching, since re-reading is simple and a
-source's manifest can't change without its file changing too.
+key/text come from engine:manifest() (reads source.json without loading
+WASM), not guessed from the filename -- the manifest id is the ground
+truth for identity and can't go stale. One subprocess call per source per
+list(), no caching, since a manifest can't change without its file
+changing too.
 ]]
 
 local lfs = require("libs/libkoreader-lfs")

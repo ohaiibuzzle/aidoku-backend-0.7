@@ -49,23 +49,15 @@ local function binArch()
     return "armv7"
 end
 
--- dataSubdir builds an absolute-or-relative path under DataStorage's data
--- dir, normalized to never start with "./". DataStorage:getDataDir() isn't
--- guaranteed to return an absolute path -- confirmed on a real Kindle whose
--- launcher cd's into an absolute KOREADER_DIR and then execs a *relative*
--- "./reader.lua", where it returns the bare "." -- which would otherwise
--- make this "./aidoku/<name>". KOReader itself strips/never adds that "./"
--- when it records a document's own path (e.g. self.document.file, or a
--- .sdr's doc_path), so leaving it in self.downloads_dir would make every
+-- dataSubdir builds a path under DataStorage's data dir, stripped of a
+-- leading "./" -- DataStorage:getDataDir() can return the bare "." on
+-- devices that exec a relative "./reader.lua" (confirmed on a real
+-- Kindle), and KOReader's own recorded document paths never carry "./",
+-- so leaving it in self.downloads_dir silently breaks every
 -- `file:sub(1, #self.downloads_dir) == self.downloads_dir` prefix check
--- below (and in nextchapter.lua) silently never match -- which is exactly
--- what happened: read-chapter marking, next-chapter advance, and returning
--- to the Library after closing a book all silently no-op'd on that device,
--- with no error, because every single one of those checks is gated on this
--- same comparison. Stripping the "./" here (rather than fixing each
--- comparison site) fixes all of them at the source and is a no-op for I/O
--- itself -- "aidoku/downloads/x" and "./aidoku/downloads/x" name the same
--- file from the same working directory.
+-- below and in nextchapter.lua (read-marking, auto-advance, Library
+-- return all no-op with no error). Stripping it here is a no-op for I/O
+-- itself.
 local function dataSubdir(name)
     return (DataStorage:getDataDir() .. "/aidoku/" .. name):gsub("^%./", "")
 end
@@ -104,14 +96,11 @@ function Aidoku:init()
 end
 
 -- refreshDownloadsDir (re)computes self.downloads_dir/self.downloads_engine
--- from the current Ephemeral Mode setting -- see CLAUDE.md's Ephemeral Mode
--- section. Called from init() (first run) and again from
--- settingsbrowser.lua's toggleEphemeralMode() (self.aidoku:refreshDownloadsDir())
--- so flipping the toggle redirects downloads immediately, in the same
--- FileManager session, rather than only on the next time this whole plugin
--- instance is constructed -- is_doc_only = false means that's only guaranteed
--- on a FileManager<->ReaderUI transition, which doesn't happen just from
--- opening Settings off the already-open Library screen.
+-- to either the normal data dir or Ephemeral Mode's RAM-disk path,
+-- depending on the current setting. Called from init() and again from
+-- settingsbrowser.lua's toggleEphemeralMode() so the toggle redirects
+-- downloads immediately rather than only on the next plugin-instance
+-- construction.
 function Aidoku:refreshDownloadsDir()
     self.downloads_dir = self.store:isEphemeralMode()
         and self.store:ephemeralPath() or dataSubdir("downloads")
@@ -137,21 +126,14 @@ function Aidoku:markCurrentChapterRead()
     end
 end
 
--- hookEndOfBook wires up auto-advance to the next chapter. It only applies
--- (and self.document is only set at all) when this plugin instance is
--- running inside ReaderUI, not the FileManager -- see the note on
--- is_doc_only in frontend/apps/filemanager/filemanager.lua vs
--- frontend/apps/reader/readerui.lua, which instantiate every plugin either
--- way but only the latter passes a document.
+-- hookEndOfBook wires up auto-advance to the next chapter. Only applies
+-- inside ReaderUI (self.document is only set there, not FileManager).
 --
--- ReaderStatus's own onEndOfBook (frontend/apps/reader/modules/
--- readerstatus.lua) is registered before plugins are and never returns
--- true, so KOReader's event propagation (which stops at the first true --
--- see WidgetContainer:propagateEvent) can't be used to suppress its "end of
--- document" pop-up by registering a same-named handler here: ReaderStatus
--- would always run first regardless, and both would show. Instead this
--- wraps the ReaderStatus instance's own method directly: ours runs first,
--- and falls through to the original when the document isn't one of ours.
+-- Can't suppress ReaderStatus's own "end of document" pop-up via a
+-- same-named event handler here -- it's registered before plugins and
+-- never returns true, so propagation always reaches it regardless. Instead
+-- this monkey-patches its onEndOfBook method directly: ours runs first and
+-- falls through to the original when the document isn't one of ours.
 function Aidoku:hookEndOfBook()
     if not self.document or not self.ui.status then
         return
@@ -175,29 +157,19 @@ function Aidoku:hookEndOfBook()
     end
 end
 
--- hookShowFileManager makes every "back to Files" path -- ReaderUI:onHome()
--- (dispatcher's "filemanager" action / readerback.lua's back-gesture-stack-
--- exhausted case), ReaderStatus:openFileBrowser() (the end-of-document
--- pop-up's "File browser" button and every end_document_action that lands
--- there), and readermenu.lua's top-bar file-browser icon (its callback
--- calls self.ui:onClose() + self.ui:showFileManager(file) directly, not
--- through onHome) -- return to Aidoku's own Library screen instead of
--- leaving the user looking at KOReader's raw file browser, when the
--- chapter being closed is one of ours. All three (and every other
--- showFileManager caller in readerui.lua) funnel through
--- ReaderUI:showFileManager(file) itself, so hooking that one method covers
--- all of them instead of chasing each call site separately.
+-- hookShowFileManager makes every "back to Files" path return to Aidoku's
+-- own Library screen instead of KOReader's raw file browser, when the
+-- chapter being closed is one of ours. Every such path (onHome, the
+-- end-of-document pop-up, the top-bar file-browser icon) funnels through
+-- ReaderUI:showFileManager(file), so hooking that one method (same
+-- monkey-patch technique as hookEndOfBook) covers all of them.
 --
--- Every caller does self:onClose() (tearing down this very plugin
--- instance) then self:showFileManager(file), which spins up a *new*
--- FileManager instance -- and since is_doc_only = false, a *new* Aidoku
--- plugin instance for it. There's no direct way to hand that future
--- instance a "reopen the Library" instruction, so this leaves a note in
--- pendinglibrary.lua (a require()-cached table, shared process-wide across
--- the teardown/recreate boundary) for that instance's init() to act on --
--- see openPendingLibrary() below. Same monkey-patch technique as
--- hookEndOfBook, for the same reason: showFileManager is a plain instance
--- method, not something event propagation can intercept.
+-- showFileManager tears down this plugin instance and spins up a new
+-- FileManager (and, since is_doc_only = false, a new Aidoku instance for
+-- it) -- with no direct way to hand that future instance a "reopen the
+-- Library" instruction, this leaves a note in pendinglibrary.lua (a
+-- require()-cached table, shared across the teardown/recreate boundary)
+-- for its init() to act on -- see openPendingLibrary() below.
 function Aidoku:hookShowFileManager()
     if not self.document then
         return
@@ -212,24 +184,15 @@ function Aidoku:hookShowFileManager()
     end
 end
 
--- hookClose closes any Aidoku screen still open (see openwidgets.lua) right
--- before self.ui itself closes -- covering Exit, Restart, and the Reader<->
--- FileManager handoff alike, since all three route through onClose(). Each
--- Aidoku screen (LibraryBrowser, MangaBrowser, ...) is its own independent
--- UIManager top-level widget, not a child of self.ui -- drilling from one
--- screen into another only closes the screen being left, not its
--- ancestors (e.g. opening a chapter closes MangaBrowser but leaves
--- LibraryBrowser sitting on the window stack, just buried under the
--- Reader). UIManager's own run loop only stops once its window stack is
--- completely empty, so a screen left open when self.ui closes -- most
--- visibly, when Exit is invoked while reading -- silently blocks KOReader
--- from actually quitting: closing self.ui alone empties it down to just
--- that leftover screen, which then resurfaces on screen instead of
--- KOReader exiting, and has to be closed by hand before the app-level exit
--- can complete. Applies to both FileManager and ReaderUI instances (unlike
--- hookEndOfBook/hookShowFileManager, which are ReaderUI-only), since either
--- one closing can be the point where a leftover screen would otherwise be
--- exposed.
+-- hookClose closes any Aidoku screen still open (openwidgets.lua) right
+-- before self.ui closes -- covers Exit, Restart, and the Reader<->
+-- FileManager handoff, all of which route through onClose(). Each Aidoku
+-- screen is its own top-level UIManager widget, not a child of self.ui, so
+-- drilling from one into another leaves ancestors buried on the window
+-- stack; UIManager's run loop only stops once that stack is fully empty,
+-- so a leftover screen silently blocks KOReader from quitting (see
+-- openwidgets.lua). Applies to both FileManager and ReaderUI instances,
+-- unlike the ReaderUI-only hooks above.
 function Aidoku:hookClose()
     local original_on_close = self.ui.onClose
     self.ui.onClose = function(ui_self, ...)

@@ -1,34 +1,19 @@
 --[[--
-Store is the plugin's persistent state: bookmarked manga (the library),
-read history, and small user preferences.
+Store is the plugin's persistent state: library, read history, and small
+preferences. Preferences stay on KOReader's LuaSettings (aidoku.lua);
+library/history live in their own SQLite file, library.db, via
+lua-ljsqlite3 instead -- LuaSettings persists via a one-shot
+pcall(dofile, file), never hot enough for LuaJIT to trace-compile, so it
+stays fully interpreted and scales linearly as history grows, unlike
+SQLite's indexed lookups.
 
-Preferences stay on KOReader's LuaSettings, one flat file at
-DataStorage:getSettingsDir()/aidoku.lua -- cheap scalar values, no scale
-concern. Library/read-history live in a separate SQLite file, <data_dir>/
-library.db, opened directly via KOReader's bundled lua-ljsqlite3 FFI binding
-(the same one downloadsengine.lua and other third-party KOReader plugins
-like vocabbuilder.koplugin/db.lua use). They used to live on LuaSettings too,
-but LuaSettings persists via pcall(dofile, file) -- a one-shot execution of a
-serialized .lua file with zero chance of LuaJIT trace compilation (traces
-only form from hot loops; a single dofile call never runs enough iterations)
--- so it scales linearly and stays fully interpreted as history grows,
-unlike SQLite's indexed lookups. See CLAUDE.md.
+Unlike index.db (schema owned by the Go side), this file is the sole
+schema authority for library.db -- Store.new() creates it idempotently and
+migrates any pre-existing LuaSettings data once.
 
-Unlike downloadsengine.lua's index.db (schema owned by the Go side), this
-file is the sole schema authority for library.db -- there's no Go process
-guaranteed to run first. Every Store.new() call creates the schema
-(idempotent, safe on every startup of either the FileManager-context or
-ReaderUI-context plugin instance) and, once, migrates any pre-existing
-LuaSettings library/history data across.
-
-Library entries are keyed by source_key (the source's stable manifest ID,
-e.g. "en.weebcentral") plus manga key, not by source_path -- a source
-update changes its installed file's path (the "-v7.aix" -> "-v8.aix"
-rename), which would otherwise silently orphan every bookmark pointing at
-the old one. source_path is still stored per entry, but only as a
-best-effort display/debugging hint; see installedsources.lua's
-findByKey(), which librarybrowser.lua uses to re-resolve a bookmark's
-current path from its key before opening it.
+Library entries are keyed by source_key + manga key, not source_path (a
+source update renames its installed file, which would orphan bookmarks
+keyed by path) -- see installedsources.lua's findByKey().
 ]]
 
 local DataStorage = require("datastorage")
@@ -66,20 +51,14 @@ local LIBRARY_SCHEMA = [[
 
 -- migrateLegacyData is a one-time move of library/last_read/read_chapters
 -- from the still-open LuaSettings instance into the SQLite tables above,
--- guarded by the library_migrated_to_sqlite marker so it only runs once.
+-- guarded by the library_migrated_to_sqlite marker.
 --
--- Ordering matters for crash-safety: the SQLite transaction commits before
--- the LuaSettings keys are deleted/marker set. If the process dies in
--- between, the marker is never set, so this harmlessly re-runs (every
--- insert below is "OR IGNORE") on next startup.
---
--- Two plugin instances (FileManager-context, ReaderUI-context) can both
--- see the marker unset on first run after an update and both migrate --
--- safe, since both read the same pre-migration snapshot and insert
--- identical rows; whichever's marker-set-and-delete flush lands last wins,
--- and both are writing the same final content. This exact lost-update race
--- already exists today for any two concurrent LuaSettings writes from the
--- two instances, so it isn't newly introduced here.
+-- Crash-safe: the SQLite transaction commits before the LuaSettings marker
+-- is set, so a mid-migration death just re-runs it next startup (every
+-- insert is "OR IGNORE"). Two plugin instances migrating concurrently is
+-- also safe -- both read the same pre-migration snapshot and insert
+-- identical rows, an existing lost-update race for LuaSettings writes
+-- between the two instances, not something new here.
 local function migrateLegacyData(settings, db)
     if settings:readSetting("library_migrated_to_sqlite", false) then
         return
@@ -109,15 +88,10 @@ local function migrateLegacyData(settings, db)
     lib_stmt:close()
 
     -- last_read/read_chapters' identity lives in the composite string key
-    -- ("source_key|manga_key" / "source_key|manga_key|chapter_key"), not
-    -- the value -- split on the first "|" each time, so the final part
-    -- (manga_key, or chapter_key for the three-part case) absorbs any
-    -- further "|" characters verbatim, since that's the field most likely
-    -- to contain one in the wild. This unescaped-separator ambiguity
-    -- already exists in the current libraryKey/lastReadKey/chapterReadKey
-    -- format at rest -- this migration inherits it rather than introducing
-    -- it, and can't retroactively resolve already-collided data, but no
-    -- future write will ever need this splitting again afterward.
+    -- ("source_key|manga_key[|chapter_key]"), so split on the first "|"
+    -- and let the final field absorb any further "|" verbatim. Inherits
+    -- the format's existing unescaped-separator ambiguity rather than
+    -- introducing it; no future write needs this splitting again.
     local lr_stmt = db:prepare(
         "INSERT OR IGNORE INTO last_read (source_key, manga_key, last_read_at) VALUES (?, ?, ?)")
     for key, read_at in pairs(last_read) do

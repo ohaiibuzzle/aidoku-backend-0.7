@@ -78,16 +78,12 @@ function Engine:manifest(source_path)
     return self.runner:execJSON({ source_path, "manifest" }, nil)
 end
 
--- encodeFilterValues JSON-encodes filter_values (an array of tables shaped
--- like filterbrowser.lua's self.values entries), dropping any empty
--- included/excluded array first. KOReader's json module can't tell an
+-- encodeFilterValues JSON-encodes filter_values (shaped like
+-- filterbrowser.lua's self.values entries), dropping any empty
+-- included/excluded array first: KOReader's json module can't tell an
 -- empty Lua table meant as an array from one meant as an object, so
--- json.encode({}) produces "{}" -- which then fails to decode into Go's
--- []string on the receiving end (confirmed live: selecting one multiselect
--- filter option, leaving the other side empty, made `search` fail with
--- "cannot unmarshal object into Go struct field ...excluded of type
--- []string"). Omitting the key entirely sidesteps the ambiguity, and
--- matches the Go side's own `omitempty` for these fields.
+-- json.encode({}) produces "{}" instead of "[]", which fails to decode
+-- into Go's []string. Omitting the key matches Go's own `omitempty`.
 local function encodeFilterValues(filter_values)
     local sanitized = {}
     for i, v in ipairs(filter_values) do
@@ -166,46 +162,27 @@ function Engine:mangaUpdate(source_path, manga_key)
     return self.runner:execJSON({ source_path, "manga", manga_key }, _("Loading chapters…"), self:sourceEnv())
 end
 
--- downloads_dir, if given, is passed through to aidoku-run so it records
--- the download into the SQLite index there itself, in the same process
--- that writes the CBZ -- see CLAUDE.md's "Recording stays inside the
--- writer" section and the downloads Go package doc. Every call from this
--- plugin should pass it; it's optional only because the bare CLI is also
--- used standalone/without an index (see cmd/aidoku-run/main.go's own usage
--- text).
+-- downloads_dir, if given, makes aidoku-run record the download into its
+-- own SQLite index, in the same process that writes the CBZ; every call
+-- from this plugin should pass it, it's optional only because the bare
+-- CLI also runs standalone/indexless.
 --
--- silent (used for background chapter prefetch) passes nil instead of a
--- progress string, which Trapper:dismissablePopen() turns into an invisible
--- trap widget instead of a visible "Downloading…" popup -- see
--- ui/trapper.lua. Deliberately nil, not false: dismissablePopen() only
--- treats an invisible trap widget as dismiss-and-drop (resend_event=false,
--- silently eating whatever tap dismissed it) when the progress argument is
--- false *exactly* -- nil gets the default resend_event=true, so a tap that
--- lands on the invisible widget while a chapter downloads in the background
--- still reaches the reader afterward instead of vanishing. Passing false
--- here was the actual cause of a bug where enabling prefetch made the
--- reader swallow one page-turn tap per buffered chapter right after opening
--- one -- confirmed by testing on device, and initially misdiagnosed as a
--- widget-stacking/timing issue (deferring the prefetch call with
--- UIManager:nextTick, still done in mangabrowser.lua/nextchapter.lua,
--- didn't fix it, since the swallowing wasn't about timing at all). It also
--- runs the binary under a lower CPU priority (see the note on this in
--- subprocess.lua's exec()), since a silent download is by definition a
--- background prefetch, not something the user is actively waiting on.
+-- silent (background prefetch) passes nil, not false, for the progress
+-- text: Trapper:dismissablePopen() only treats a dismissed trap widget as
+-- silently-eat-the-tap when the progress arg is false *exactly* -- nil
+-- gets the default resend_event=true, so a tap landing on the invisible
+-- widget still reaches the reader afterward instead of vanishing. Also
+-- runs under lower CPU priority (subprocess.lua's exec()).
 --
 -- progress_text_override, if given, replaces the default "Downloading
--- chapter…" text (e.g. mangabrowser.lua's bulk download uses it to show
--- batch position, "Downloading 3/15: Chapter 9"). Ignored when silent.
+-- chapter…" text (e.g. batch position "Downloading 3/15: Chapter 9").
+-- Ignored when silent.
 --
--- manga_dir_name, if given, makes aidoku-run create a subdirectory named
--- after it (sanitized Go-side, same authority as the chapter filename
--- itself -- see source.DownloadChapterCBZ's doc comment and CLAUDE.md's
--- "Filesystem-safe filenames" section) under out_path's own directory, and
--- write the archive inside that instead -- see mangabrowser.lua for the
--- naming convention. Requires downloads_dir to also be given, since it
--- occupies the next positional CLI argument after it; passing one without
--- the other inserts an empty placeholder so the arguments after it don't
--- shift.
+-- manga_dir_name, if given, makes aidoku-run create a sanitized
+-- subdirectory by that name under out_path's directory and write there
+-- instead. Requires downloads_dir too, since it's the next positional CLI
+-- arg -- passing one without the other inserts an empty placeholder so
+-- later args don't shift.
 function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name)
     -- Not "silent and false or ...": that's the classic Lua and/or-ternary
     -- trap -- it misfires whenever the "true" branch value is itself falsy,

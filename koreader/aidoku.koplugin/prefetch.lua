@@ -36,30 +36,22 @@ function Prefetch.chapterLabel(chapter)
 end
 
 -- ahead silently downloads up to ctx.store:effectiveBufferChapters() upcoming
--- chapters (in reading order, not display sort order) after chapter_key,
--- so they're likely already local by the time the reader reaches them.
+-- chapters (reading order, not display sort) after chapter_key, so they're
+-- likely already local by the time the reader reaches them.
 --
--- Two callers wanting the exact same not-yet-downloaded chapter at once
--- (e.g. this prefetch still mid-download when the reader reaches that same
--- chapter fast enough to hit nextchapter.lua's network fallback) is handled
--- Go-side, not here: aidoku-run's "download" command takes a cross-process
--- flock keyed on (source, manga, chapter) before downloading an indexed
--- chapter, so a second concurrent invocation just blocks and then reuses
--- the first one's result instead of re-fetching every page -- see
--- downloads.AcquireLock's doc for why that has to live there rather than in
--- this Lua layer (KOReader's Trapper can report a download "cancelled" the
--- instant an unrelated tap dismisses its progress widget, while the
--- process it spawned keeps running regardless -- a Lua-side lock keyed off
--- when that call returns is not a reliable signal of when the real work is
--- actually done).
+-- Two callers racing the same not-yet-downloaded chapter (e.g. this
+-- prefetch still running when the reader reaches it via nextchapter.lua's
+-- network fallback) is deduplicated Go-side via aidoku-run's cross-process
+-- flock, not here: a Lua-side lock can't tell "the subprocess call
+-- returned" apart from "the download actually finished" (KOReader's
+-- Trapper can report a download cancelled mid-write), so it isn't reliable.
 --
 -- ctx fields: engine, downloads_engine, store, downloads_dir, source_path,
 -- source_key, manga (the full manga table, for its Key/Title).
 --
--- on_downloaded(chapter, path), if given, is called for each chapter newly
--- downloaded this pass (mangabrowser.lua uses it to keep its menu's
--- downloaded_keys cache in sync). on_complete(any_new), if given, is called
--- once after the pass finishes.
+-- on_downloaded(chapter, path), if given, is called per chapter newly
+-- downloaded this pass. on_complete(any_new), if given, is called once
+-- after the pass finishes.
 function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
     local n = ctx.store:effectiveBufferChapters()
     if n <= 0 then

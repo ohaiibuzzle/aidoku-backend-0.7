@@ -1,25 +1,14 @@
-// Package downloads is the persistent index of locally downloaded
-// chapters: which (source, manga, chapter) maps to which local CBZ file,
-// its size, and when it was fetched -- backed by SQLite (modernc.org/sqlite,
-// pure Go, no cgo, so it cross-compiles the same as the rest of this
-// project) rather than a flat file, since callers (e.g. a KOReader plugin)
-// query it on nearly every screen and re-parsing a growing JSON blob each
-// time doesn't scale.
+// Package downloads is the persistent index of locally downloaded chapters:
+// which (source, manga, chapter) maps to which local CBZ file, its size, and
+// when it was fetched -- backed by SQLite (modernc.org/sqlite, pure Go, no
+// cgo) since callers query it on nearly every screen.
 //
-// Record, Path, and AcquireLock (see lock.go) are the only methods any Go
-// binary in this repo still calls, all from cmd/aidoku-run's "download"
-// command: AcquireLock and Path together let one invocation detect (after
-// blocking on another already-in-flight download of the exact same
-// chapter) that there's nothing left for it to do, and Record indexes a
-// freshly written CBZ, in the same process that wrote it -- see the
-// package's callers for why that atomicity matters. The KOReader plugin no
-// longer goes through a Go CLI for the rest of this package's API (there
-// used to be a cmd/aidoku-downloads for exactly that); it opens this same
-// index.db file directly via KOReader's bundled lua-ljsqlite3 binding and
-// reimplements Path/ByPath/Remove/List/TotalBytes/Prune/Reassociate's
-// queries in Lua. The Go versions stay here, fully tested, as this
-// package's public API for any other embedder -- they are not dead code,
-// just no longer this repo's only caller.
+// Record, Path, and AcquireLock (lock.go) are the only methods any Go binary
+// here still calls (cmd/aidoku-run's "download" command). The KOReader
+// plugin instead opens index.db directly via lua-ljsqlite3 (see
+// downloadsengine.lua) and reimplements the rest of this API's queries in
+// Lua -- the Go versions stay here, fully tested, as this package's public
+// surface for any other embedder, not dead code.
 package downloads
 
 import (
@@ -105,19 +94,13 @@ func Open(dir string) (*Store, error) {
 	return s, nil
 }
 
-// migrateToSourceKey upgrades a pre-existing database created before
-// source_key existed (when source_path -- the installed file's path --
-// was itself the primary key). SQLite can't add a column into a PRIMARY
-// KEY or change one via ALTER TABLE, so this rebuilds the table: renaming
-// the old one, creating the new schema, and copying every row across with
-// source_key seeded from its old source_path. That doesn't retroactively
-// fix any row whose source has already been renamed by an update installed
-// before this migration ran (nothing on disk records what that source's
-// real key was) -- but it does mean every row keeps resolving exactly as
-// it did before the migration, and every row recorded from here on is
-// keyed by the stable identity instead of a path that can change under it.
-// A no-op if the table doesn't exist yet (fresh install) or already has a
-// source_key column (already migrated).
+// migrateToSourceKey upgrades a database from before source_key existed
+// (when source_path was itself the primary key). SQLite can't add/change a
+// PRIMARY KEY column via ALTER TABLE, so this rebuilds the table, seeding
+// source_key from the old source_path -- which can't retroactively fix a
+// row whose source was renamed before this ran, but keeps every row
+// resolving correctly and keys future rows by the stable identity. No-op if
+// the table doesn't exist yet or already has a source_key column.
 func (s *Store) migrateToSourceKey() error {
 	var exists int
 	if err := s.db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='downloads'`).Scan(&exists); err != nil {

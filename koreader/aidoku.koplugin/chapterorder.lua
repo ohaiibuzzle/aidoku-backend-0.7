@@ -16,23 +16,15 @@ function ChapterOrder.number(chapter)
 end
 
 -- orderedByReading returns all of chapters in ascending reading order.
--- Network chapter lists arrive newest-first by convention (see fromEntries
--- below), so this starts by reversing to oldest-first.
+-- Network chapter lists arrive newest-first, so this starts by reversing.
 --
--- Not every chapter carries a ChapterNumber -- e.g. en.weebcentral lists
--- whole-volume bundle downloads ("Volume 2") as separate entries alongside
--- individually numbered chapters, with only a VolumeNumber set and no
--- ChapterNumber. VolumeNumber isn't on the same numeric axis as
--- ChapterNumber (a volume can bundle any range of chapters), so it can't be
--- used as a substitute sort key -- but the source's own list order already
--- places a bundle row where it chronologically belongs relative to the
--- surrounding numbered chapters. So: chapters with a ChapterNumber are
--- sorted ascending among themselves, then re-threaded back into their
--- original (reversed) positional slots, leaving every unnumbered chapter
--- pinned wherever the source placed it rather than dropped or shoved to one
--- end. This is what lets ChapterOrder.after() treat a Volume-bundle entry as
--- a normal step in the sequence instead of an invisible gap next-chapter/
--- prefetch can't cross.
+-- Not every chapter carries a ChapterNumber (e.g. en.weebcentral's
+-- whole-volume bundle rows have only VolumeNumber, which isn't on the same
+-- axis so can't substitute as a sort key). Numbered chapters are sorted
+-- ascending among themselves, then re-threaded back into their original
+-- reversed slots -- leaving unnumbered chapters pinned where the source
+-- placed them, so ChapterOrder.after() can treat a bundle row as a normal
+-- step instead of a gap.
 function ChapterOrder.orderedByReading(chapters)
     local positional = {}
     for i = #chapters, 1, -1 do
@@ -60,15 +52,10 @@ function ChapterOrder.orderedByReading(chapters)
     return ordered
 end
 
--- fromEntry adapts one row from downloads_engine:list()/byPath() (lowerCamel-
--- Case JSON: chapterKey, chapterTitle, chapterNumber, volumeNumber) into a
--- chapter-shaped table (Key, Title, ChapterNumber, VolumeNumber) matching
--- what orderedByReading/after/chapterLabel expect from a network Chapters
--- entry -- so the same ordering logic works offline, against the downloads
--- index, not just against a freshly fetched chapter list. entry.chapterNumber
--- suffers the same null-decodes-as-a-function-sentinel gotcha as a network
--- chapter's ChapterNumber (see the note at the top of this file), hence the
--- same type(...) == "number" guard here.
+-- fromEntry adapts one downloads_engine row (lowerCamelCase JSON) into a
+-- chapter-shaped table matching what orderedByReading/after/chapterLabel
+-- expect from a network Chapters entry, so ordering works offline too.
+-- Same null-as-function-sentinel guard as ChapterOrder.number above.
 function ChapterOrder.fromEntry(entry)
     return {
         Key = entry.chapterKey,
@@ -82,22 +69,13 @@ end
 -- adapts each row via fromEntry, for building an offline chapter list/
 -- ordering when the network chapter list isn't available.
 --
--- downloads_engine:list() (and so the entries this is fed) is ordered by
--- download recency, not reading order -- if left as-is, a chapter
--- downloaded out of sequence (e.g. as a one-off before its neighbors) would
--- land wherever its download timestamp happens to put it, which looks
--- especially broken once mangabrowser.lua's asc/desc toggle reverses it (a
--- reversal only makes sense against a list already in reading order, same
--- as a network chapter list arrives in). So sort by ChapterNumber
--- descending here -- the same "newest chapter first" convention a network
--- chapter list normally arrives in -- with unnumbered chapters (no
--- ChapterNumber to place them by) pushed to the end. table.sort isn't
--- guaranteed stable, so two unnumbered chapters (which the comparator below
--- would otherwise treat as equal) can't just rely on keeping their input
--- order -- that produced a visibly scrambled list in practice. _order
--- (their position in the download-recency-ordered input, stripped again
--- before returning) breaks that tie explicitly, so unnumbered chapters end
--- up in a deterministic, still recency-ordered block instead.
+-- downloads_engine:list() entries arrive ordered by download recency, not
+-- reading order, so this re-sorts by ChapterNumber descending (matching
+-- the "newest first" convention a network list arrives in), pushing
+-- unnumbered chapters to the end. table.sort isn't stable, so two
+-- unnumbered chapters need an explicit tiebreaker (_order, their original
+-- position) rather than relying on input order -- omitting it produced a
+-- visibly scrambled list in practice.
 function ChapterOrder.fromEntries(entries, source_key, manga_key)
     local chapters = {}
     for i, entry in ipairs(entries or {}) do

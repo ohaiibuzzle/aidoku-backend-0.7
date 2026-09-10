@@ -10,13 +10,10 @@ import (
 //
 //	[{"trigger":{"url-filter":".*ads.*","resource-type":["image"]},"action":{"type":"block"}}]
 //
-// Only the "block" action is meaningful here (WebKit also supports
-// css-display-none, make-https, etc., which have no bearing on a
-// script/fetch/image-loading shim with no rendering). url-filter is
-// WebKit's ICU-regex dialect; we compile it with Go's RE2-based
-// regexp package, which covers the common simple patterns real rule
-// lists use but not backreferences/lookaround. A rule with a pattern Go
-// can't compile is skipped rather than failing the whole list.
+// Only "block" is meaningful (other WebKit actions have no bearing on a
+// non-rendering shim). url-filter is WebKit's ICU-regex dialect, compiled
+// with Go's RE2-based regexp -- covers common patterns but not
+// backreferences/lookaround; an uncompilable rule is skipped, not fatal.
 type contentRuleList struct {
 	rules []contentRule
 }

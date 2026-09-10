@@ -21,18 +21,12 @@ const (
 	jsInvalidRuleList jsResult = -6
 )
 
-// JS implements the `js` namespace's context_* functions
-// (Imports/JavaScript.swift), backed by modernc.org/quickjs (a pure-Go,
-// ES2023-compliant QuickJS build), matching Swift's IsolatedJSContext (a
-// fresh JS context per context_create call). webview_* — the rest of the
-// `js` namespace — is implemented separately by WebView (see webview.go): a
-// hand-rolled DOM binding over the same quickjs engine, since there's no
-// real browser engine available on a headless cgo-free target. It covers
-// straightforward JS/DOM work and simple timed challenges; it cannot clear
-// interactive CAPTCHA/Cloudflare-Turnstile-style challenges that expect real
-// browser capabilities (canvas rendering, etc.) — nothing short of a real
-// browser or a CAPTCHA-solving service can, so those sources stay
-// unsupported.
+// JS implements the `js` namespace's context_* functions (Imports/JavaScript.swift)
+// via modernc.org/quickjs, matching Swift's IsolatedJSContext (a fresh JS
+// context per context_create call). webview_* is implemented separately by
+// WebView (see webview.go) as a hand-rolled DOM binding over the same
+// engine -- there's no real browser available headless/cgo-free, so
+// interactive CAPTCHA/Turnstile-style challenges stay unsupported.
 type JS struct {
 	Store *Store
 }

@@ -1,27 +1,14 @@
 --[[--
 Shows one manga's chapter list, and downloads a chapter as a CBZ (skipping
-the network entirely if it's already downloaded) then opens it. Bookmarking
-a manga to the library happens from searchbrowser.lua's result list, not
-here.
+the network if already downloaded) then opens it. Bookmarking happens from
+searchbrowser.lua, not here. reload() (below) renders the local downloads
+index first, refreshing from the network only when connected.
 
-The title bar's left "hamburger" button (same technique as
-librarybrowser.lua's own onLeftButtonTap) groups the chapter sort-order
-toggle and bulk-downloading the next N chapters from wherever the user last
-left off reading (see downloadNext()).
-
-reload() renders the local downloads index first (see the note there) and
-only opportunistically refreshes from the network's "manga" command (details
-+ chapters together) when already connected, so already-downloaded chapters
-stay browsable/openable fully offline.
-
-Requires both source_path (the installed .aix's path, used for every
-content operation -- search/mangaUpdate/download) and source_key (the
-source's stable manifest ID, used for every downloads-index operation --
-see the downloads Go package doc for why those are kept separate). Callers
-that only have one of the two (e.g. librarybrowser.lua's bookmark entries,
-which store source_key and must re-resolve source_path via
-installedsources.lua's findByKey before opening this) must resolve the
-other first.
+Requires both source_path (for search/mangaUpdate/download) and source_key
+(for downloads-index ops) -- see the downloads Go package doc for why
+they're kept separate. Callers with only one (e.g. librarybrowser.lua's
+bookmarks, which store source_key) must resolve the other via
+installedsources.lua's findByKey first.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
@@ -102,18 +89,11 @@ function MangaBrowser:onLeftButtonTap()
     UIManager:show(dialog)
 end
 
--- downloadedPath returns the local CBZ path for chapter_key if it's
--- downloaded and the file still exists, or "" otherwise. Reads
--- self.downloaded_keys (an in-memory snapshot refreshed by reload() and
--- kept up to date locally after each download/removal here) rather than
--- querying the downloads index per chapter -- this is called once per row
--- while building the chapter list, and a manga can have dozens of
--- chapters, so a subprocess call per row is not an option. The lfs check
--- is a cheap local stat (no subprocess) so it's fine to do per row; a
--- stale entry (file deleted out from under us) is just treated as "not
--- downloaded" here rather than cleaned up, since that too would need a
--- subprocess call mid-render -- record() overwrites it on the next real
--- download regardless.
+-- downloadedPath returns the local CBZ path for chapter_key if downloaded
+-- and still present, else "". Reads self.downloaded_keys (an in-memory
+-- snapshot, not a per-row subprocess call -- a manga can have dozens of
+-- chapters) with a cheap local lfs stat; a stale entry is just treated as
+-- "not downloaded" rather than cleaned up here.
 function MangaBrowser:downloadedPath(chapter_key)
     local path = self.downloaded_keys[chapter_key]
     if not path or path == "" then
@@ -179,19 +159,13 @@ function MangaBrowser:reloadDownloadedKeys(all)
 end
 
 -- reload() always shows what's already downloaded first, straight from the
--- local downloads index -- no network involved -- so this manga's
--- downloaded chapters stay browsable/openable even fully offline. It then
--- opportunistically refreshes (fetching the real chapter list, titles, and
--- any chapters not yet downloaded) either from ChapterCache -- if
--- nextchapter.lua or a previous reload() already fetched this manga this
--- session, see chaptercache.lua -- or, on a cache miss, from the network,
--- but only if already connected; if not, it skips straight past that rather
--- than popping a "connect to network?" prompt, since the point is to let
--- already-downloaded content just work without a network fuss.
+-- local downloads index, so this manga stays browsable offline. It then
+-- opportunistically refreshes from ChapterCache or, on a miss, the network
+-- -- but only if already connected, skipping past otherwise rather than
+-- popping a "connect to network?" prompt.
 --
--- Every exit path ends with promptResume() (see below) so the "Resume
--- reading?" prompt appears once chapter data is actually ready, whether that
--- data came from the offline/local-only path or the online refresh.
+-- Every exit path ends with promptResume() so that prompt appears once
+-- chapter data is ready, whichever path supplied it.
 function MangaBrowser:reload()
     Trapper:wrap(function()
         local all = self:reloadDownloadedKeys()

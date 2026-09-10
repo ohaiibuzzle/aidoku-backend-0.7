@@ -65,18 +65,13 @@ func (t SettingType) byteValue() uint8 {
 // settings.json manifest + postcard-decoded dynamic get_settings). Only
 // fields relevant to Type are populated.
 //
-// NOTE on `Key`: Swift's hand-written Setting.encode(to:) encodes `key` via
-// the plain generic `container.encode(_:forKey:)` (not `encodeIfPresent`)
-// with a locally-nil'd `String?` when key.isEmpty. That bypasses this
-// codebase's manual tag+value Option encoding (which every *other* Option
-// field here goes through) and instead defers to Optional's own stdlib
-// Encodable conformance. We could not verify byte-for-byte from source
-// whether that path double-consumes a presence-check byte against this
-// hand-rolled byte-cursor decoder. Since an empty key and the "absent"
-// case are indistinguishable in every plausible reading (both reduce to a
-// single zero/empty-length marker), Key is treated as a plain required
-// postcard string, same as Title. Validate against a real compiled source
-// with a dynamic, keyed setting before shipping.
+// NOTE on `Key`: Swift's Setting.encode(to:) encodes `key` through
+// Optional's stdlib Encodable conformance rather than this codebase's usual
+// tag+value Option encoding, and we couldn't verify byte-for-byte whether
+// that double-consumes a presence marker against this decoder. Key is
+// treated as a plain required postcard string (empty and "absent" are
+// indistinguishable anyway) -- UNVERIFIED, validate against a real
+// compiled source with a dynamic, keyed setting before shipping.
 type Setting struct {
 	Key           string
 	Title         string

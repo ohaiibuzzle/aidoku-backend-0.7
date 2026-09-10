@@ -1,19 +1,13 @@
 --[[--
 Lets the user set search filter values for one source (sort/select/
-multi-select/check kinds only -- text/range/note filters are read-only shown
-as unsupported and skipped, since building a text-entry and a numeric-range
-widget for filter kinds real sources rarely use isn't worth the UI cost yet).
-Values are kept in self.values, keyed by filter ID, shaped exactly like the
-JSON aidoku-run's `search` command expects for its filters.json argument
-(see models.FilterValue's MarshalJSON in the parent Go repo) -- engine.lua's
-Engine:search builds that file from self.values.
+multi-select/check only -- text/range/note filters show as unsupported and
+are skipped). Values live in self.values, keyed by filter ID, shaped for
+aidoku-run's `search` filters.json argument -- engine.lua's Engine:search
+builds that file from self.values.
 
-CAUTION on "check" filters: Aidoku's check-filter value convention (does
-1/-1/0 mean include/exclude/unset, or something else?) could not be verified
-against a real compiled source with a check-kind filter in this session's
-testing (the two installed test sources -- WeebCentral, MangaDex -- don't
-expose one). This assumes the common 1 = include, -1 = exclude, absent =
-unset convention; verify against a real check filter before relying on it.
+CAUTION: the "check" filter value convention (1/-1/0 = include/exclude/
+unset) is UNVERIFIED against a real compiled source; verify before relying
+on it.
 ]]
 
 local Menu = require("ui/widget/menu")

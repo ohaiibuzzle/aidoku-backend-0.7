@@ -128,34 +128,21 @@ func (s *Source) downloadZipEntry(ctx context.Context, zipURL, filePath string, 
 	return nil, fmt.Errorf("source: entry %q not found in zip %s", filePath, zipURL)
 }
 
-// DownloadChapterCBZ downloads every page of chapter and writes them, in
-// order, to a CBZ archive at outputPath. If outputPath is "", a filename
-// is generated from the manga title and chapter number/title; otherwise
-// outputPath's base filename is still run through sanitizeFilename (its
-// directory component is left untouched), since manga/chapter titles often
-// end up baked into that filename by the caller and can contain characters
-// illegal on the target filesystem (e.g. FAT32/exFAT, common on e-readers).
+// DownloadChapterCBZ downloads every page of chapter, in order, to a CBZ at
+// outputPath (auto-generated from the manga/chapter title if ""). The base
+// filename is always run through sanitizeFilename, even when outputPath is
+// caller-supplied -- a manga/chapter title baked into that path can contain
+// characters illegal on e-reader filesystems like FAT32/exFAT.
 //
-// mangaDirName, if non-empty (and outputPath is non-empty), inserts a new,
-// sanitized directory named after it between outputPath's given directory
-// (treated as an already-safe, caller-owned root -- e.g. the downloads
-// directory -- and left untouched) and the chapter file, creating it if
-// needed. This travels as its own parameter rather than being folded into
-// outputPath by the caller because this function can't safely tell "a
-// title-derived path segment that needs sanitizing and owning" apart from
-// "a real, pre-existing directory the caller controls" by inspecting
-// outputPath alone -- see CLAUDE.md's "Filesystem-safe filenames" section
-// for why an unconditional, single point of sanitization matters here.
+// mangaDirName, if given, inserts a new sanitized directory by that name
+// between outputPath's (caller-owned, untouched) directory and the chapter
+// file, since this function can't otherwise tell a title-derived segment
+// needing sanitizing apart from a real caller-controlled directory.
 //
-// onProgress, if non-nil, is called after each page finishes downloading
-// (1-indexed current, plus total). Returns the path the archive was
-// written to.
-//
-// Pages are streamed straight to disk as they download rather than
-// buffered in memory for the whole chapter -- on a memory-constrained
-// device (e.g. Kindle), holding every page of a long, high-resolution
-// chapter in RAM at once can be enough to get the process OOM-killed
-// before a single byte reaches disk.
+// onProgress, if non-nil, is called after each page (1-indexed current,
+// total). Returns the path written to. Pages stream straight to disk rather
+// than buffering the whole chapter, to avoid OOM on memory-constrained
+// devices (e.g. Kindle).
 func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, chapter models.Chapter, outputPath, mangaDirName string, onProgress func(current, total int)) (string, error) {
 	pages, err := s.GetPageList(ctx, manga, chapter)
 	if err != nil {
