@@ -49,6 +49,22 @@ local LIBRARY_SCHEMA = [[
     );
 ]]
 
+-- pstep runs fn (a prepare/bind/step/close sequence) inside a pcall,
+-- returning fallback instead of raising if it fails -- e.g. the
+-- busy-timeout expiring while a concurrent aidoku-run write holds the
+-- file. Same reasoning as downloadsengine.lua's list(): every Store
+-- method below is called from all over the plugin (bookmark toggles,
+-- read-tracking on every chapter open, the Library list itself) with no
+-- expectation of a raised error, so an unguarded prepare/step would crash
+-- whichever screen happened to be the one racing a write.
+local function pstep(fallback, fn)
+    local ok, result = pcall(fn)
+    if not ok then
+        return fallback
+    end
+    return result
+end
+
 -- migrateLegacyData is a one-time move of library/last_read/read_chapters
 -- from the still-open LuaSettings instance into the SQLite tables above,
 -- guarded by the library_migrated_to_sqlite marker.
@@ -68,59 +84,76 @@ local function migrateLegacyData(settings, db)
     local last_read = settings:readSetting("last_read", {})
     local read_chapters = settings:readSetting("read_chapters", {})
 
-    db:exec("BEGIN")
+    -- The whole insert sequence runs inside one pcall -- see pstep's doc
+    -- comment above for why an unguarded prepare/step here could crash
+    -- plugin init on a transient failure (e.g. a busy-timeout). Unlike
+    -- pstep's other callers, a failure here also needs an explicit
+    -- ROLLBACK: "BEGIN" already ran, and leaving that transaction open
+    -- would make every subsequent db:exec on this connection fail (SQLite
+    -- doesn't allow a nested BEGIN). Leaving library_migrated_to_sqlite
+    -- unset on failure is what makes the retry-next-startup safety in this
+    -- function's own doc comment actually true even for this failure mode.
+    local ok = pcall(function()
+        db:exec("BEGIN")
 
-    local lib_stmt = db:prepare([[
-        INSERT OR IGNORE INTO library (source_key, manga_key, source_path, title, cover, added_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ]])
-    for _, entry in pairs(library) do
-        -- Legacy pre-source_key bookmarks exist on real installs (see
-        -- librarybrowser.lua's migrateLegacyBookmark) -- coerce a nil/absent
-        -- source_key to "", not NULL, so the composite primary key still
-        -- dedupes correctly (SQLite treats NULL as never-equal-to-itself
-        -- even in PK columns).
-        lib_stmt:bind(entry.source_key or "", entry.manga_key, entry.source_path or "",
-            entry.title, entry.cover, entry.added_at or 0)
-        lib_stmt:step()
-        lib_stmt:reset()
-    end
-    lib_stmt:close()
-
-    -- last_read/read_chapters' identity lives in the composite string key
-    -- ("source_key|manga_key[|chapter_key]"), so split on the first "|"
-    -- and let the final field absorb any further "|" verbatim. Inherits
-    -- the format's existing unescaped-separator ambiguity rather than
-    -- introducing it; no future write needs this splitting again.
-    local lr_stmt = db:prepare(
-        "INSERT OR IGNORE INTO last_read (source_key, manga_key, last_read_at) VALUES (?, ?, ?)")
-    for key, read_at in pairs(last_read) do
-        local source_key, manga_key = key:match("^(.-)|(.*)$")
-        if source_key and manga_key then
-            lr_stmt:bind(source_key, manga_key, read_at)
-            lr_stmt:step()
-            lr_stmt:reset()
+        local lib_stmt = db:prepare([[
+            INSERT OR IGNORE INTO library (source_key, manga_key, source_path, title, cover, added_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ]])
+        for _, entry in pairs(library) do
+            -- Legacy pre-source_key bookmarks exist on real installs (see
+            -- librarybrowser.lua's migrateLegacyBookmark) -- coerce a
+            -- nil/absent source_key to "", not NULL, so the composite
+            -- primary key still dedupes correctly (SQLite treats NULL as
+            -- never-equal-to-itself even in PK columns).
+            lib_stmt:bind(entry.source_key or "", entry.manga_key, entry.source_path or "",
+                entry.title, entry.cover, entry.added_at or 0)
+            lib_stmt:step()
+            lib_stmt:reset()
         end
-    end
-    lr_stmt:close()
+        lib_stmt:close()
 
-    local rc_stmt = db:prepare(
-        "INSERT OR IGNORE INTO read_chapters (source_key, manga_key, chapter_key) VALUES (?, ?, ?)")
-    for key in pairs(read_chapters) do
-        local source_key, rest = key:match("^(.-)|(.*)$")
-        local manga_key, chapter_key
-        if rest then
-            manga_key, chapter_key = rest:match("^(.-)|(.*)$")
+        -- last_read/read_chapters' identity lives in the composite string
+        -- key ("source_key|manga_key[|chapter_key]"), so split on the
+        -- first "|" and let the final field absorb any further "|"
+        -- verbatim. Inherits the format's existing unescaped-separator
+        -- ambiguity rather than introducing it; no future write needs this
+        -- splitting again.
+        local lr_stmt = db:prepare(
+            "INSERT OR IGNORE INTO last_read (source_key, manga_key, last_read_at) VALUES (?, ?, ?)")
+        for key, read_at in pairs(last_read) do
+            local source_key, manga_key = key:match("^(.-)|(.*)$")
+            if source_key and manga_key then
+                lr_stmt:bind(source_key, manga_key, read_at)
+                lr_stmt:step()
+                lr_stmt:reset()
+            end
         end
-        if source_key and manga_key and chapter_key then
-            rc_stmt:bind(source_key, manga_key, chapter_key)
-            rc_stmt:step()
-            rc_stmt:reset()
-        end
-    end
-    rc_stmt:close()
+        lr_stmt:close()
 
-    db:exec("COMMIT")
+        local rc_stmt = db:prepare(
+            "INSERT OR IGNORE INTO read_chapters (source_key, manga_key, chapter_key) VALUES (?, ?, ?)")
+        for key in pairs(read_chapters) do
+            local source_key, rest = key:match("^(.-)|(.*)$")
+            local manga_key, chapter_key
+            if rest then
+                manga_key, chapter_key = rest:match("^(.-)|(.*)$")
+            end
+            if source_key and manga_key and chapter_key then
+                rc_stmt:bind(source_key, manga_key, chapter_key)
+                rc_stmt:step()
+                rc_stmt:reset()
+            end
+        end
+        rc_stmt:close()
+
+        db:exec("COMMIT")
+    end)
+
+    if not ok then
+        pcall(function() db:exec("ROLLBACK") end)
+        return
+    end
 
     settings:delSetting("library")
     settings:delSetting("last_read")
@@ -177,53 +210,64 @@ end
 -- ===== Library (bookmarked manga) =====
 
 function Store:isBookmarked(source_key, manga_key)
-    local stmt = self.db:prepare("SELECT 1 FROM library WHERE source_key=? AND manga_key=? LIMIT 1")
-    stmt:bind(source_key, manga_key)
-    local row = stmt:step()
-    stmt:close()
-    return row ~= nil
+    return pstep(false, function()
+        local stmt = self.db:prepare("SELECT 1 FROM library WHERE source_key=? AND manga_key=? LIMIT 1")
+        stmt:bind(source_key, manga_key)
+        local row = stmt:step()
+        stmt:close()
+        return row ~= nil
+    end)
 end
 
 function Store:addBookmark(source_key, source_path, manga_key, title, cover)
-    local stmt = self.db:prepare([[
-        INSERT INTO library (source_key, manga_key, source_path, title, cover, added_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT (source_key, manga_key) DO UPDATE SET
-            source_path=excluded.source_path, title=excluded.title,
-            cover=excluded.cover, added_at=excluded.added_at
-    ]])
-    stmt:bind(source_key, manga_key, source_path, title, cover, os.time())
-    stmt:step()
-    stmt:close()
+    pstep(nil, function()
+        local stmt = self.db:prepare([[
+            INSERT INTO library (source_key, manga_key, source_path, title, cover, added_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (source_key, manga_key) DO UPDATE SET
+                source_path=excluded.source_path, title=excluded.title,
+                cover=excluded.cover, added_at=excluded.added_at
+        ]])
+        stmt:bind(source_key, manga_key, source_path, title, cover, os.time())
+        stmt:step()
+        stmt:close()
+    end)
 end
 
 function Store:removeBookmark(source_key, manga_key)
-    local stmt = self.db:prepare("DELETE FROM library WHERE source_key=? AND manga_key=?")
-    stmt:bind(source_key, manga_key)
-    stmt:step()
-    stmt:close()
+    pstep(nil, function()
+        local stmt = self.db:prepare("DELETE FROM library WHERE source_key=? AND manga_key=?")
+        stmt:bind(source_key, manga_key)
+        stmt:step()
+        stmt:close()
+    end)
 end
 
 -- libraryEntries returns bookmarked manga as an array, oldest-added first,
 -- with the same snake_case field names (entry.source_key, entry.title, ...)
--- librarybrowser.lua already reads directly.
+-- librarybrowser.lua already reads directly. Falls back to {} on failure,
+-- matching every other "no data" case here -- librarybrowser.lua has no
+-- error-display path for this, same as downloadsengine.lua's other list-
+-- shaped methods besides list() itself.
 function Store:libraryEntries()
-    local stmt = self.db:prepare(
-        "SELECT source_key, manga_key, source_path, title, cover, added_at FROM library ORDER BY added_at ASC")
-    local entries = {}
-    local row = {}
-    while stmt:step(row) do
-        table.insert(entries, {
-            source_key = row[1],
-            manga_key = row[2],
-            source_path = row[3],
-            title = row[4],
-            cover = row[5],
-            added_at = tonumber(row[6]) or 0,
-        })
-    end
-    stmt:close()
-    return entries
+    return pstep({}, function()
+        local stmt = self.db:prepare(
+            "SELECT source_key, manga_key, source_path, title, cover, added_at FROM library ORDER BY added_at ASC")
+        local entries = {}
+        local row = {}
+        while stmt:step(row) do
+            table.insert(entries, {
+                source_key = row[1],
+                manga_key = row[2],
+                source_path = row[3],
+                title = row[4],
+                cover = row[5],
+                added_at = tonumber(row[6]) or 0,
+            })
+        end
+        stmt:close()
+        return entries
+    end)
 end
 
 -- librarySortOrder is "name" (alphabetical, the default) or "last_read"
@@ -245,21 +289,25 @@ end
 -- the manga is bookmarked -- entries for manga never added to the library
 -- are simply never looked up.
 function Store:lastReadAt(source_key, manga_key)
-    local stmt = self.db:prepare("SELECT last_read_at FROM last_read WHERE source_key=? AND manga_key=?")
-    stmt:bind(source_key, manga_key)
-    local row = stmt:step()
-    stmt:close()
-    return (row and tonumber(row[1])) or 0
+    return pstep(0, function()
+        local stmt = self.db:prepare("SELECT last_read_at FROM last_read WHERE source_key=? AND manga_key=?")
+        stmt:bind(source_key, manga_key)
+        local row = stmt:step()
+        stmt:close()
+        return (row and tonumber(row[1])) or 0
+    end)
 end
 
 function Store:markLastRead(source_key, manga_key)
-    local stmt = self.db:prepare([[
-        INSERT INTO last_read (source_key, manga_key, last_read_at) VALUES (?, ?, ?)
-        ON CONFLICT (source_key, manga_key) DO UPDATE SET last_read_at=excluded.last_read_at
-    ]])
-    stmt:bind(source_key, manga_key, os.time())
-    stmt:step()
-    stmt:close()
+    pstep(nil, function()
+        local stmt = self.db:prepare([[
+            INSERT INTO last_read (source_key, manga_key, last_read_at) VALUES (?, ?, ?)
+            ON CONFLICT (source_key, manga_key) DO UPDATE SET last_read_at=excluded.last_read_at
+        ]])
+        stmt:bind(source_key, manga_key, os.time())
+        stmt:step()
+        stmt:close()
+    end)
 end
 
 -- ===== Read chapters =====
@@ -268,20 +316,24 @@ end
 -- event (see main.lua's hookEndOfBook) -- there's no manual toggle, so row
 -- presence alone means "read"; there's no boolean column to check.
 function Store:isChapterRead(source_key, manga_key, chapter_key)
-    local stmt = self.db:prepare(
-        "SELECT 1 FROM read_chapters WHERE source_key=? AND manga_key=? AND chapter_key=? LIMIT 1")
-    stmt:bind(source_key, manga_key, chapter_key)
-    local row = stmt:step()
-    stmt:close()
-    return row ~= nil
+    return pstep(false, function()
+        local stmt = self.db:prepare(
+            "SELECT 1 FROM read_chapters WHERE source_key=? AND manga_key=? AND chapter_key=? LIMIT 1")
+        stmt:bind(source_key, manga_key, chapter_key)
+        local row = stmt:step()
+        stmt:close()
+        return row ~= nil
+    end)
 end
 
 function Store:markChapterRead(source_key, manga_key, chapter_key)
-    local stmt = self.db:prepare(
-        "INSERT OR IGNORE INTO read_chapters (source_key, manga_key, chapter_key) VALUES (?, ?, ?)")
-    stmt:bind(source_key, manga_key, chapter_key)
-    stmt:step()
-    stmt:close()
+    pstep(nil, function()
+        local stmt = self.db:prepare(
+            "INSERT OR IGNORE INTO read_chapters (source_key, manga_key, chapter_key) VALUES (?, ?, ?)")
+        stmt:bind(source_key, manga_key, chapter_key)
+        stmt:step()
+        stmt:close()
+    end)
 end
 
 -- ===== Preferences =====
@@ -314,8 +366,7 @@ end
 -- seamless (the next chapter is always ready) without defeating the point of
 -- Ephemeral Mode by buffering a whole stack of chapters. If the user had
 -- prefetch off (0) to begin with, it stays off -- this only ever caps down,
--- never re-enables a disabled setting. See CLAUDE.md's Ephemeral Mode
--- section.
+-- never re-enables a disabled setting.
 function Store:effectiveBufferChapters()
     local n = self:bufferChapters()
     if self:isEphemeralMode() and n > 1 then

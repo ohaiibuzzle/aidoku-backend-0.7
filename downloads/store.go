@@ -60,8 +60,7 @@ func Open(dir string) (*Store, error) {
 	// for a write -- without a busy timeout a concurrent writer/reader would
 	// get SQLITE_BUSY immediately instead of retrying. No _journal_mode=WAL
 	// here: some real target hardware (older Kindle kernels) can't safely
-	// mmap for WAL, and this package has no way to detect that -- see
-	// CLAUDE.md.
+	// mmap for WAL, and this package has no way to detect that.
 	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("downloads: opening %s: %w", dbPath, err)
@@ -263,27 +262,14 @@ func (s *Store) Record(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaT
 
 // disambiguatePath renames the just-downloaded file at path if some other
 // (manga_key, chapter_key) under sourceKey already has an index row
-// pointing at that exact path, and returns the (possibly new) path to
-// record. Two different chapters whose titles happen to sanitize to the
-// same filename (source.sanitizeFilename has no way to know about the
-// other one -- it has no access to this index, by design, see
-// source/download.go) would otherwise both end up recorded against one
-// path.
-//
-// This can't recover the *first* chapter's bytes -- the second download
-// already overwrote them on disk before Record was ever called, so by the
-// time this runs there's only one real file left to rename. What it does
-// prevent is the index staying wrong afterward: without this, both rows
-// would permanently point at the one surviving file (deleting "chapter 1"
-// would delete chapter 2's download too, and opening chapter 1 would
-// silently show chapter 2's pages). With it, the second chapter gets its
-// own distinct file and the first's row is left pointing at a path with
-// nothing there anymore -- which existingDownload/Path already treat the
-// same as "not downloaded yet" (see its own doc comment), so it just needs
-// re-downloading rather than silently showing the wrong content. Caught
-// here, the single place every download gets recorded (see CLAUDE.md's
-// "Recording stays inside the writer"), rather than left to the source
-// package or every caller of it to somehow avoid on their own.
+// pointing at that exact path -- two chapters whose titles sanitize to the
+// same filename would otherwise both end up recorded against one path.
+// It can't recover the first chapter's bytes (the second download already
+// overwrote them on disk before Record was called), but it stops the
+// index staying wrong afterward: the second chapter gets its own file, and
+// the first's row is left pointing at nothing, which existingDownload/Path
+// already treat as "not downloaded yet" rather than silently resolving to
+// the wrong content.
 func (s *Store) disambiguatePath(sourceKey, mangaKey, chapterKey, path string) (string, error) {
 	var ownerManga, ownerChapter string
 	err := s.db.QueryRow(`SELECT manga_key, chapter_key FROM downloads WHERE source_key = ? AND path = ?`, sourceKey, path).Scan(&ownerManga, &ownerChapter)

@@ -10,6 +10,7 @@ local Menu = require("ui/widget/menu")
 local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
+local lfs = require("libs/libkoreader-lfs")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
@@ -65,15 +66,30 @@ function DownloadsBrowser:reload()
     Trapper:wrap(function() self:loadAndRefresh() end)
 end
 
+-- See mangabrowser.lua's downloadedPath()/onMenuSelect() for the same
+-- pattern -- this list is built from a list() snapshot that can go stale
+-- (a row whose file was since deleted, e.g. by prune() or Ephemeral Mode's
+-- residency bound), so re-check existence rather than trusting it blindly,
+-- and apply the same markLastRead/removeAllExcept bookkeeping every other
+-- "open a downloaded chapter" path already does.
 function DownloadsBrowser:onMenuSelect(item)
     if item.is_placeholder then
         return true
     end
     local entry = item.download_entry
+    if lfs.attributes(entry.path, "mode") ~= "file" then
+        UIManager:show(InfoMessage:new{ text = _("That download is no longer available."), timeout = 2 })
+        self:reload()
+        return true
+    end
+    self.store:markLastRead(entry.sourceKey, entry.mangaKey)
     if self.ui.document then
         self.ui:switchDocument(entry.path)
     else
         self.ui:openFile(entry.path)
+    end
+    if self.store:isEphemeralMode() then
+        self.downloads_engine:removeAllExcept(entry.path)
     end
     return true
 end

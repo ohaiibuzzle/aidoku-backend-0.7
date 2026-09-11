@@ -289,16 +289,16 @@ var filenameSanitizer = strings.NewReplacer(
 	"|", "-",
 )
 
-// sanitizeFilename is the single authoritative point (see CLAUDE.md's
-// "Filesystem-safe filenames") that turns a manga/chapter title into a safe
-// path component. filenameSanitizer only strips characters illegal on
-// FAT32/exFAT -- "." and ".." contain none of those, so they'd otherwise
-// pass through untouched. resolveOutputPath's mangaDirName is used as a
-// bare path component with nothing appended to neutralize that (unlike the
-// chapter filename, which always gets a ".cbz" suffix), so a manga title
-// of exactly ".." there would resolve outside the downloads directory
-// entirely via filepath.Join. Reject both here so every caller is safe,
-// not just the ones that happen to append a fixed suffix.
+// sanitizeFilename is the single authoritative point that turns a
+// manga/chapter title into a safe path component. filenameSanitizer only
+// strips characters illegal on FAT32/exFAT -- "." and ".." contain none of
+// those, so they'd otherwise pass through untouched. resolveOutputPath's
+// mangaDirName is used as a bare path component with nothing appended to
+// neutralize that (unlike the chapter filename, which always gets a
+// ".cbz" suffix), so a manga title of exactly ".." there would resolve
+// outside the downloads directory via filepath.Join. Reject both here so
+// every caller is safe, not just the ones that happen to append a fixed
+// suffix.
 func sanitizeFilename(s string) string {
 	s = strings.TrimSpace(filenameSanitizer.Replace(s))
 	if s == "." || s == ".." {

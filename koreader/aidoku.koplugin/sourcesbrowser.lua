@@ -89,6 +89,7 @@ function SourcesBrowser:onMenuSelect(item)
         local DownloadsBrowser = require("downloadsbrowser")
         UIManager:show(DownloadsBrowser:new{
             downloads_engine = self.downloads_engine,
+            store = self.store,
             ui = self.ui,
             is_popout = false,
             is_borderless = true,

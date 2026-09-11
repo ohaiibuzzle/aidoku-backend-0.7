@@ -479,8 +479,8 @@ function MangaBrowser:onMenuSelect(item)
     if existing ~= "" then
         self:openLocal(existing)
         -- Under Ephemeral Mode this chapter is commonly one Prefetch already
-        -- fetched ahead of time (see CLAUDE.md), so it's opened from here,
-        -- not downloadAndOpen() -- needs the same cleanup call, or a
+        -- fetched ahead of time, so it's opened from here, not
+        -- downloadAndOpen() -- needs the same cleanup call, or a
         -- prefetched-then-opened chapter would never get its predecessor
         -- cleaned up at all.
         if self.store:isEphemeralMode() then

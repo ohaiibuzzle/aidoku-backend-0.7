@@ -172,10 +172,9 @@ type Net struct {
 }
 
 // defaultSendAllMaxConcurrency is used when Net.MaxConcurrency is unset.
-// Each goroutine's underlying HTTP round trip can pin an OS thread, and this
-// project targets devices with as little as 256MB RAM (see CLAUDE.md) — an
-// unbounded fan-out over a large descriptor batch would spin up one thread
-// per descriptor with no cap.
+// Each goroutine's underlying HTTP round trip can pin an OS thread on a
+// device with as little as 256MB RAM -- an unbounded fan-out over a large
+// descriptor batch would spin up one thread per descriptor with no cap.
 const defaultSendAllMaxConcurrency = 8
 
 func (n *Net) maxConcurrency() int {
@@ -501,8 +500,7 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 // get ReadLen's bound -- without this check a guest could pass e.g.
 // length = 2^31-1 and sendAll's make([]int32, length) would try to
 // allocate ~8GB before the memory-bounds check on the first ReadUint32Le
-// ever runs, OOMing the process on a memory-constrained device (see
-// CLAUDE.md). The descriptor array is read from guest memory at 4
+// ever runs. The descriptor array is read from guest memory at 4
 // bytes/entry, so it can never legitimately need more entries than fit in
 // the guest's own linear memory. Widened to uint64 so the multiply itself
 // can't overflow back into range for a huge length.

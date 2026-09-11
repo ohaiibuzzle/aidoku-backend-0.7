@@ -373,23 +373,21 @@ const domPrelude = `
 })();
 `
 
-// registerDOM installs domPrelude and every host dispatcher it calls into
-// vm. Called once per VM (see ensureGlobals's globalsReady guard) — the
 // promiseCapabilityFailed logs (rather than panicking on) a
-// NewPromiseCapability failure. This runs inside a guest-dispatched
-// closure (fetch()/XMLHttpRequest.send()/Image.src=), so a panic here
-// isn't recoverable by the guest -- it crashes the whole aidoku-run
-// process instead, and it's exactly the kind of allocation more likely to
-// fail under the memory pressure this project targets (see CLAUDE.md).
-// Callers fall back to returning quickjs.UndefinedValue; the guest's own
-// script then throws an ordinary JS TypeError calling .then() on it -- a
-// guest-recoverable failure instead of a host crash.
+// NewPromiseCapability failure inside a guest-dispatched closure
+// (fetch()/XMLHttpRequest.send()/Image.src=) -- a panic there isn't
+// guest-recoverable, it crashes the whole process, right when memory
+// pressure made the allocation more likely to fail in the first place.
+// Callers fall back to quickjs.UndefinedValue; the guest's own script then
+// throws an ordinary JS TypeError calling .then() on it instead.
 func (d *domBinder) promiseCapabilityFailed(where string, err error) {
 	if d.print != nil {
 		d.print(fmt.Sprintf("webview: %s: creating promise capability: %v", where, err))
 	}
 }
 
+// registerDOM installs domPrelude and every host dispatcher it calls into
+// vm. Called once per VM (see ensureGlobals's globalsReady guard) --
 // dispatchers themselves read d's live getters on every call, so they stay
 // correct across multiple loadHTML calls on the same VM.
 func (d *domBinder) registerDOM(vm *quickjs.VM) error {

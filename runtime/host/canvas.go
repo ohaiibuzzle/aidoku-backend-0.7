@@ -87,11 +87,10 @@ func (c *Canvas) fetchImage(descriptor int32) image.Image {
 	}
 }
 
-// maxCanvasDimension caps a single new_context axis. A source descrambling
+// maxCanvasDimension caps a single new_context axis against a guest
+// passing a deliberately huge or garbage dimension. A source descrambling
 // a scanned page never needs anywhere near this; the cap exists to bound
-// gg.NewContext's image.NewRGBA allocation (4 bytes/pixel) on a
-// memory-constrained device (see CLAUDE.md) against a guest passing a
-// deliberately huge or garbage dimension.
+// gg.NewContext's image.NewRGBA allocation (4 bytes/pixel).
 const maxCanvasDimension = 8192
 
 // validCanvasDimension rejects non-finite and out-of-range new_context

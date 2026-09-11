@@ -136,13 +136,9 @@ function DownloadsEngine:remove(source_key, manga_key, chapter_key)
 end
 
 -- list returns every downloaded chapter, most recently downloaded first.
--- list's caller (downloadsbrowser.lua) already checks for a (nil, err)
--- return -- but prepare()/step() raise a Lua error on failure (e.g. the
--- busy-timeout expiring while a concurrent aidoku-run write holds the
--- file, mid-Trapper:wrap) rather than returning one, so that error
--- handling used to be unreachable dead code and a busy-timeout expiry
--- here crashed instead. pcall makes the actual failure mode match what
--- the caller already expects.
+-- pcall-wrapped so a busy-timeout expiry (a concurrent aidoku-run write
+-- holding the file) returns (nil, err) instead of raising -- matching
+-- what downloadsbrowser.lua's caller already checks for.
 function DownloadsEngine:list()
     if not self:tableExists() then
         return {}
@@ -176,13 +172,11 @@ end
 -- limit_bytes, returning what was removed. limit_bytes <= 0 means "no
 -- limit" (store.lua's zero-value default for an unset preference).
 --
--- keep_path, if given, is never deleted even if it's needed to get under
--- limit_bytes. Every real caller of this calls it on the chapter it's
--- about to open (mangabrowser.lua's downloadAndOpen, nextchapter.lua's
--- fetchAndOpen) *before* actually opening it -- without keep_path, a
--- storage limit smaller than that one chapter's own size would walk right
--- past every older chapter and delete the one about to be opened too,
--- since nothing here knew to protect it.
+-- keep_path, if given, is never deleted -- callers pass the chapter
+-- they're about to open, so a limit smaller than that chapter's own size
+-- can't delete it out from under them (confirmed on-device: prefetch.lua
+-- once called this with no keep_path at all and deleted the chapter the
+-- user was actively reading).
 function DownloadsEngine:prune(limit_bytes, keep_path)
     if not limit_bytes or limit_bytes <= 0 then
         return {}
