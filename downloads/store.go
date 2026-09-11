@@ -209,13 +209,23 @@ func (s *Store) migrateAddChapterOrdering() error {
 		return nil
 	}
 
-	if _, err := s.db.Exec(`ALTER TABLE downloads ADD COLUMN chapter_number REAL`); err != nil {
+	// Both ALTER TABLEs run in one transaction -- SQLite DDL is
+	// transactional, so a kill between them can't leave chapter_number
+	// added but volume_number missing (which the guard above, checking only
+	// chapter_number, would then treat as "already migrated" forever).
+	tx, err := s.db.Begin()
+	if err != nil {
 		return err
 	}
-	if _, err := s.db.Exec(`ALTER TABLE downloads ADD COLUMN volume_number REAL`); err != nil {
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`ALTER TABLE downloads ADD COLUMN chapter_number REAL`); err != nil {
 		return err
 	}
-	return nil
+	if _, err := tx.Exec(`ALTER TABLE downloads ADD COLUMN volume_number REAL`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) Close() error { return s.db.Close() }

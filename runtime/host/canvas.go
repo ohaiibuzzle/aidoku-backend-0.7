@@ -20,6 +20,7 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
+	_ "golang.org/x/image/webp" // register WebP decoder
 
 	_ "image/jpeg" // register JPEG decoder
 )

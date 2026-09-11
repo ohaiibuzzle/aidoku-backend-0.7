@@ -31,7 +31,16 @@ func ParseNetscapeCookies(data []byte) ([]*http.Cookie, error) {
 	var out []*http.Cookie
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		if line == "" {
+			continue
+		}
+		// A standard Netscape cookie export marks an HttpOnly cookie (e.g.
+		// cf_clearance) with a literal "#HttpOnly_" prefix before the real
+		// tab-separated fields, not a real comment -- curl special-cases it
+		// the same way. Any other "#"-prefixed line is a genuine comment.
+		if rest, ok := strings.CutPrefix(line, "#HttpOnly_"); ok {
+			line = rest
+		} else if strings.HasPrefix(line, "#") {
 			continue
 		}
 		fields := strings.Split(line, "\t")

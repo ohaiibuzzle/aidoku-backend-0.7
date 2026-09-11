@@ -375,7 +375,7 @@ function Store:effectiveBufferChapters()
     return n
 end
 
--- nextChapterMode is "off", "ask", or "auto" (the default), governing
+-- nextChapterMode is "off", "ask" (the default), or "auto", governing
 -- whether reaching the end of a chapter offers/auto-advances to the next.
 function Store:nextChapterMode()
     return self.settings:readSetting("next_chapter_mode", "ask")

@@ -689,6 +689,9 @@ func newEventLoop() (*eventLoop, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := vm.SetEvalTimeout(scriptEvalTimeout); err != nil {
+		return nil, err
+	}
 	return &eventLoop{vm: vm}, nil
 }
 
@@ -746,11 +749,26 @@ func (l *eventLoop) Run(fn func(*quickjs.VM)) {
 	l.drainNow()
 }
 
-// drainNow processes pending jobs and zero-delay continuations until quiet.
+// drainNow processes pending jobs and zero-delay continuations until quiet,
+// bounded by scriptEvalTimeout. drainUntil's own deadline check is the guard
+// here: a page script that keeps rechaining continuations (e.g.
+// fetch().then(f) where f always schedules another fetch().then(f)) never
+// empties l.pending, and each individual continuation runs too fast for
+// QuickJS's own SetEvalTimeout (set in newEventLoop) to ever trip -- so
+// without this bound the Go-level loop itself spins forever.
 func (l *eventLoop) drainNow() {
+	l.drainUntil(time.Now().Add(scriptEvalTimeout))
+}
+
+// drainUntil processes pending jobs and zero-delay continuations until
+// quiet or deadline passes.
+func (l *eventLoop) drainUntil(deadline time.Time) {
 	for {
 		_, _ = l.vm.ExecutePendingJobs()
 		if len(l.pending) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
 			return
 		}
 		next := l.pending[0]
@@ -765,7 +783,7 @@ func (l *eventLoop) drainNow() {
 func (l *eventLoop) RunUntilQuiescent(maxWait time.Duration) {
 	deadline := time.Now().Add(maxWait)
 	for {
-		l.drainNow()
+		l.drainUntil(deadline)
 		if len(l.timers) == 0 || time.Now().After(deadline) {
 			return
 		}

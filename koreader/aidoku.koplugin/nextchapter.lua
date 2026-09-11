@@ -171,42 +171,57 @@ function NextChapter.handle(ctx, file_path)
         end
         prefetch_ctx.manga = updated
 
+        -- Self-wraps in its own Trapper:wrap: "auto" mode calls this
+        -- synchronously from inside the outer Trapper:wrap above (a nested
+        -- wrap -- already an accepted pattern, see mangabrowser.lua's
+        -- onMenuHold Re-download callback calling downloadAndOpen, which
+        -- wraps again), but "ask" mode's ConfirmBox invokes this later, from
+        -- ok_callback, as a plain UI tap handler with no Trapper context of
+        -- its own by then (the outer wrap already returned once its first
+        -- subprocess call yielded). Without its own wrap here,
+        -- ctx.engine:download's Trapper:dismissablePopen call silently falls
+        -- back to a blocking io.popen with no progress UI, freezing the
+        -- whole UI for the download's duration -- same as
+        -- mangabrowser.lua's downloadAndOpen, which self-wraps for the same
+        -- reason.
         local function fetchAndOpen()
-            local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
-            if existing ~= "" then
-                ctx.open_callback(existing)
+            Trapper:wrap(function()
+                local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
+                if existing ~= "" then
+                    ctx.open_callback(existing)
+                    if ctx.store:isEphemeralMode() then
+                        ctx.downloads_engine:removeAllExcept(existing)
+                    end
+                    -- See the deferral note on openLocalNext() above.
+                    UIManager:nextTick(function()
+                        Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
+                    end)
+                    return
+                end
+                local chapter_filename = util.getSafeFilename(
+                    chapterLabel(next_chapter) .. ".cbz", ctx.downloads_dir)
+                local out_path = ctx.downloads_dir .. "/" .. chapter_filename
+                local manga_dir_name = mangaLabel(updated) .. " [" .. entry.sourceKey .. "]"
+                local path, dl_err = ctx.engine:download(
+                    source_path, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir, nil, nil, manga_dir_name)
+                if not path then
+                    UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
+                    return
+                end
+                -- See the same note on skipping prune() under Ephemeral Mode
+                -- (and passing path as keep_path even when it isn't) in
+                -- mangabrowser.lua's downloadAndOpen.
+                if not ctx.store:isEphemeralMode() then
+                    ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), path)
+                end
+                ctx.open_callback(path)
                 if ctx.store:isEphemeralMode() then
-                    ctx.downloads_engine:removeAllExcept(existing)
+                    ctx.downloads_engine:removeAllExcept(path)
                 end
                 -- See the deferral note on openLocalNext() above.
                 UIManager:nextTick(function()
                     Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
                 end)
-                return
-            end
-            local chapter_filename = util.getSafeFilename(
-                chapterLabel(next_chapter) .. ".cbz", ctx.downloads_dir)
-            local out_path = ctx.downloads_dir .. "/" .. chapter_filename
-            local manga_dir_name = mangaLabel(updated) .. " [" .. entry.sourceKey .. "]"
-            local path, dl_err = ctx.engine:download(
-                source_path, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir, nil, nil, manga_dir_name)
-            if not path then
-                UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
-                return
-            end
-            -- See the same note on skipping prune() under Ephemeral Mode
-            -- (and passing path as keep_path even when it isn't) in
-            -- mangabrowser.lua's downloadAndOpen.
-            if not ctx.store:isEphemeralMode() then
-                ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), path)
-            end
-            ctx.open_callback(path)
-            if ctx.store:isEphemeralMode() then
-                ctx.downloads_engine:removeAllExcept(path)
-            end
-            -- See the deferral note on openLocalNext() above.
-            UIManager:nextTick(function()
-                Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
             end)
         end
 

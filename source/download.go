@@ -301,6 +301,18 @@ var filenameSanitizer = strings.NewReplacer(
 // suffix.
 func sanitizeFilename(s string) string {
 	s = strings.TrimSpace(filenameSanitizer.Replace(s))
+	// ASCII control characters (0x00-0x1F, 0x7F) are illegal on the same
+	// FAT32/exFAT filesystems filenameSanitizer targets, but contain none of
+	// the punctuation it replaces, so they'd otherwise pass through
+	// untouched and can still fail cbz.Writer.Close()'s os.Rename. Dropped
+	// rather than replaced with a placeholder -- a run of them shouldn't
+	// inflate the filename with dashes.
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7F {
+			return -1
+		}
+		return r
+	}, s)
 	if s == "." || s == ".." {
 		return "-"
 	}

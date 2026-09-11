@@ -90,6 +90,16 @@ func TestSanitizeFilenameRejectsDotAndDotDot(t *testing.T) {
 	}
 }
 
+func TestSanitizeFilenameStripsControlChars(t *testing.T) {
+	got := sanitizeFilename("Chapter\x001\x1f\x7f Title")
+	if strings.ContainsAny(got, "\x00\x1f\x7f") {
+		t.Fatalf("sanitizeFilename left a control character in %q", got)
+	}
+	if got != "Chapter1 Title" {
+		t.Fatalf("sanitizeFilename(...) = %q, want %q", got, "Chapter1 Title")
+	}
+}
+
 func TestResolveOutputPath_Empty(t *testing.T) {
 	manga := models.Manga{Title: "Test Manga"}
 	title := "Chapter 1"

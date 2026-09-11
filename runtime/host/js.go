@@ -3,11 +3,21 @@ package host
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"modernc.org/quickjs"
 )
+
+// scriptEvalTimeout bounds how long a single guest script (context_eval, or
+// a webview eventLoop drain -- see webview.go) is allowed to run before
+// QuickJS interrupts it. Without this, a script with a real infinite loop
+// (reachable from third-party wasm via context_eval, or from fetched page
+// HTML via the webview) never returns and hangs the process -- the same
+// failure class env.sleep and SharedHTTPClient are already capped against
+// elsewhere in this package.
+const scriptEvalTimeout = 30 * time.Second
 
 type jsResult int32
 
@@ -37,6 +47,9 @@ func LinkJS(builder wazero.HostModuleBuilder, j *JS) wazero.HostModuleBuilder {
 		WithFunc(func(ctx context.Context) int32 {
 			vm, err := quickjs.NewVM()
 			if err != nil {
+				return int32(jsInvalidContext)
+			}
+			if err := vm.SetEvalTimeout(scriptEvalTimeout); err != nil {
 				return int32(jsInvalidContext)
 			}
 			return j.Store.Store(vm)
