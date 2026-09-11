@@ -80,6 +80,40 @@ func TestFixtureGetSearchMangaList(t *testing.T) {
 	}
 }
 
+// TestRestart doesn't have a fixture export that actually traps the guest
+// (see loadFixture's doc comment on what main.wasm exports), so this only
+// exercises the re-instantiation path itself: that Restart() tears down and
+// recreates the module against the same wasm bytes, re-probes features, and
+// leaves the interpreter able to serve calls again afterward — mirroring
+// AidokuRunnerTests.swift's testSourcePanic minus the actual panic trigger.
+func TestRestart(t *testing.T) {
+	ctx := context.Background()
+	wasmBytes, info := loadFixture(t)
+
+	interp, err := New(ctx, info.Info.ID, wasmBytes, Config{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer interp.Close(ctx)
+
+	if err := interp.Restart(ctx); err != nil {
+		t.Fatalf("Restart: %v", err)
+	}
+
+	if interp.Features.ProvidesListings || interp.Features.ProvidesHome || interp.Features.DynamicFilters {
+		t.Fatalf("unexpected features after restart: %+v", interp.Features)
+	}
+
+	query := "hello"
+	result, err := interp.GetSearchMangaList(ctx, &query, 1, nil)
+	if err != nil {
+		t.Fatalf("GetSearchMangaList after restart: %v", err)
+	}
+	if result == nil {
+		t.Fatalf("expected non-nil result after restart")
+	}
+}
+
 // Cookie injection lets a host app paste browser cookies (e.g. a CF
 // cf_clearance) into the jar that backs the source's net.* requests. Verifies
 // the Interpreter.SetCookieHeader/SetCookie/Cookies wiring against the shared

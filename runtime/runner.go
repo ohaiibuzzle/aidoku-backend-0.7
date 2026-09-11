@@ -251,6 +251,30 @@ func (i *Interpreter) ProcessPageImage(ctx context.Context, response models.Resp
 	return imageRef, nil
 }
 
+// ProcessCoverImage mirrors Source.swift's processCoverImage(response:),
+// which calls the guest's process_cover_image export the same way
+// ProcessPageImage calls process_page_image, but without a PageContext
+// argument (a cover has no page/reader context to descramble against).
+func (i *Interpreter) ProcessCoverImage(ctx context.Context, response models.Response) (int32, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	rw := postcard.NewWriter()
+	response.EncodePostcard(rw)
+	responsePtr := i.storeBytes(rw.Bytes())
+	defer i.RemoveValue(responsePtr)
+
+	data, err := i.call(ctx, "process_cover_image", api.EncodeI32(responsePtr))
+	if err != nil {
+		return 0, err
+	}
+	imageRef, err := postcard.NewReader(data).ReadI32()
+	if err != nil {
+		return 0, err
+	}
+	return imageRef, nil
+}
+
 func (i *Interpreter) GetSearchFilters(ctx context.Context) ([]models.Filter, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()

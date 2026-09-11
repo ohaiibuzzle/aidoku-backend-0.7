@@ -64,6 +64,7 @@ type Interpreter struct {
 	sourceKey string
 	rt        wazero.Runtime
 	module    api.Module
+	wasmBytes []byte
 	store     *host.Store
 	env       *host.Env
 	net       *host.Net
@@ -99,6 +100,7 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 	i := &Interpreter{
 		sourceKey: sourceKey,
 		rt:        rt,
+		wasmBytes: wasmBytes,
 		store:     host.NewStore(),
 	}
 
@@ -195,24 +197,7 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 		return nil, fmt.Errorf("runtime: instantiating guest module: %w", err)
 	}
 	i.module = module
-
-	i.Features = models.SourceFeatures{
-		ProvidesListings:         i.hasExport("get_manga_list"),
-		ProvidesHome:             i.hasExport("get_home"),
-		DynamicFilters:           i.hasExport("get_filters"),
-		DynamicSettings:          i.hasExport("get_settings"),
-		DynamicListings:          i.hasExport("get_listings"),
-		ProcessesPages:           i.hasExport("process_page_image"),
-		ProvidesImageRequests:    i.hasExport("get_image_request"),
-		ProvidesPageDescriptions: i.hasExport("get_page_description"),
-		ProvidesAlternateCovers:  i.hasExport("get_alternate_covers"),
-		ProvidesBaseURL:          i.hasExport("get_base_url"),
-		HandlesNotifications:     i.hasExport("handle_notification"),
-		HandlesDeepLinks:         i.hasExport("handle_deep_link"),
-		HandlesBasicLogin:        i.hasExport("handle_basic_login"),
-		HandlesWebLogin:          i.hasExport("handle_web_login"),
-		HandlesMigration:         i.hasExport("handle_key_migration"),
-	}
+	i.Features = i.detectFeatures()
 
 	if fn := module.ExportedFunction("start"); fn != nil {
 		if _, err := fn.Call(ctx); err != nil {
@@ -226,6 +211,59 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 
 func (i *Interpreter) hasExport(name string) bool {
 	return i.module.ExportedFunction(name) != nil
+}
+
+func (i *Interpreter) detectFeatures() models.SourceFeatures {
+	return models.SourceFeatures{
+		ProvidesListings:         i.hasExport("get_manga_list"),
+		ProvidesHome:             i.hasExport("get_home"),
+		DynamicFilters:           i.hasExport("get_filters"),
+		DynamicSettings:          i.hasExport("get_settings"),
+		DynamicListings:          i.hasExport("get_listings"),
+		ProcessesPages:           i.hasExport("process_page_image"),
+		ProcessesCovers:          i.hasExport("process_cover_image"),
+		ProvidesImageRequests:    i.hasExport("get_image_request"),
+		ProvidesPageDescriptions: i.hasExport("get_page_description"),
+		ProvidesAlternateCovers:  i.hasExport("get_alternate_covers"),
+		ProvidesBaseURL:          i.hasExport("get_base_url"),
+		HandlesNotifications:     i.hasExport("handle_notification"),
+		HandlesDeepLinks:         i.hasExport("handle_deep_link"),
+		HandlesBasicLogin:        i.hasExport("handle_basic_login"),
+		HandlesWebLogin:          i.hasExport("handle_web_login"),
+		HandlesMigration:         i.hasExport("handle_key_migration"),
+	}
+}
+
+// Restart mirrors AidokuRunner's Interpreter.restart()/Source.restart():
+// recovers a source after a WASM trap (e.g. a guest panic) by discarding
+// the trapped guest module instance and re-instantiating the same wasm
+// bytes fresh, without reloading the .aix or re-linking any host
+// namespace. Every previously issued store descriptor (parsed HTML nodes,
+// JS/webview contexts, decoded images, ...) is invalidated by this, since
+// it only had meaning for the module instance that just got discarded —
+// matching Swift's linkImports() being re-run with a fresh GlobalStore.
+func (i *Interpreter) Restart(ctx context.Context) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	if i.module != nil {
+		_ = i.module.Close(ctx)
+	}
+	_ = i.store.Close()
+
+	module, err := i.rt.InstantiateWithConfig(ctx, i.wasmBytes, wazero.NewModuleConfig().WithName(i.sourceKey))
+	if err != nil {
+		return fmt.Errorf("runtime: restarting guest module: %w", err)
+	}
+	i.module = module
+	i.Features = i.detectFeatures()
+
+	if fn := module.ExportedFunction("start"); fn != nil {
+		if _, err := fn.Call(ctx); err != nil {
+			return fmt.Errorf("runtime: calling guest start() after restart: %w", err)
+		}
+	}
+	return nil
 }
 
 // Close releases the wazero runtime and everything it instantiated,
@@ -392,6 +430,18 @@ func errorForCode(result int32) error {
 		return models.ErrUnimplemented()
 	case -3:
 		return models.ErrNetworkError()
+	case -4:
+		return models.ErrHTMLError()
+	case -5:
+		return models.ErrJSError()
+	case -6:
+		return models.ErrCanvasError()
+	case -7:
+		return models.ErrUTF8Error()
+	case -8:
+		return models.ErrJSONParseError()
+	case -9:
+		return models.ErrDeserializeError()
 	default:
 		return models.ErrMissingResult()
 	}

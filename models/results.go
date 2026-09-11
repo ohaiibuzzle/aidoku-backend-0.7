@@ -126,6 +126,7 @@ type SourceFeatures struct {
 	DynamicSettings          bool
 	DynamicListings          bool
 	ProcessesPages           bool
+	ProcessesCovers          bool
 	ProvidesImageRequests    bool
 	ProvidesPageDescriptions bool
 	ProvidesAlternateCovers  bool

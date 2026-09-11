@@ -163,15 +163,16 @@ const (
 )
 
 type LoginSetting struct {
-	Method           LoginMethod
-	URL              *string
-	URLKey           *string
-	LogoutTitle      *string
-	PKCE             *bool
-	TokenURL         *string
-	CallbackScheme   *string
-	UseEmail         *bool
-	LocalStorageKeys []string
+	Method               LoginMethod
+	URL                  *string
+	URLKey               *string
+	LogoutTitle          *string
+	PKCE                 *bool
+	TokenURL             *string
+	CallbackScheme       *string
+	UseEmail             *bool
+	LocalStorageKeys     []string
+	ClearCookiesOnLogout *bool
 }
 
 type PageSettingIconKind uint8
@@ -405,6 +406,9 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		if v.LocalStorageKeys, err = decodeOptionalStringSlice(r); err != nil {
 			return err
 		}
+		if v.ClearCookiesOnLogout, err = decodeOptionalBool(r); err != nil {
+			return err
+		}
 		s.Login = v
 	case SettingTypePage:
 		v := &PageSetting{}
@@ -559,14 +563,15 @@ func (s *Setting) UnmarshalJSON(data []byte) error {
 		URL      *string `json:"url"`
 		External *bool   `json:"external"`
 
-		Method           *LoginMethod `json:"method"`
-		URLKey           *string      `json:"urlKey"`
-		LogoutTitle      *string      `json:"logoutTitle"`
-		PKCE             *bool        `json:"pkce"`
-		TokenURL         *string      `json:"tokenUrl"`
-		CallbackScheme   *string      `json:"callbackScheme"`
-		UseEmail         *bool        `json:"useEmail"`
-		LocalStorageKeys []string     `json:"localStorageKeys"`
+		Method               *LoginMethod `json:"method"`
+		URLKey               *string      `json:"urlKey"`
+		LogoutTitle          *string      `json:"logoutTitle"`
+		PKCE                 *bool        `json:"pkce"`
+		TokenURL             *string      `json:"tokenUrl"`
+		CallbackScheme       *string      `json:"callbackScheme"`
+		UseEmail             *bool        `json:"useEmail"`
+		LocalStorageKeys     []string     `json:"localStorageKeys"`
+		ClearCookiesOnLogout *bool        `json:"clearCookiesOnLogOut"`
 
 		InlineTitle *bool                `json:"inlineTitle"`
 		Icon        *pageSettingIconJSON `json:"icon"`
@@ -677,7 +682,8 @@ func (s *Setting) UnmarshalJSON(data []byte) error {
 		v := &LoginSetting{
 			URL: raw.URL, URLKey: raw.URLKey, LogoutTitle: raw.LogoutTitle, PKCE: raw.PKCE,
 			TokenURL: raw.TokenURL, CallbackScheme: raw.CallbackScheme, UseEmail: raw.UseEmail,
-			LocalStorageKeys: raw.LocalStorageKeys,
+			LocalStorageKeys:     raw.LocalStorageKeys,
+			ClearCookiesOnLogout: raw.ClearCookiesOnLogout,
 		}
 		if raw.Method != nil {
 			v.Method = *raw.Method

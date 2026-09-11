@@ -28,6 +28,13 @@ type SettingsStore interface {
 
 const APIVersion = "0.7"
 
+// AidokuRunnerRef pins the github.com/Aidoku/AidokuRunner commit this
+// package was last audited against for behavioral parity (models, host
+// namespace surface, error codes, ...). Bump it whenever upstream is
+// re-diffed and any resulting gaps are ported, so the next audit knows
+// exactly where to start `git log` from.
+const AidokuRunnerRef = "cc4d06ff399e7169b9c647bccede7cb29bc805c6" // 2026-08-30: "feat: add cover image processing api"
+
 type Source struct {
 	// Path is whatever was passed to LoadPath/LoadDir/LoadZip: a directory
 	// or an .aix/.zip archive path.
@@ -365,6 +372,25 @@ func (s *Source) ProcessPageImage(ctx context.Context, response models.Response,
 		return nil, nil
 	}
 	ref, err := s.Runner.ProcessPageImage(ctx, response, pageContext)
+	if err != nil {
+		return nil, err
+	}
+	return &ref, nil
+}
+
+// Restart recovers this source's runtime after a WASM trap (e.g. a guest
+// panic) by re-instantiating the loaded main.wasm bytes fresh, without
+// reloading the .aix from disk. See runtime.Interpreter.Restart for what
+// this does and doesn't reset.
+func (s *Source) Restart(ctx context.Context) error {
+	return s.Runner.Restart(ctx)
+}
+
+func (s *Source) ProcessCoverImage(ctx context.Context, response models.Response) (*int32, error) {
+	if !s.Runner.Features.ProcessesCovers {
+		return nil, nil
+	}
+	ref, err := s.Runner.ProcessCoverImage(ctx, response)
 	if err != nil {
 		return nil, err
 	}
