@@ -79,8 +79,25 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
                 end
             end
         end
-        if any_new then
-            ctx.downloads_engine:prune(ctx.store:downloadLimitBytes())
+        -- The storage-limit prune is a persistent-storage concept -- under
+        -- Ephemeral Mode, the caller's own removeAllExcept() already keeps
+        -- at most ~1-2 chapters resident, and running prune() on top of
+        -- that risks deleting a chapter this same call just downloaded
+        -- (see mangabrowser.lua's downloadAndOpen for the same guard).
+        --
+        -- chapter_key is the chapter the caller just opened (downloadAndOpen/
+        -- fetchAndOpen kick this off right after opening it, deferred to the
+        -- next tick) -- it's still being read when this runs, so its path is
+        -- passed as keep_path the same way those callers protect it from
+        -- their own prune() calls. Without this, a storage limit small
+        -- enough to need pruning at all could delete the chapter the user
+        -- is actively reading right out from under them (confirmed
+        -- on-device: this prune call has no keep_path of its own, so it
+        -- deleted the just-opened chapter's file even though downloadAndOpen's
+        -- own prune, moments earlier, had correctly protected it).
+        if any_new and not ctx.store:isEphemeralMode() then
+            local keep_path = ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, chapter_key)
+            ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), keep_path)
         end
         if on_complete then
             on_complete(any_new)

@@ -42,6 +42,103 @@ func TestRecordAndPath(t *testing.T) {
 	}
 }
 
+// TestRecordDisambiguatesCollidingFilename guards against two different
+// chapters (different chapter keys) whose titles happen to sanitize to the
+// identical filename leaving the index with two rows permanently pointing
+// at the same one surviving file. It can't recover the first chapter's
+// bytes -- the second download already overwrote them on disk before
+// Record was ever called -- but it must stop compounding that: the second
+// chapter needs its own distinct file, and the first's row must end up
+// pointing somewhere with nothing there (degrading to "needs
+// re-downloading", which Path already handles gracefully) rather than
+// silently sharing the winner's content.
+func TestRecordDisambiguatesCollidingFilename(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	// Both chapters' downloader picked the exact same output filename --
+	// e.g. two chapters of the same manga both titled "Omake".
+	collidingPath := filepath.Join(dir, "Omake.cbz")
+	if err := os.WriteFile(collidingPath, make([]byte, 100), 0o644); err != nil {
+		t.Fatalf("seeding first file: %v", err)
+	}
+	first, err := s.Record("src.key", "src.aix", "manga1", "ch1", collidingPath, "Manga", "Omake", nil, nil)
+	if err != nil {
+		t.Fatalf("Record ch1: %v", err)
+	}
+	if first.Path != collidingPath {
+		t.Fatalf("first Record should not have been disambiguated: got path %q", first.Path)
+	}
+
+	// The second download physically overwrites the first's bytes at
+	// collidingPath before Record is even called -- this is the real
+	// sequence (the source package writes the CBZ, then aidoku-run's
+	// download command calls Record), not something this test invents.
+	if err := os.WriteFile(collidingPath, make([]byte, 200), 0o644); err != nil {
+		t.Fatalf("seeding second file (overwriting the first on disk, as the real download would): %v", err)
+	}
+	second, err := s.Record("src.key", "src.aix", "manga1", "ch2", collidingPath, "Manga", "Omake", nil, nil)
+	if err != nil {
+		t.Fatalf("Record ch2: %v", err)
+	}
+	if second.Path == collidingPath {
+		t.Fatalf("second Record should have been disambiguated to a different path, still got %q", second.Path)
+	}
+	if _, err := os.Stat(second.Path); err != nil {
+		t.Fatalf("disambiguated file missing on disk: %v", err)
+	}
+
+	path1, err := s.Path("src.key", "manga1", "ch1")
+	if err != nil {
+		t.Fatalf("Path(ch1): %v", err)
+	}
+	path2, err := s.Path("src.key", "manga1", "ch2")
+	if err != nil {
+		t.Fatalf("Path(ch2): %v", err)
+	}
+	if path1 == path2 {
+		t.Fatalf("ch1 and ch2 still point at the same path %q", path1)
+	}
+	// ch1's file is gone -- clobbered by ch2's download before Record ever
+	// ran -- so its row now correctly looks like "not downloaded" rather
+	// than silently resolving to ch2's content.
+	if _, err := os.Stat(path1); !os.IsNotExist(err) {
+		t.Errorf("expected ch1's path to have no file (stale row), stat err=%v", err)
+	}
+	if _, err := os.Stat(path2); err != nil {
+		t.Errorf("ch2's recorded file missing: %v", err)
+	}
+}
+
+// TestRecordSamePathTwiceForSameChapterDoesNotDisambiguate checks that
+// re-recording the identical chapter at the same path (a retry, or an
+// update to a previously downloaded chapter) is left alone -- only a
+// collision against a genuinely different chapter should trigger a rename.
+func TestRecordSamePathTwiceForSameChapterDoesNotDisambiguate(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	file := writeFile(t, dir, "ch1.cbz", 100)
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1", nil, nil); err != nil {
+		t.Fatalf("first Record: %v", err)
+	}
+	entry, err := s.Record("src.key", "src.aix", "manga1", "ch1", file, "Manga", "Chapter 1", nil, nil)
+	if err != nil {
+		t.Fatalf("second Record: %v", err)
+	}
+	if entry.Path != file {
+		t.Fatalf("re-recording the same chapter got disambiguated: path = %q, want %q", entry.Path, file)
+	}
+}
+
 func TestByPath(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(dir)

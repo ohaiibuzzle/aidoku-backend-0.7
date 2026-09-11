@@ -153,7 +153,12 @@ function FilterBrowser:pickSort(filter)
             self:refresh()
             return true
         end,
+        onCloseWidget = function(self_picker)
+            Menu.onCloseWidget(self_picker)
+            OpenWidgets.remove(self_picker)
+        end,
     }
+    OpenWidgets.push(picker)
     UIManager:show(picker)
 end
 
@@ -182,7 +187,12 @@ function FilterBrowser:pickSelect(filter)
             self:refresh()
             return true
         end,
+        onCloseWidget = function(self_picker)
+            Menu.onCloseWidget(self_picker)
+            OpenWidgets.remove(self_picker)
+        end,
     }
+    OpenWidgets.push(picker)
     UIManager:show(picker)
 end
 
@@ -250,7 +260,12 @@ function FilterBrowser:pickMultiselect(filter)
             cycle(item.id)
             return true
         end,
+        onCloseWidget = function(self_picker)
+            Menu.onCloseWidget(self_picker)
+            OpenWidgets.remove(self_picker)
+        end,
     }
+    OpenWidgets.push(picker)
     UIManager:show(picker)
 end
 

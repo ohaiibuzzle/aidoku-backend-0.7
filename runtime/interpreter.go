@@ -201,6 +201,15 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 
 	if fn := module.ExportedFunction("start"); fn != nil {
 		if _, err := fn.Call(ctx); err != nil {
+			// start() is the first point a guest can call back into host
+			// functions (js.new_runtime, webview.new, ...) that store a
+			// *quickjs.VM or similar item in i.store holding native,
+			// non-Go-GC-visible memory. rt.Close below frees the wasm side,
+			// but only i.store.Close() releases those -- without it, a
+			// trap here leaks that memory until something else happens to
+			// call Close() on this Interpreter later (which may never
+			// happen if the caller just discards it after this error).
+			_ = i.store.Close()
 			rt.Close(ctx)
 			return nil, fmt.Errorf("runtime: calling guest start(): %w", err)
 		}
@@ -260,6 +269,10 @@ func (i *Interpreter) Restart(ctx context.Context) error {
 
 	if fn := module.ExportedFunction("start"); fn != nil {
 		if _, err := fn.Call(ctx); err != nil {
+			// Same leak as New()'s start() error path above: start() may
+			// have already stored a native-memory-backed item in i.store
+			// before trapping.
+			_ = i.store.Close()
 			return fmt.Errorf("runtime: calling guest start() after restart: %w", err)
 		}
 	}

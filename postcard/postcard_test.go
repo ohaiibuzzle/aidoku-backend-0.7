@@ -123,3 +123,30 @@ func TestFloatRoundTrip(t *testing.T) {
 		t.Fatalf("f64 round trip: %v err=%v", f64, err)
 	}
 }
+
+// TestReadLenRejectsOversizedLength guards against a corrupt or hostile
+// length prefix reaching a downstream make([]T, n) with a wildly larger n
+// than the buffer could actually contain -- ReadLen must bound n against
+// Remaining() itself, not just leave it to ReadString/ReadBytes.
+func TestReadLenRejectsOversizedLength(t *testing.T) {
+	w := NewWriter()
+	w.WriteU64(1 << 32) // length prefix claiming ~4 billion elements
+	w.WriteU8(1)        // one real byte follows -- nowhere near enough
+	r := NewReader(w.Bytes())
+	if n, err := r.ReadLen(); err == nil {
+		t.Fatalf("ReadLen: expected error for oversized length, got n=%d", n)
+	}
+}
+
+func TestReadLenAcceptsLengthWithinRemaining(t *testing.T) {
+	w := NewWriter()
+	w.WriteU64(3)
+	w.WriteU8(1)
+	w.WriteU8(2)
+	w.WriteU8(3)
+	r := NewReader(w.Bytes())
+	n, err := r.ReadLen()
+	if err != nil || n != 3 {
+		t.Fatalf("ReadLen: want n=3 err=nil, got n=%d err=%v", n, err)
+	}
+}

@@ -95,10 +95,22 @@ func (r *Reader) ReadI64() (int64, error) {
 	return unzigzag64(v), err
 }
 
-// ReadLen reads a sequence/string/map length prefix.
+// ReadLen reads a sequence/string/map length prefix, bounded by the
+// buffer's remaining bytes. Every element of a length-n sequence needs at
+// least 1 more byte to encode (even a bool or a 1-byte enum tag), so n
+// bytes remaining is always a necessary condition -- rejecting a length
+// that fails it catches a corrupt or hostile prefix before it reaches a
+// make([]T, n) call site downstream (models/, canvas_types.go,
+// defaults.go, runner.go, ...) and OOMs or panics the process.
 func (r *Reader) ReadLen() (int, error) {
 	v, err := r.readVarintU64(10)
-	return int(v), err
+	if err != nil {
+		return 0, err
+	}
+	if v > uint64(r.Remaining()) {
+		return 0, ErrUnexpectedEOF
+	}
+	return int(v), nil
 }
 
 func (r *Reader) ReadF32() (float32, error) {

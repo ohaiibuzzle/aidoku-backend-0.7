@@ -477,6 +477,14 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 
 	resp, data, err := doHTTPRequest(client, httpReq)
 	if err != nil {
+		// A guest can reuse the same descriptor across multiple send()
+		// calls (e.g. set_url then send() again). Without clearing these,
+		// a failed re-send would leave Response/ResponseData holding the
+		// previous, successful send's data -- a guest that reads them
+		// without separately checking ResponseError would silently see a
+		// stale response instead of the failure.
+		req.Response = nil
+		req.ResponseData = nil
 		req.ResponseError = err
 		return netRequestError
 	}
@@ -487,8 +495,40 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 	return netSuccess
 }
 
+// descriptorsFitInMemory reports whether length descriptors (4 bytes each)
+// starting at offset fit inside a guest memory of memSize bytes. length is
+// a raw guest-supplied int32, not a postcard-decoded value, so it doesn't
+// get ReadLen's bound -- without this check a guest could pass e.g.
+// length = 2^31-1 and sendAll's make([]int32, length) would try to
+// allocate ~8GB before the memory-bounds check on the first ReadUint32Le
+// ever runs, OOMing the process on a memory-constrained device (see
+// CLAUDE.md). The descriptor array is read from guest memory at 4
+// bytes/entry, so it can never legitimately need more entries than fit in
+// the guest's own linear memory. Widened to uint64 so the multiply itself
+// can't overflow back into range for a huge length.
+func descriptorsFitInMemory(offset, length int32, memSize uint32) bool {
+	end := uint64(offset) + uint64(length)*4
+	return end <= uint64(memSize)
+}
+
+// hasDuplicateDescriptor reports whether descriptors contains the same
+// value more than once. See sendAll's comment on why that's rejected.
+func hasDuplicateDescriptor(descriptors []int32) bool {
+	seen := make(map[int32]bool, len(descriptors))
+	for _, d := range descriptors {
+		if seen[d] {
+			return true
+		}
+		seen[d] = true
+	}
+	return false
+}
+
 func (n *Net) sendAll(ctx context.Context, m api.Module, descriptorsOffset, length int32) netResult {
 	if descriptorsOffset < 0 || length <= 0 {
+		return netInvalidDescriptor
+	}
+	if !descriptorsFitInMemory(descriptorsOffset, length, m.Memory().Size()) {
 		return netInvalidDescriptor
 	}
 	descriptors := make([]int32, length)
@@ -498,6 +538,16 @@ func (n *Net) sendAll(ctx context.Context, m api.Module, descriptorsOffset, leng
 			return netInvalidDescriptor
 		}
 		descriptors[idx] = int32(v)
+	}
+
+	// n.send mutates the *NetRequest behind each descriptor in place
+	// (Response/ResponseData/ResponseError). If the same descriptor
+	// appeared twice, two goroutines below would write those fields on the
+	// same object concurrently -- an actual data race, not just a
+	// last-writer-wins ambiguity, since e.g. ResponseData is a multi-word
+	// slice header a torn concurrent write can leave pointing at garbage.
+	if hasDuplicateDescriptor(descriptors) {
+		return netInvalidDescriptor
 	}
 
 	errs := make([]int32, length)

@@ -197,3 +197,50 @@ func TestHtmlAbsAttr(t *testing.T) {
 		t.Fatalf("abs:href with no base should fail")
 	}
 }
+
+// TestParseHTMLPrunesBaseURIOnRemove guards against baseURIs.roots leaking
+// every parsed document for the life of the process: root staying as a map
+// key there keeps the whole node tree reachable to the GC even after a
+// guest calls std.destroy() on its descriptor.
+func TestParseHTMLPrunesBaseURIOnRemove(t *testing.T) {
+	store := NewStore()
+	h := NewHtml(store)
+
+	descriptor, err := h.ParseHTML([]byte(`<html><body><a href="/x">x</a></body></html>`), "https://example.com/page")
+	if err != nil {
+		t.Fatalf("ParseHTML: %v", err)
+	}
+	root, ok := store.Fetch(descriptor).(*nethtml.Node)
+	if !ok {
+		t.Fatalf("expected stored root, got %T", store.Fetch(descriptor))
+	}
+	if got := h.bases.get(root); got != "https://example.com/page" {
+		t.Fatalf("base URI before removal: got %q", got)
+	}
+
+	store.Remove(descriptor)
+
+	if n := len(h.bases.roots); n != 0 {
+		t.Fatalf("baseURIs.roots not pruned after Remove: %d entries remain", n)
+	}
+	if got := h.bases.get(root); got != "" {
+		t.Fatalf("base URI after removal: got %q, want empty", got)
+	}
+}
+
+// TestParseHTMLWithNoBaseURLRegistersNoCleanup checks that a descriptor
+// parsed without a base URL doesn't accumulate an OnRemove hook it doesn't
+// need -- registerBase's early return on an empty baseURL must actually
+// skip Store.OnRemove, not just h.bases.set.
+func TestParseHTMLWithNoBaseURLRegistersNoCleanup(t *testing.T) {
+	store := NewStore()
+	h := NewHtml(store)
+
+	descriptor, err := h.ParseHTML([]byte(`<html><body>x</body></html>`), "")
+	if err != nil {
+		t.Fatalf("ParseHTML: %v", err)
+	}
+	if n := len(store.cleanup[descriptor]); n != 0 {
+		t.Fatalf("expected no cleanup hooks for a document with no base URL, got %d", n)
+	}
+}

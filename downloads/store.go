@@ -12,10 +12,13 @@
 package downloads
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -227,6 +230,10 @@ func (s *Store) Record(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaT
 	if err != nil {
 		return nil, fmt.Errorf("downloads: stat %s: %w", path, err)
 	}
+	path, err = s.disambiguatePath(sourceKey, mangaKey, chapterKey, path)
+	if err != nil {
+		return nil, err
+	}
 	e := &Entry{
 		SourceKey:     sourceKey,
 		SourcePath:    sourcePath,
@@ -252,6 +259,55 @@ func (s *Store) Record(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaT
 		return nil, fmt.Errorf("downloads: recording: %w", err)
 	}
 	return e, nil
+}
+
+// disambiguatePath renames the just-downloaded file at path if some other
+// (manga_key, chapter_key) under sourceKey already has an index row
+// pointing at that exact path, and returns the (possibly new) path to
+// record. Two different chapters whose titles happen to sanitize to the
+// same filename (source.sanitizeFilename has no way to know about the
+// other one -- it has no access to this index, by design, see
+// source/download.go) would otherwise both end up recorded against one
+// path.
+//
+// This can't recover the *first* chapter's bytes -- the second download
+// already overwrote them on disk before Record was ever called, so by the
+// time this runs there's only one real file left to rename. What it does
+// prevent is the index staying wrong afterward: without this, both rows
+// would permanently point at the one surviving file (deleting "chapter 1"
+// would delete chapter 2's download too, and opening chapter 1 would
+// silently show chapter 2's pages). With it, the second chapter gets its
+// own distinct file and the first's row is left pointing at a path with
+// nothing there anymore -- which existingDownload/Path already treat the
+// same as "not downloaded yet" (see its own doc comment), so it just needs
+// re-downloading rather than silently showing the wrong content. Caught
+// here, the single place every download gets recorded (see CLAUDE.md's
+// "Recording stays inside the writer"), rather than left to the source
+// package or every caller of it to somehow avoid on their own.
+func (s *Store) disambiguatePath(sourceKey, mangaKey, chapterKey, path string) (string, error) {
+	var ownerManga, ownerChapter string
+	err := s.db.QueryRow(`SELECT manga_key, chapter_key FROM downloads WHERE source_key = ? AND path = ?`, sourceKey, path).Scan(&ownerManga, &ownerChapter)
+	if err == sql.ErrNoRows {
+		return path, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("downloads: checking for a path collision: %w", err)
+	}
+	if ownerManga == mangaKey && ownerChapter == chapterKey {
+		return path, nil // re-recording the same chapter -- an expected overwrite, not a collision
+	}
+
+	// mangaKey/chapterKey can be arbitrary source-provided strings unsafe
+	// to use in a filename directly (same reasoning as lockPath in
+	// lock.go), so a short hash of them disambiguates without risking a
+	// FAT32/exFAT-illegal character sneaking back in.
+	ext := filepath.Ext(path)
+	sum := sha256.Sum256([]byte(mangaKey + "\x00" + chapterKey))
+	newPath := fmt.Sprintf("%s [%s]%s", strings.TrimSuffix(path, ext), hex.EncodeToString(sum[:])[:8], ext)
+	if err := os.Rename(path, newPath); err != nil {
+		return "", fmt.Errorf("downloads: disambiguating colliding filename: %w", err)
+	}
+	return newPath, nil
 }
 
 // Path returns the local file path for a chapter, or "" if it hasn't been
@@ -390,7 +446,13 @@ func (s *Store) Prune(limitBytes int64) ([]Entry, error) {
 // of overwriting the existing one, since the row already under
 // newSourceKey is presumably the more recently verified-working one.
 func (s *Store) Reassociate(oldSourceKey, newSourceKey string) (int64, error) {
-	if _, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("downloads: beginning reassociate transaction: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	if _, err := tx.Exec(`
 		DELETE FROM downloads
 		WHERE source_key = ?
 		AND EXISTS (
@@ -400,9 +462,16 @@ func (s *Store) Reassociate(oldSourceKey, newSourceKey string) (int64, error) {
 	`, oldSourceKey, newSourceKey); err != nil {
 		return 0, fmt.Errorf("downloads: dropping conflicting rows: %w", err)
 	}
-	res, err := s.db.Exec(`UPDATE downloads SET source_key = ? WHERE source_key = ?`, newSourceKey, oldSourceKey)
+	res, err := tx.Exec(`UPDATE downloads SET source_key = ? WHERE source_key = ?`, newSourceKey, oldSourceKey)
 	if err != nil {
 		return 0, fmt.Errorf("downloads: reassociating: %w", err)
 	}
-	return res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("downloads: reading rows affected: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("downloads: committing reassociate transaction: %w", err)
+	}
+	return n, nil
 }

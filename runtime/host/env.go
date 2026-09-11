@@ -19,9 +19,41 @@ type Env struct {
 	OnPartialResult func(data []byte)
 }
 
+// maxEnvSleep caps env.sleep -- see envSleep's doc comment for why an
+// unbounded duration can't just pass through to time.Sleep.
+const maxEnvSleep = 30 * time.Second
+
 func (e *Env) print(s string) {
 	if e.PrintHandler != nil {
 		e.PrintHandler(s)
+	}
+}
+
+// capSleepDuration bounds a raw guest-supplied seconds value to at most
+// maxEnvSleep. seconds <= 0 is the caller's responsibility to filter
+// (envSleep does); this only handles the upper bound.
+func capSleepDuration(seconds int32) time.Duration {
+	d := time.Duration(seconds) * time.Second
+	if d > maxEnvSleep {
+		return maxEnvSleep
+	}
+	return d
+}
+
+// envSleep implements env.sleep. Guest calls are serialized behind
+// Interpreter's single mutex (see runtime/interpreter.go), so an unbounded,
+// ctx-blind time.Sleep here would block every other command against this
+// source for as long as a huge or garbage seconds value asked -- capping
+// the duration and honoring ctx cancellation avoids both.
+func envSleep(ctx context.Context, seconds int32) {
+	if seconds <= 0 {
+		return
+	}
+	t := time.NewTimer(capSleepDuration(seconds))
+	defer t.Stop()
+	select {
+	case <-t.C:
+	case <-ctx.Done():
 	}
 }
 
@@ -47,12 +79,7 @@ func LinkEnv(builder wazero.HostModuleBuilder, e *Env) wazero.HostModuleBuilder 
 		Export("print")
 
 	builder = builder.NewFunctionBuilder().
-		WithFunc(func(ctx context.Context, seconds int32) {
-			if seconds <= 0 {
-				return
-			}
-			time.Sleep(time.Duration(seconds) * time.Second)
-		}).
+		WithFunc(envSleep).
 		Export("sleep")
 
 	builder = builder.NewFunctionBuilder().

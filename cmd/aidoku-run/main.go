@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,7 +174,11 @@ func run(dir, command string, args []string) error {
 		}
 		page := 1
 		if len(args) > 1 && args[1] != "" {
-			fmt.Sscanf(args[1], "%d", &page)
+			p, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid page %q: %w", args[1], err)
+			}
+			page = p
 		}
 		query := args[0]
 		var filters []models.FilterValue
@@ -371,9 +376,15 @@ func run(dir, command string, args []string) error {
 		// a caller could otherwise do has a window for exactly that kind of
 		// inconsistency.
 		if downloadsDir != "" {
-			if err := recordDownload(downloadsDir, src.Key, dir, *updated, *chapter, path); err != nil {
+			// recordDownload's returned path can differ from the one just
+			// written: a colliding filename against a different chapter
+			// gets disambiguated (renamed) as part of recording, see
+			// downloads.Store.disambiguatePath.
+			recorded, err := recordDownload(downloadsDir, src.Key, dir, *updated, *chapter, path)
+			if err != nil {
 				return fmt.Errorf("recording download: %w", err)
 			}
+			path = recorded
 		}
 		fmt.Println(path)
 		return nil
@@ -389,14 +400,17 @@ func run(dir, command string, args []string) error {
 // source update renaming its installed file, unlike sourcePath -- see the
 // downloads package doc); sourcePath is the loaded source's own
 // path/directory, kept only as a display/debugging hint.
-func recordDownload(downloadsDir, sourceKey, sourcePath string, manga models.Manga, chapter models.Chapter, path string) error {
+func recordDownload(downloadsDir, sourceKey, sourcePath string, manga models.Manga, chapter models.Chapter, path string) (string, error) {
 	store, err := downloads.Open(downloadsDir)
 	if err != nil {
-		return fmt.Errorf("opening downloads index: %w", err)
+		return "", fmt.Errorf("opening downloads index: %w", err)
 	}
 	defer store.Close()
-	_, err = store.Record(sourceKey, sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber)
-	return err
+	entry, err := store.Record(sourceKey, sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber)
+	if err != nil {
+		return "", err
+	}
+	return entry.Path, nil
 }
 
 // existingDownload returns the already-recorded local path for
@@ -450,6 +464,11 @@ func readCookieFile(path string) cookieFile {
 	}
 	var f cookieFile
 	if err := json.Unmarshal(b, &f); err != nil {
+		// Surface this rather than silently treating a corrupt file as
+		// "no cookies": a caller that goes on to persistCookies() after
+		// this would otherwise overwrite the file with only the newly
+		// solved cookies, permanently discarding whatever else was in it.
+		fmt.Fprintf(os.Stderr, "aidoku-run: cookie file %s is corrupt, ignoring: %v\n", path, err)
 		return cookieFile{}
 	}
 	if f == nil {
@@ -458,15 +477,58 @@ func readCookieFile(path string) cookieFile {
 	return f
 }
 
+// writeCookieFile writes via a temp file + rename in the same directory
+// (same pattern as settingsstore.save() and cbz.Writer.Close()), so a
+// crash, power loss, or a second aidoku-run invocation writing cookies at
+// the same time never leaves cookies.json truncated or corrupt.
 func writeCookieFile(path string, f cookieFile) error {
 	b, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o600)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".cookies-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
-// cookie returns the *http.Cookie corresponding to this stored entry.
+// cookie returns the *http.Cookie corresponding to this stored entry, for
+// injection via cookiejar.Jar.SetCookies (see injectCookies). Per RFC 6265
+// (and Go's cookiejar implementation of it), any non-empty Domain
+// attribute -- dotted or not -- makes a cookie apply to subdomains too;
+// the only way to get a host-only cookie back out of SetCookies is to
+// leave Domain empty entirely, so IncludeSubdomains == false must not set
+// it to the bare hostname either. Setting it unconditionally used to turn
+// every re-injected host-only cookie into a domain cookie.
 func (e cookieEntry) cookie() *http.Cookie {
 	c := &http.Cookie{Name: e.Name, Value: e.Value, Path: e.Path}
 	if c.Path == "" {
@@ -477,8 +539,6 @@ func (e cookieEntry) cookie() *http.Cookie {
 		c.Expires = time.Unix(e.Expires, 0)
 	}
 	if e.IncludeSubdomains {
-		c.Domain = "." + e.Domain
-	} else {
 		c.Domain = e.Domain
 	}
 	return c

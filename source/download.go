@@ -83,14 +83,21 @@ func (s *Source) buildImageRequest(ctx context.Context, rawURL string, headers m
 		if err != nil {
 			return nil, fmt.Errorf("source: building guest-supplied request for %s: %w", rawURL, err)
 		}
-		if req.Header.Get("User-Agent") == "" {
-			req.Header.Set("User-Agent", defaultPageUserAgent)
+		// ToHTTPRequest returns (nil, nil) when the guest's NetRequest never
+		// had its URL set (same sentinel net.go's send() already checks for)
+		// -- fall through to the default rawURL-based request below instead
+		// of dereferencing a nil *http.Request.
+		if req != nil {
+			if req.Header.Get("User-Agent") == "" {
+				req.Header.Set("User-Agent", defaultPageUserAgent)
+			}
+			return req, nil
 		}
-		return req, nil
-	}
-	var srcErr *models.SourceError
-	if !errors.As(err, &srcErr) || srcErr.Kind != models.SourceErrorUnimplemented {
-		return nil, fmt.Errorf("source: getting image request for %s: %w", rawURL, err)
+	} else {
+		var srcErr *models.SourceError
+		if !errors.As(err, &srcErr) || srcErr.Kind != models.SourceErrorUnimplemented {
+			return nil, fmt.Errorf("source: getting image request for %s: %w", rawURL, err)
+		}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
@@ -282,6 +289,20 @@ var filenameSanitizer = strings.NewReplacer(
 	"|", "-",
 )
 
+// sanitizeFilename is the single authoritative point (see CLAUDE.md's
+// "Filesystem-safe filenames") that turns a manga/chapter title into a safe
+// path component. filenameSanitizer only strips characters illegal on
+// FAT32/exFAT -- "." and ".." contain none of those, so they'd otherwise
+// pass through untouched. resolveOutputPath's mangaDirName is used as a
+// bare path component with nothing appended to neutralize that (unlike the
+// chapter filename, which always gets a ".cbz" suffix), so a manga title
+// of exactly ".." there would resolve outside the downloads directory
+// entirely via filepath.Join. Reject both here so every caller is safe,
+// not just the ones that happen to append a fixed suffix.
 func sanitizeFilename(s string) string {
-	return strings.TrimSpace(filenameSanitizer.Replace(s))
+	s = strings.TrimSpace(filenameSanitizer.Replace(s))
+	if s == "." || s == ".." {
+		return "-"
+	}
+	return s
 }

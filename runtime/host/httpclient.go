@@ -4,7 +4,16 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"sync"
+	"time"
 )
+
+// defaultHTTPTimeout bounds a request with no explicit net.set_timeout,
+// matching URLSession.shared's own default (60s). Without this, a page
+// fetch, webview fetch, or canvas.load_font against an unresponsive server
+// hangs forever: the CLI runs requests on context.Background() (no
+// deadline of its own) and holds the per-chapter flock (see
+// downloads.AcquireLock) the whole time it's stuck.
+const defaultHTTPTimeout = 60 * time.Second
 
 var (
 	sharedHTTPClientOnce sync.Once
@@ -45,7 +54,7 @@ func (defaultUAInjector) RoundTrip(req *http.Request) (*http.Response, error) {
 func SharedHTTPClient() *http.Client {
 	sharedHTTPClientOnce.Do(func() {
 		jar, _ := cookiejar.New(nil)
-		sharedHTTPClient = &http.Client{Jar: jar, Transport: defaultUAInjector{}}
+		sharedHTTPClient = &http.Client{Jar: jar, Transport: defaultUAInjector{}, Timeout: defaultHTTPTimeout}
 	})
 	return sharedHTTPClient
 }

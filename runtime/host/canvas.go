@@ -3,12 +3,13 @@ package host
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	_ "image/gif"
 	"image/png"
 	"io"
+	"math"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -86,12 +87,30 @@ func (c *Canvas) fetchImage(descriptor int32) image.Image {
 	}
 }
 
+// maxCanvasDimension caps a single new_context axis. A source descrambling
+// a scanned page never needs anywhere near this; the cap exists to bound
+// gg.NewContext's image.NewRGBA allocation (4 bytes/pixel) on a
+// memory-constrained device (see CLAUDE.md) against a guest passing a
+// deliberately huge or garbage dimension.
+const maxCanvasDimension = 8192
+
+// validCanvasDimension rejects non-finite and out-of-range new_context
+// dimensions. NaN compares false against every relation, including <= 0
+// and > maxCanvasDimension, so it has to be checked explicitly -- it would
+// otherwise slip through both of those and reach int(v) downstream.
+func validCanvasDimension(v float32) bool {
+	if math.IsNaN(float64(v)) {
+		return false
+	}
+	return v > 0 && v <= maxCanvasDimension
+}
+
 // LinkCanvas registers the `canvas` namespace onto the given host module
 // builder.
 func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBuilder {
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, width, height float32) int32 {
-			if width <= 0 || height <= 0 {
+			if !validCanvasDimension(width) || !validCanvasDimension(height) {
 				return int32(canvasInvalidBounds)
 			}
 			gc := gg.NewContext(int(width), int(height))
@@ -348,26 +367,33 @@ func (c *Canvas) storeEmbeddedFont(bold bool) int32 {
 	return c.Store.Store(parsed)
 }
 
+// loadBytes fetches a font for canvas.load_font. Only http(s) is
+// supported: location is a guest-controlled string (a manga source's own
+// wasm code), and aidoku-run runs unsandboxed as the invoking user with
+// real filesystem access -- a local-file fallback here would let any
+// source read arbitrary files readable by that user (SSH keys, other
+// app data, ...) by passing a bare path or "file://" URL. There's no
+// legitimate reason a source needs that: every real-world source
+// references a remote CDN font URL.
 func (c *Canvas) loadBytes(location string) ([]byte, error) {
-	if strings.HasPrefix(location, "http://") || strings.HasPrefix(location, "https://") {
-		client := c.client()
-		req, err := http.NewRequest(http.MethodGet, location, nil)
-		if err != nil {
-			return nil, err
-		}
-		httpClient := client
-		if httpClient.Timeout == 0 {
-			httpClient = &http.Client{Timeout: 30 * time.Second, Transport: client.Transport, Jar: client.Jar, CheckRedirect: client.CheckRedirect}
-		}
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		return io.ReadAll(resp.Body)
+	if !strings.HasPrefix(location, "http://") && !strings.HasPrefix(location, "https://") {
+		return nil, fmt.Errorf("canvas: unsupported font location %q (only http/https are allowed)", location)
 	}
-	path := strings.TrimPrefix(location, "file://")
-	return os.ReadFile(path)
+	client := c.client()
+	req, err := http.NewRequest(http.MethodGet, location, nil)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := client
+	if httpClient.Timeout == 0 {
+		httpClient = &http.Client{Timeout: 30 * time.Second, Transport: client.Transport, Jar: client.Jar, CheckRedirect: client.CheckRedirect}
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
 }
 
 func drawScaled(gc *gg.Context, img image.Image, dstX, dstY, dstWidth, dstHeight float64) {

@@ -157,7 +157,12 @@ function SourceSettingsBrowser:pickSelect(entry)
             self:setValue(setting.Key, "select", { item.value }, item.value)
             return true
         end,
+        onCloseWidget = function(self_picker)
+            Menu.onCloseWidget(self_picker)
+            OpenWidgets.remove(self_picker)
+        end,
     }
+    OpenWidgets.push(picker)
     UIManager:show(picker)
 end
 
@@ -209,7 +214,12 @@ function SourceSettingsBrowser:pickMultiselect(entry)
             self:setValue(setting.Key, "multiselect", selected, selected)
             return true
         end,
+        onCloseWidget = function(self_picker)
+            Menu.onCloseWidget(self_picker)
+            OpenWidgets.remove(self_picker)
+        end,
     }
+    OpenWidgets.push(picker)
     UIManager:show(picker)
 end
 

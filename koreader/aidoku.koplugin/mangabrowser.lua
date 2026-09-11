@@ -51,10 +51,15 @@ function MangaBrowser:init()
     UIManager:nextTick(function() self:reload() end)
 end
 
--- See librarybrowser.lua's onCloseWidget for why this is needed.
+-- See librarybrowser.lua's onCloseWidget for why this is needed. Also
+-- records that this screen is gone, so a still-in-flight prefetchAhead
+-- (started before openLocal below closes this screen and switches to the
+-- reader) knows not to call refresh() on it once the prefetch finishes --
+-- see prefetchAhead's on_complete.
 function MangaBrowser:onCloseWidget()
     Menu.onCloseWidget(self)
     OpenWidgets.remove(self)
+    self.closed = true
 end
 
 -- The hamburger menu (see title_bar_left_icon above) groups the sort-order
@@ -91,9 +96,9 @@ end
 
 -- downloadedPath returns the local CBZ path for chapter_key if downloaded
 -- and still present, else "". Reads self.downloaded_keys (an in-memory
--- snapshot, not a per-row subprocess call -- a manga can have dozens of
--- chapters) with a cheap local lfs stat; a stale entry is just treated as
--- "not downloaded" rather than cleaned up here.
+-- snapshot, not a fresh index.db query each time -- a manga can have dozens
+-- of chapters) with a cheap local lfs stat; a stale entry is just treated
+-- as "not downloaded" rather than cleaned up here.
 function MangaBrowser:downloadedPath(chapter_key)
     local path = self.downloaded_keys[chapter_key]
     if not path or path == "" then
@@ -138,10 +143,10 @@ function MangaBrowser:refresh()
 end
 
 -- reloadDownloadedKeys fetches the full downloads index (unless a
--- previously-fetched list is passed in, to avoid a second subprocess call
+-- previously-fetched list is passed in, to avoid a second index.db query
 -- when reload() already has one) and keeps just this manga's entries, so
 -- per-row downloadedPath() lookups are local table reads instead of one
--- subprocess call each -- see the note on this in downloadedPath(). Returns
+-- SQLite query each -- see the note on this in downloadedPath(). Returns
 -- the full (unfiltered) list, for callers that also need it (reload()'s
 -- offline chapter-list fallback).
 function MangaBrowser:reloadDownloadedKeys(all)
@@ -258,7 +263,13 @@ function MangaBrowser:prefetchAhead(chapter)
         self.downloaded_keys[c.Key] = path
     end,
     function(any_new)
-        if any_new then
+        -- openLocal (the common caller into this, via downloadAndOpen/
+        -- onMenuHold below) closes this screen and switches to the reader
+        -- before this prefetch -- a real network download, taking real
+        -- time -- has a chance to finish. self.closed (set in
+        -- onCloseWidget) catches that: refreshing an already-closed Menu
+        -- widget is at best wasted work on something nobody can see.
+        if any_new and not self.closed then
             self:refresh()
         end
     end)
@@ -362,7 +373,12 @@ function MangaBrowser:downloadNext(n)
                     downloaded_any = true
                 end
             end
-            if downloaded_any then
+            -- Storage-limit prune is a persistent-storage concept -- skip
+            -- it under Ephemeral Mode, same guard as downloadAndOpen below
+            -- (this bulk path has no removeAllExcept() bounding residency,
+            -- but an unguarded prune could still delete a chapter this
+            -- same batch just downloaded before the user opens it).
+            if downloaded_any and not self.store:isEphemeralMode() then
                 self.downloads_engine:prune(self.store:downloadLimitBytes())
             end
             self:refresh()
@@ -437,9 +453,11 @@ function MangaBrowser:downloadAndOpen(chapter)
             -- Ephemeral Mode, removeAllExcept() below already keeps at most
             -- ~1-2 chapters resident, and running prune() on top of that risks
             -- deleting the chapter just downloaded before it's even opened, if
-            -- the user's saved limit happens to be smaller than that.
+            -- the user's saved limit happens to be smaller than that. Passing
+            -- path as keep_path covers the remaining case even when Ephemeral
+            -- Mode is off: a limit smaller than this one chapter's own size.
             if not self.store:isEphemeralMode() then
-                self.downloads_engine:prune(self.store:downloadLimitBytes())
+                self.downloads_engine:prune(self.store:downloadLimitBytes(), path)
             end
             self:refresh()
             self:openLocal(path)

@@ -57,8 +57,23 @@ func (h *Html) ParseHTML(data []byte, baseURL string) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
+	descriptor := h.Store.Store(root)
+	h.registerBase(descriptor, root, baseURL)
+	return descriptor, nil
+}
+
+// registerBase records root's base URL (if any) and arranges for that
+// entry to be pruned from h.bases when descriptor is later removed from
+// the Store -- otherwise root would stay reachable to the GC forever as a
+// baseURIs.roots map key. Every site that calls h.bases.set on a
+// freshly-stored root must go through this instead, so none of them can
+// reintroduce the leak by adding a bases.set without a matching cleanup.
+func (h *Html) registerBase(descriptor int32, root *nethtml.Node, baseURL string) {
+	if baseURL == "" {
+		return
+	}
 	h.bases.set(root, baseURL)
-	return h.Store.Store(root), nil
+	h.Store.OnRemove(descriptor, func() { h.bases.remove(root) })
 }
 
 func readMemString(m api.Module, offset, length int32) (string, bool) {
@@ -85,12 +100,13 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 			if err != nil {
 				return int32(htmlInvalidHTML)
 			}
+			descriptor := h.Store.Store(root)
 			if baseLen > 0 {
 				if baseURL, ok := readMemString(m, baseOff, baseLen); ok {
-					h.bases.set(root, baseURL)
+					h.registerBase(descriptor, root, baseURL)
 				}
 			}
-			return h.Store.Store(root)
+			return descriptor
 		}).
 		Export("parse")
 
@@ -108,12 +124,13 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 			for _, n := range nodes {
 				root.AppendChild(n)
 			}
+			descriptor := h.Store.Store(root)
 			if baseLen > 0 {
 				if baseURL, ok := readMemString(m, baseOff, baseLen); ok {
-					h.bases.set(root, baseURL)
+					h.registerBase(descriptor, root, baseURL)
 				}
 			}
-			return h.Store.Store(root)
+			return descriptor
 		}).
 		Export("parse_fragment")
 

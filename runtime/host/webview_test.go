@@ -168,6 +168,77 @@ func TestWebViewDOMTextContent(t *testing.T) {
 	}
 }
 
+// TestWebViewElementSrcAndHrefResolveAgainstPageURL guards against a
+// descrambling source reading a plain, unresolved relative URL back from
+// img.src/a.href -- real DOM .src/.href getters return the value resolved
+// against the document's base URL, like html.go's "abs:"-prefixed attr()
+// already does for the SwiftSoup-style API. getAttribute must still return
+// the raw value, matching real DOM semantics.
+func TestWebViewElementSrcAndHrefResolveAgainstPageURL(t *testing.T) {
+	wv := newTestWebView(t)
+	pageURL, err := url.Parse("https://example.com/manga/chapter-1/")
+	if err != nil {
+		t.Fatalf("url.Parse: %v", err)
+	}
+	wv.loadHTML(`<!doctype html><html><body>
+		<img id="cover" src="../cover.jpg">
+		<a id="next" href="page-2.html">next</a>
+	</body></html>`, pageURL)
+
+	cases := []struct {
+		expr string
+		want string
+	}{
+		{`document.getElementById('cover').src`, "https://example.com/manga/cover.jpg"},
+		{`document.getElementById('next').href`, "https://example.com/manga/chapter-1/page-2.html"},
+		{`document.getElementById('cover').getAttribute('src')`, "../cover.jpg"},
+		{`document.getElementById('next').getAttribute('href')`, "page-2.html"},
+	}
+	for _, c := range cases {
+		var result string
+		wv.loop.Run(func(vm *quickjs.VM) {
+			v, err := vm.Eval(c.expr, quickjs.EvalGlobal)
+			if err != nil {
+				t.Fatalf("Eval(%q): %v", c.expr, err)
+			}
+			result = stringify(v)
+		})
+		if result != c.want {
+			t.Errorf("%s = %q, want %q", c.expr, result, c.want)
+		}
+	}
+}
+
+// TestWebViewElementSrcSetterStoresRawValue checks that assigning .src
+// stores the raw value (like a real DOM setter), not a resolved one --
+// resolution only happens on read.
+func TestWebViewElementSrcSetterStoresRawValue(t *testing.T) {
+	wv := newTestWebView(t)
+	pageURL, err := url.Parse("https://example.com/manga/chapter-1/")
+	if err != nil {
+		t.Fatalf("url.Parse: %v", err)
+	}
+	wv.loadHTML(`<!doctype html><html><body><img id="cover"></body></html>`, pageURL)
+
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		v, err := vm.Eval(`
+			(() => {
+				const el = document.getElementById('cover');
+				el.src = "../cover2.jpg";
+				return el.getAttribute('src') + "|" + el.src;
+			})()
+		`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+		result = stringify(v)
+	})
+	if want := "../cover2.jpg|https://example.com/manga/cover2.jpg"; result != want {
+		t.Fatalf("got %q, want %q", result, want)
+	}
+}
+
 func TestWebViewQuerySelectorAllLiveElements(t *testing.T) {
 	wv := newTestWebView(t)
 	wv.loadHTML(`<!doctype html><html><body>

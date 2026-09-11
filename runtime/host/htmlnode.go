@@ -29,6 +29,14 @@ func (b *baseURIs) set(root *nethtml.Node, uri string) {
 	}
 }
 
+// remove drops root's entry. root staying as a map key would otherwise
+// keep the whole node tree reachable to the GC for the life of the
+// process, even after its Store descriptor is gone -- see Store.cleanup's
+// doc comment.
+func (b *baseURIs) remove(root *nethtml.Node) {
+	delete(b.roots, root)
+}
+
 func (b *baseURIs) get(n *nethtml.Node) string {
 	for cur := n; cur != nil; cur = cur.Parent {
 		if uri, ok := b.roots[cur]; ok {

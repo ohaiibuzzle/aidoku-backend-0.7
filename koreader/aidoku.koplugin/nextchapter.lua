@@ -36,13 +36,11 @@ local chapterLabel = Prefetch.chapterLabel
 -- caller should suppress KOReader's own end-of-book popup), false
 -- otherwise.
 function NextChapter.handle(ctx, file_path)
-    -- downloads_engine:byPath() is a subprocess call (the index moved to
-    -- the Go backend), and this function must return synchronously to its
-    -- caller -- there's no way to await a subprocess result before
-    -- returning. Only chapters we downloaded ever live under downloads_dir,
-    -- so a cheap path-prefix check tells us up front whether this document
-    -- could possibly be ours, without touching the index at all for the
-    -- common case of finishing some other, unrelated book.
+    -- downloads_engine:byPath() reads index.db directly (lua-ljsqlite3, no
+    -- subprocess call), but a cheap path-prefix check still avoids that
+    -- SQLite lookup entirely for the common case of finishing some other,
+    -- unrelated book: only chapters we downloaded ever live under
+    -- downloads_dir.
     if file_path:sub(1, #ctx.downloads_dir) ~= ctx.downloads_dir then
         return false
     end
@@ -196,10 +194,11 @@ function NextChapter.handle(ctx, file_path)
                 UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
                 return
             end
-            -- See the same note on skipping prune() under Ephemeral Mode in
+            -- See the same note on skipping prune() under Ephemeral Mode
+            -- (and passing path as keep_path even when it isn't) in
             -- mangabrowser.lua's downloadAndOpen.
             if not ctx.store:isEphemeralMode() then
-                ctx.downloads_engine:prune(ctx.store:downloadLimitBytes())
+                ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), path)
             end
             ctx.open_callback(path)
             if ctx.store:isEphemeralMode() then

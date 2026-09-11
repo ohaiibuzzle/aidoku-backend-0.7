@@ -136,20 +136,38 @@ function Store.new(data_dir)
 
     data_dir = (data_dir or ""):gsub("/+$", "")
     util.makePath(data_dir)
-    local db = SQ3.open(data_dir .. "/library.db")
-    db:set_busy_timeout(5000)
-    -- Real target hardware varies: some Kindle kernels can't safely mmap
-    -- for WAL ("Kernel too old to support mmap'ed I/O on /mnt/us", per
-    -- KOReader's own frontend/device/kindle/device.lua), so this idiom --
-    -- copied from vocabbuilder.koplugin/db.lua's real, hardware-tested
-    -- pattern, not invented here -- gates WAL behind KOReader's own
-    -- device-capability check rather than forcing it unconditionally.
-    if Device:canUseWAL() then
-        db:exec("PRAGMA journal_mode=WAL;")
-    else
-        db:exec("PRAGMA journal_mode=TRUNCATE;")
+
+    -- Unlike downloadsengine.lua's index.db (which degrades to
+    -- isAvailable() == false on open failure, since the plugin still works
+    -- without downloads), library.db backs nearly everything here --
+    -- bookmarks, history, settings -- so there's no meaningful "keep
+    -- going without it" state to degrade to. This still pcall-wraps the
+    -- open + schema setup so a failure (unwritable/unmounted storage, a
+    -- corrupt file) surfaces as one clear error instead of an unguarded
+    -- SQ3.open crashing plugin init with whatever raw message the SQLite
+    -- binding happened to produce.
+    local ok, db_or_err = pcall(function()
+        local db = SQ3.open(data_dir .. "/library.db")
+        db:set_busy_timeout(5000)
+        -- Real target hardware varies: some Kindle kernels can't safely
+        -- mmap for WAL ("Kernel too old to support mmap'ed I/O on
+        -- /mnt/us", per KOReader's own frontend/device/kindle/device.lua),
+        -- so this idiom -- copied from vocabbuilder.koplugin/db.lua's
+        -- real, hardware-tested pattern, not invented here -- gates WAL
+        -- behind KOReader's own device-capability check rather than
+        -- forcing it unconditionally.
+        if Device:canUseWAL() then
+            db:exec("PRAGMA journal_mode=WAL;")
+        else
+            db:exec("PRAGMA journal_mode=TRUNCATE;")
+        end
+        db:exec(LIBRARY_SCHEMA)
+        return db
+    end)
+    if not ok then
+        error("Aidoku: could not open library database at " .. data_dir .. "/library.db: " .. tostring(db_or_err), 0)
     end
-    db:exec(LIBRARY_SCHEMA)
+    local db = db_or_err
 
     migrateLegacyData(settings, db)
 

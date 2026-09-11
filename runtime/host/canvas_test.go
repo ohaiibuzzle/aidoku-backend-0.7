@@ -5,6 +5,8 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
+	"os"
 	"testing"
 
 	"github.com/fogleman/gg"
@@ -46,6 +48,53 @@ func TestCanvasGetImageDataProducesValidPNG(t *testing.T) {
 	}
 	if decoded.Bounds().Dx() != 4 || decoded.Bounds().Dy() != 4 {
 		t.Fatalf("unexpected decoded bounds: %v", decoded.Bounds())
+	}
+}
+
+func TestValidCanvasDimension(t *testing.T) {
+	cases := []struct {
+		name string
+		v    float32
+		want bool
+	}{
+		{"typical page width", 1200, true},
+		{"zero", 0, false},
+		{"negative", -1, false},
+		{"at cap", maxCanvasDimension, true},
+		{"over cap", maxCanvasDimension + 1, false},
+		{"NaN", float32(math.NaN()), false},
+		{"positive infinity", float32(math.Inf(1)), false},
+		{"negative infinity", float32(math.Inf(-1)), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := validCanvasDimension(c.v); got != c.want {
+				t.Errorf("validCanvasDimension(%v) = %v, want %v", c.v, got, c.want)
+			}
+		})
+	}
+}
+
+// TestLoadBytesRejectsLocalPaths guards against a guest-controlled font
+// location (canvas.load_font) reading arbitrary local files: aidoku-run
+// runs unsandboxed as the invoking user, so a bare path or "file://" URL
+// used to let any source read anything that user can read (SSH keys,
+// other app data, ...).
+func TestLoadBytesRejectsLocalPaths(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "secret-*.txt")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	if _, err := f.WriteString("do not read me"); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	f.Close()
+
+	c := &Canvas{Store: NewStore()}
+	for _, loc := range []string{f.Name(), "file://" + f.Name(), "/etc/passwd"} {
+		if _, err := c.loadBytes(loc); err == nil {
+			t.Errorf("loadBytes(%q): expected an error, got nil", loc)
+		}
 	}
 }
 

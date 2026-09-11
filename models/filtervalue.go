@@ -83,6 +83,8 @@ func (f *FilterValue) DecodePostcard(r *postcard.Reader) error {
 		if f.To, err = decodeOptionalF32(r); err != nil {
 			return err
 		}
+	default:
+		return fmt.Errorf("postcard: unknown filter value kind %d", kind)
 	}
 	return nil
 }

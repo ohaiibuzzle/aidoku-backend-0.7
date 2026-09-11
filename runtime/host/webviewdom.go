@@ -2,6 +2,7 @@ package host
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -177,6 +178,8 @@ const domPrelude = `
     set value(v) { __elSetProp(this.#h, "value", String(v)); }
     get href() { return __elGetProp(this.#h, "href"); }
     set href(v) { __elSetProp(this.#h, "href", String(v)); }
+    get src() { return __elGetProp(this.#h, "src"); }
+    set src(v) { __elSetProp(this.#h, "src", String(v)); }
     get parentElement() { return Element.wrap(__elGetProp(this.#h, "parentElement")); }
     get children() { return Element.wrapAll(__elGetProp(this.#h, "children")); }
     get nextElementSibling() { return Element.wrap(__elGetProp(this.#h, "nextElementSibling")); }
@@ -372,6 +375,21 @@ const domPrelude = `
 
 // registerDOM installs domPrelude and every host dispatcher it calls into
 // vm. Called once per VM (see ensureGlobals's globalsReady guard) — the
+// promiseCapabilityFailed logs (rather than panicking on) a
+// NewPromiseCapability failure. This runs inside a guest-dispatched
+// closure (fetch()/XMLHttpRequest.send()/Image.src=), so a panic here
+// isn't recoverable by the guest -- it crashes the whole aidoku-run
+// process instead, and it's exactly the kind of allocation more likely to
+// fail under the memory pressure this project targets (see CLAUDE.md).
+// Callers fall back to returning quickjs.UndefinedValue; the guest's own
+// script then throws an ordinary JS TypeError calling .then() on it -- a
+// guest-recoverable failure instead of a host crash.
+func (d *domBinder) promiseCapabilityFailed(where string, err error) {
+	if d.print != nil {
+		d.print(fmt.Sprintf("webview: %s: creating promise capability: %v", where, err))
+	}
+}
+
 // dispatchers themselves read d's live getters on every call, so they stay
 // correct across multiple loadHTML calls on the same VM.
 func (d *domBinder) registerDOM(vm *quickjs.VM) error {
@@ -434,9 +452,17 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		case "value":
 			v, _ := attrOf(n, "value")
 			return v, nil
-		case "href":
-			v, _ := attrOf(n, "href")
-			return v, nil
+		case "href", "src":
+			// The .href/.src IDL getters return the attribute resolved
+			// against the document's base URL, unlike getAttribute
+			// (__elGetAttr below), which returns it raw -- same
+			// distinction as html.go's plain attr() vs "abs:"-prefixed
+			// attr(). A challenge/page script reading img.src (the common
+			// case a descrambling source relies on) or an <a>/<link>'s
+			// .href with a relative value used to get that raw, unresolved
+			// value back instead.
+			v, _ := attrOf(n, arg(args, 1))
+			return resolveFromBase(d.pageURL, v), nil
 		case "parentElement":
 			if n.Parent == nil || n.Parent.Type != nethtml.ElementNode {
 				return nil, nil
@@ -471,8 +497,10 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 			setAttr(n, "class", val)
 		case "value":
 			setAttr(n, "value", val)
-		case "href":
-			setAttr(n, "href", val)
+		case "href", "src":
+			// Setters store the raw value, same as real DOM
+			// .href/.src -- resolution only happens on read (above).
+			setAttr(n, arg(args, 1), val)
 		}
 		return nil, nil
 	})); err != nil {
@@ -666,9 +694,11 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 	// (confirmed with a standalone reproduction against the real library
 	// before writing this).
 	if err := must(vm.RegisterFunc("__imgLoadCheck", func(src string) quickjs.Value {
+		src = resolveFromBase(d.pageURL, src)
 		pc, err := vm.NewPromiseCapability()
 		if err != nil {
-			panic(err)
+			d.promiseCapabilityFailed("__imgLoadCheck", err)
+			return quickjs.UndefinedValue
 		}
 		settle := func(vm2 *quickjs.VM) {
 			defer pc.Free()
@@ -698,7 +728,8 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		r.URL = resolveFromBase(d.pageURL, r.URL)
 		pc, err := vm.NewPromiseCapability()
 		if err != nil {
-			panic(err)
+			d.promiseCapabilityFailed("__xhrSend", err)
+			return quickjs.UndefinedValue
 		}
 		settle := func(vm2 *quickjs.VM) {
 			defer pc.Free()
@@ -737,7 +768,8 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		r.URL = resolveFromBase(d.pageURL, r.URL)
 		pc, err := vm.NewPromiseCapability()
 		if err != nil {
-			panic(err)
+			d.promiseCapabilityFailed("__fetchOp", err)
+			return quickjs.UndefinedValue
 		}
 		if d.rules().Blocks(r.URL, resourceTypeFetch) {
 			pc.Reject.Call(quickjs.UndefinedValue, "blocked by content rule list: "+r.URL)

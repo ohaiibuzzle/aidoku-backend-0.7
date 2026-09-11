@@ -1,6 +1,10 @@
 package models
 
-import "github.com/ohaiibuzzle/aidokurunner-go/postcard"
+import (
+	"fmt"
+
+	"github.com/ohaiibuzzle/aidokurunner-go/postcard"
+)
 
 // PageContext mirrors Swift's `typealias PageContext = [String: String]`.
 type PageContext = map[string]string
@@ -79,6 +83,8 @@ func (c *PageContent) DecodePostcard(r *postcard.Reader) error {
 		if c.FilePath, err = r.ReadString(); err != nil {
 			return err
 		}
+	default:
+		return fmt.Errorf("postcard: unknown page content kind %d", kind)
 	}
 	return nil
 }

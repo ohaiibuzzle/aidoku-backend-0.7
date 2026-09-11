@@ -6,6 +6,7 @@ package settingsstore
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -54,14 +55,28 @@ func (s *Store) save() error {
 	if s.path == "" {
 		return nil
 	}
+	// Snapshot values under the lock, then do JSON marshal + disk I/O
+	// unlocked -- SetValue releases s.mu before calling save(), so two
+	// concurrent SetValues (e.g. net.send_all's per-descriptor goroutines
+	// each hitting defaults.set) would otherwise range s.values here while
+	// another goroutine mutates it, which is a fatal, unrecoverable
+	// concurrent map read/write in Go.
+	s.mu.Lock()
 	tagged := make(map[string]taggedValue, len(s.values))
 	for k, v := range s.values {
 		tv, ok := tag(v)
 		if !ok {
-			continue // unsupported type; silently skip persistence
+			// A caller passed a type SetValue's contract doesn't support
+			// (bool/int32/float32/string/[]string/[]byte, see tag()) --
+			// surface it rather than just dropping the value on the floor,
+			// so this doesn't look like a successful SetValue that quietly
+			// never persists.
+			fmt.Fprintf(os.Stderr, "settingsstore: %q has unsupported value type %T, not persisted\n", k, v)
+			continue
 		}
 		tagged[k] = tv
 	}
+	s.mu.Unlock()
 	data, err := json.Marshal(tagged)
 	if err != nil {
 		return err

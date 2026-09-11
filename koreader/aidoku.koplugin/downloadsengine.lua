@@ -136,19 +136,32 @@ function DownloadsEngine:remove(source_key, manga_key, chapter_key)
 end
 
 -- list returns every downloaded chapter, most recently downloaded first.
+-- list's caller (downloadsbrowser.lua) already checks for a (nil, err)
+-- return -- but prepare()/step() raise a Lua error on failure (e.g. the
+-- busy-timeout expiring while a concurrent aidoku-run write holds the
+-- file, mid-Trapper:wrap) rather than returning one, so that error
+-- handling used to be unreachable dead code and a busy-timeout expiry
+-- here crashed instead. pcall makes the actual failure mode match what
+-- the caller already expects.
 function DownloadsEngine:list()
     if not self:tableExists() then
         return {}
     end
-    local stmt = self.conn:prepare(
-        "SELECT " .. ENTRY_COLUMNS .. " FROM downloads ORDER BY downloaded_at DESC")
-    local entries = {}
-    local row = {}
-    while stmt:step(row) do
-        table.insert(entries, rowToEntry(row))
+    local ok, entries_or_err = pcall(function()
+        local stmt = self.conn:prepare(
+            "SELECT " .. ENTRY_COLUMNS .. " FROM downloads ORDER BY downloaded_at DESC")
+        local entries = {}
+        local row = {}
+        while stmt:step(row) do
+            table.insert(entries, rowToEntry(row))
+        end
+        stmt:close()
+        return entries
+    end)
+    if not ok then
+        return nil, entries_or_err
     end
-    stmt:close()
-    return entries
+    return entries_or_err
 end
 
 -- totalBytes returns the sum of every indexed download's size.
@@ -162,7 +175,15 @@ end
 -- prune deletes the oldest downloads (index entry + file) until under
 -- limit_bytes, returning what was removed. limit_bytes <= 0 means "no
 -- limit" (store.lua's zero-value default for an unset preference).
-function DownloadsEngine:prune(limit_bytes)
+--
+-- keep_path, if given, is never deleted even if it's needed to get under
+-- limit_bytes. Every real caller of this calls it on the chapter it's
+-- about to open (mangabrowser.lua's downloadAndOpen, nextchapter.lua's
+-- fetchAndOpen) *before* actually opening it -- without keep_path, a
+-- storage limit smaller than that one chapter's own size would walk right
+-- past every older chapter and delete the one about to be opened too,
+-- since nothing here knew to protect it.
+function DownloadsEngine:prune(limit_bytes, keep_path)
     if not limit_bytes or limit_bytes <= 0 then
         return {}
     end
@@ -170,17 +191,19 @@ function DownloadsEngine:prune(limit_bytes)
     if total <= limit_bytes then
         return {}
     end
-    local entries = self:list() -- most-recently-downloaded first
+    local entries = self:list() or {} -- most-recently-downloaded first
     local removed = {}
     for i = #entries, 1, -1 do -- walk from the oldest end
         if total <= limit_bytes then
             break
         end
         local e = entries[i]
-        local ok = self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
-        if ok then
-            total = total - e.sizeBytes
-            table.insert(removed, e)
+        if e.path ~= keep_path then
+            local ok = self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
+            if ok then
+                total = total - e.sizeBytes
+                table.insert(removed, e)
+            end
         end
     end
     return removed
@@ -193,7 +216,7 @@ end
 -- (keep_path = the newly opened path) -- see mangabrowser.lua/nextchapter.lua/
 -- settingsbrowser.lua.
 function DownloadsEngine:removeAllExcept(keep_path)
-    for _, e in ipairs(self:list()) do
+    for _, e in ipairs(self:list() or {}) do
         if e.path ~= keep_path then
             self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
         end
