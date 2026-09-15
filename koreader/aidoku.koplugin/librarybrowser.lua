@@ -208,7 +208,7 @@ function LibraryBrowser:checkForUpdates()
         end
         if result.status == "up_to_date" then
             UIManager:show(InfoMessage:new{
-                text = T(_("Aidoku is up to date (%1)."), result.current),
+                text = T(_("Plugin is up to date (%1)."), result.current),
                 timeout = 2,
             })
             return
