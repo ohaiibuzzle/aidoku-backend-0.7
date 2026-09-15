@@ -133,13 +133,8 @@ func (w *Writer) WritePage(data []byte) error {
 	return nil
 }
 
-// WriteComicInfo adds a ComicInfo.xml entry to the archive, holding the
-// metadata most comic/manga readers besides this project's own KOReader
-// plugin (Komga, Kavita, CDisplayEx, YACReader, ...) look for. Call it at
-// most once, before any WritePage call -- writing it first matches the
-// convention most of those tools follow themselves, though nothing about
-// page order actually depends on it, since readers match pages by file
-// extension, not by zip entry position.
+// WriteComicInfo adds a ComicInfo.xml entry to the archive. Call it at
+// most once, before any WritePage calls
 func (w *Writer) WriteComicInfo(data []byte) error {
 	zf, err := w.zw.CreateHeader(&zip.FileHeader{Name: "ComicInfo.xml", Method: zip.Store})
 	if err != nil {
