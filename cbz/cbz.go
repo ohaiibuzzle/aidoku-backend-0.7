@@ -133,6 +133,24 @@ func (w *Writer) WritePage(data []byte) error {
 	return nil
 }
 
+// WriteComicInfo adds a ComicInfo.xml entry to the archive, holding the
+// metadata most comic/manga readers besides this project's own KOReader
+// plugin (Komga, Kavita, CDisplayEx, YACReader, ...) look for. Call it at
+// most once, before any WritePage call -- writing it first matches the
+// convention most of those tools follow themselves, though nothing about
+// page order actually depends on it, since readers match pages by file
+// extension, not by zip entry position.
+func (w *Writer) WriteComicInfo(data []byte) error {
+	zf, err := w.zw.CreateHeader(&zip.FileHeader{Name: "ComicInfo.xml", Method: zip.Store})
+	if err != nil {
+		return fmt.Errorf("cbz: adding ComicInfo.xml: %w", err)
+	}
+	if _, err := zf.Write(data); err != nil {
+		return fmt.Errorf("cbz: writing ComicInfo.xml: %w", err)
+	}
+	return nil
+}
+
 // Close finishes the archive and atomically renames it into place at the
 // path passed to NewWriter. Call it only once every page has been written
 // successfully; on any WritePage error, call Abort instead so a partial

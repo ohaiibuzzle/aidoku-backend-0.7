@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/cbz"
@@ -196,6 +197,16 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 		return "", err
 	}
 
+	comicInfo, err := buildComicInfo(manga, chapter, len(pages)).Marshal()
+	if err != nil {
+		w.Abort()
+		return "", fmt.Errorf("source: building ComicInfo.xml: %w", err)
+	}
+	if err := w.WriteComicInfo(comicInfo); err != nil {
+		w.Abort()
+		return "", err
+	}
+
 	zipCache := make(map[string][]byte)
 	for i, page := range pages {
 		img, err := s.downloadPage(ctx, page, zipCache)
@@ -216,6 +227,61 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 		return "", err
 	}
 	return outputPath, nil
+}
+
+// buildComicInfo maps the manga/chapter fields that translate onto
+// ComicInfo.xml honestly -- see cbz.ComicInfo's doc comment for which
+// fields are deliberately left out and why.
+func buildComicInfo(manga models.Manga, chapter models.Chapter, pageCount int) cbz.ComicInfo {
+	info := cbz.ComicInfo{
+		Series:    manga.Title,
+		Genre:     strings.Join(manga.Tags, ", "),
+		Writer:    strings.Join(manga.Authors, ", "),
+		PageCount: pageCount,
+	}
+	if chapter.Title != nil {
+		info.Title = *chapter.Title
+	}
+	if manga.Description != nil {
+		info.Summary = *manga.Description
+	}
+	if len(manga.Artists) > 0 {
+		artists := strings.Join(manga.Artists, ", ")
+		info.Penciller = artists
+		info.CoverArtist = artists
+	}
+	if chapter.ChapterNumber != nil {
+		info.Number = formatComicInfoNumber(*chapter.ChapterNumber)
+	}
+	if chapter.VolumeNumber != nil {
+		info.Volume = formatComicInfoNumber(*chapter.VolumeNumber)
+	}
+	if chapter.URL != nil {
+		info.Web = *chapter.URL
+	} else if manga.URL != nil {
+		info.Web = *manga.URL
+	}
+	if chapter.Language != nil {
+		info.LanguageISO = *chapter.Language
+	}
+	if len(chapter.Scanlators) > 0 {
+		info.ScanInformation = strings.Join(chapter.Scanlators, ", ")
+	}
+	if chapter.DateUploaded != nil {
+		y, m, d := chapter.DateUploaded.Date()
+		info.Year, info.Month, info.Day = y, int(m), d
+	}
+	return info
+}
+
+// formatComicInfoNumber renders a ComicInfo Number/Volume value, dropping a
+// pointless ".0" for whole numbers -- the same convention ChapterLabel
+// already uses for display.
+func formatComicInfoNumber(n float32) string {
+	if n == float32(int64(n)) {
+		return strconv.FormatInt(int64(n), 10)
+	}
+	return strconv.FormatFloat(float64(n), 'g', -1, 32)
 }
 
 func defaultCBZName(manga models.Manga, chapter models.Chapter) string {
