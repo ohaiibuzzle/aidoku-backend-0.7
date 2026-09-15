@@ -83,6 +83,14 @@ commands:
   repo list <index-url>              fetch a source-repository index (index.min.json) and list its sources
   repo install <index-url> <source-id> <dest-dir>
                                      download a source's .aix from a repository index into dest-dir
+  update check <bin-arch> <current-version>
+                                     compare current-version against the latest GitHub release's
+                                     "aidoku-koplugin-<bin-arch>-*" asset; current-version is whatever
+                                     the caller read from its own VERSION file (empty/unparseable is fine --
+                                     reported back as status "unknown_current" rather than an error)
+  update apply <plugin-dir> <asset-url>
+                                     download a release zip (as named/produced above) and atomically
+                                     replace plugin-dir's contents with it
 Cookies stored with `+"`cookie load`"+` are injected into a source's requests
 for the matching domain on every command, helping get past Cloudflare.
 
@@ -95,9 +103,12 @@ anything other than one-off CLI testing.
 NETWORK_CONCURRENCY, if set to a positive integer, bounds how many requests
 a guest's net.send_all call runs at once (default 8).
 
-The <source-dir> argument is required but ignored by the `+"`cookie`"+` and `+"`repo`"+`
-subcommands, which don't operate on a loaded source. `+"`manifest`"+` does use it, but
-reads source.json directly rather than loading the source.`)
+AIDOKU_UPDATE_REPO, if set, overrides the "owner/repo" GitHub slug `+"`update`"+`
+checks/downloads releases from (default ohaiibuzzle/aidoku-backend-0.7).
+
+The <source-dir> argument is required but ignored by the `+"`cookie`"+`, `+"`repo`"+` and
+`+"`update`"+` subcommands, which don't operate on a loaded source. `+"`manifest`"+` does use
+it, but reads source.json directly rather than loading the source.`)
 }
 
 func run(dir, command string, args []string) error {
@@ -131,6 +142,9 @@ func run(dir, command string, args []string) error {
 	}
 	if command == "manifest" {
 		return handleManifest(dir)
+	}
+	if command == "update" {
+		return handleUpdate(ctx, args)
 	}
 
 	src, err := source.LoadPath(ctx, dir, runtime.Config{

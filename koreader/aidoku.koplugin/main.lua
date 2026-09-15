@@ -73,6 +73,11 @@ function Aidoku:init()
     -- koreader/build.sh produces ("armv6"/"armv7" for Kindles/Kobos,
     -- "arm64"/"x64" for aarch64/x86-64 devices and desktops).
     local bin_arch = binArch()
+    -- Kept on self (not just the local above) so other top-level screens
+    -- (see librarybrowser.lua's "aidoku = self" threading) can build the
+    -- same "aidoku-koplugin-<bin_arch>-*" asset name the release workflow
+    -- uses, without duplicating binArch()'s /proc/cpuinfo probing.
+    self.bin_arch = bin_arch
     self.store = Store.new(dataSubdir(""))
     self.engine = Engine.new(self.path .. "/bin/" .. bin_arch .. "/aidoku-run", function()
         local concurrency = self.store:networkConcurrency()

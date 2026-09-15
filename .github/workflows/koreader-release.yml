@@ -65,6 +65,22 @@ jobs:
         # ships).
         run: rsync -a --exclude='bin' koreader/aidoku.koplugin/ staging/aidoku.koplugin/
 
+      - name: Stamp version
+        # VERSION ships inside the bundle so an installed copy can read its
+        # own version at runtime (cmd/aidoku-run's `update check` compares
+        # this against the latest release's tag) -- the tag/sha otherwise
+        # only exists in this workflow's own naming of the zip/artifact,
+        # which the installed files never see. Tag builds get the real
+        # version; branch builds (main/senpai, not release-worthy) get a
+        # "dev-<sha>" marker that `update check` reports as
+        # status=unknown_current rather than a comparable version.
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "${{ github.ref_name }}" > staging/aidoku.koplugin/VERSION
+          else
+            echo "dev-${{ github.sha }}" > staging/aidoku.koplugin/VERSION
+          fi
+
       - name: Package zip
         run: |
           set -euo pipefail

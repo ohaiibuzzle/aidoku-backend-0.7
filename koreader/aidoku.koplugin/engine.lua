@@ -64,6 +64,19 @@ function Engine:cookieClear()
     return self.runner:exec({ "-", "cookie", "clear" }, nil, self:sourceEnv())
 end
 
+-- checkUpdate/selfUpdate don't load a source either (see handleUpdate() in
+-- cmd/aidoku-run/main.go), so they take the same unused leading "-" as
+-- repo/cookie above. No sourceEnv() -- AIDOKU_UPDATE_REPO (if a fork needs
+-- it) is a real process environment variable set by however KOReader itself
+-- was launched, not a plugin setting threaded through here.
+function Engine:checkUpdate(bin_arch, current_version)
+    return self.runner:execJSON({ "-", "update", "check", bin_arch, current_version }, _("Checking for updates…"))
+end
+
+function Engine:selfUpdate(plugin_dir, asset_url)
+    return self.runner:execJSON({ "-", "update", "apply", plugin_dir, asset_url }, _("Downloading update…"))
+end
+
 function Engine:info(source_path)
     return self.runner:execJSON({ source_path, "info" }, _("Loading source…"), self:sourceEnv())
 end

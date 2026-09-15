@@ -160,9 +160,93 @@ function LibraryBrowser:onLeftButtonTap()
                     self:refresh()
                 end,
             }},
+            {{
+                text = _("Check for Updates"),
+                callback = function()
+                    UIManager:close(dialog)
+                    self:checkForUpdates()
+                end,
+            }},
         },
     }
     UIManager:show(dialog)
+end
+
+-- readOwnVersion reads the VERSION file the release workflow stamps into
+-- the plugin bundle (see koreader-release.yml's "Stamp version" step). A
+-- dev checkout built by koreader/build.sh rather than that workflow has no
+-- VERSION file at all -- returning "" for that case rather than erroring
+-- is deliberate: aidoku-run's `update check` treats an unparseable current
+-- version as status "unknown_current" and still reports the latest
+-- release, instead of failing the whole check.
+local function readOwnVersion(plugin_path)
+    local f = io.open(plugin_path .. "/VERSION", "r")
+    if not f then
+        return ""
+    end
+    local v = f:read("*a") or ""
+    f:close()
+    return (v:gsub("%s+$", ""))
+end
+
+-- checkForUpdates/applyUpdate are a deliberate two-step flow (check, show
+-- what's available, only then download) rather than one combined call --
+-- see cmd/aidoku-run's `update check`/`update apply` split. Each step gets
+-- its own Trapper:wrap at the point it actually shells out, same as
+-- RepoBrowser:onMenuSelect's install flow; the ConfirmBox shown between
+-- them is a plain UI dialog, not a subprocess call, so it doesn't need to
+-- share a wrap with either.
+function LibraryBrowser:checkForUpdates()
+    local plugin_path = self.aidoku.path
+    local bin_arch = self.aidoku.bin_arch
+    local current_version = readOwnVersion(plugin_path)
+    Trapper:wrap(function()
+        local result, err = self.engine:checkUpdate(bin_arch, current_version)
+        if not result then
+            UIManager:show(InfoMessage:new{ text = T(_("Could not check for updates:\n%1"), err) })
+            return
+        end
+        if result.status == "up_to_date" then
+            UIManager:show(InfoMessage:new{
+                text = T(_("Aidoku is up to date (%1)."), result.current),
+                timeout = 2,
+            })
+            return
+        end
+        local message
+        if result.status == "update_available" then
+            message = T(
+                _("Update available: %1\n(current: %2)"),
+                result.latest,
+                current_version == "" and _("unknown") or current_version
+            )
+        else
+            message = T(
+                _("Latest release is %1.\nYour installed version could not be determined."),
+                result.latest
+            )
+        end
+        UIManager:show(ConfirmBox:new{
+            text = message,
+            ok_text = _("Download & Install"),
+            ok_callback = function()
+                self:applyUpdate(result)
+            end,
+        })
+    end)
+end
+
+function LibraryBrowser:applyUpdate(check_result)
+    Trapper:wrap(function()
+        local applied, err = self.engine:selfUpdate(self.aidoku.path, check_result.assetUrl)
+        if not applied then
+            UIManager:show(InfoMessage:new{ text = T(_("Update failed:\n%1"), err) })
+            return
+        end
+        UIManager:show(InfoMessage:new{
+            text = T(_("Updated to %1. Restart KOReader to apply the update."), applied.version),
+        })
+    end)
 end
 
 -- migrateLegacyBookmark handles a bookmark saved before source_key existed
