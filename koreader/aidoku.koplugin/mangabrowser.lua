@@ -70,26 +70,34 @@ end
 -- icon itself, same technique as librarybrowser.lua:82-136.
 function MangaBrowser:onLeftButtonTap()
     local dialog
+    local buttons = {
+        {{
+            text = self.store:sortOrder() == "asc" and _("Sort: Oldest first") or _("Sort: Newest first"),
+            callback = function()
+                UIManager:close(dialog)
+                self.store:setSortOrder(self.store:sortOrder() == "asc" and "desc" or "asc")
+                self:refresh()
+            end,
+        }},
+    }
+    -- Bulk pre-downloading conflicts with Ephemeral Mode's residency cap
+    -- (removeAllExcept keeps at most ~1-2 chapters resident globally -- see
+    -- CLAUDE.md's "Ephemeral Mode" section) -- anything queued here would
+    -- just get deleted again before it's ever read, so hide the option
+    -- entirely rather than let it queue work that can't stick.
+    if not self.store:isEphemeralMode() then
+        table.insert(buttons, {{
+            text = _("Download next chapters…"),
+            callback = function()
+                UIManager:close(dialog)
+                self:promptBulkDownload()
+            end,
+        }})
+    end
     dialog = ButtonDialog:new{
         shrink_unneeded_width = true,
         anchor = function() return self.title_bar.left_button.image.dimen end,
-        buttons = {
-            {{
-                text = self.store:sortOrder() == "asc" and _("Sort: Oldest first") or _("Sort: Newest first"),
-                callback = function()
-                    UIManager:close(dialog)
-                    self.store:setSortOrder(self.store:sortOrder() == "asc" and "desc" or "asc")
-                    self:refresh()
-                end,
-            }},
-            {{
-                text = _("Download next chapters…"),
-                callback = function()
-                    UIManager:close(dialog)
-                    self:promptBulkDownload()
-                end,
-            }},
-        },
+        buttons = buttons,
     }
     UIManager:show(dialog)
 end
