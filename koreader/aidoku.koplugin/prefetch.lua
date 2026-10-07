@@ -11,7 +11,7 @@ local ChapterOrder = require("chapterorder")
 local Trapper = require("ui/trapper")
 local util = require("util")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local Prefetch = {}
 

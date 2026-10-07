@@ -40,6 +40,17 @@ local function rowToEntry(row)
     }
 end
 
+-- purgeSidecar deletes a document's KOReader reading-progress sidecar,
+-- using DocSettings:getSidecarDir rather than a guessed "<path>.sdr" path
+-- since the user's document_metadata_folder setting can relocate sidecars
+-- away from the document. Best-effort: a purgeDir failure is ignored.
+local function purgeSidecar(path)
+    local sidecar_dir = DocSettings:getSidecarDir(path)
+    if sidecar_dir ~= "" and lfs.attributes(sidecar_dir, "mode") == "directory" then
+        ffiUtil.purgeDir(sidecar_dir)
+    end
+end
+
 function DownloadsEngine.new(downloads_dir)
     local self = setmetatable({
         downloads_dir = downloads_dir,
@@ -107,11 +118,8 @@ end
 
 -- remove deletes the index entry, its backing file, and its KOReader
 -- reading-progress sidecar (all no-ops, not errors, if already absent).
--- Sidecar cleanup is unconditional (not just Ephemeral Mode), using
--- DocSettings:getSidecarDir rather than a guessed "<path>.sdr" path since
--- the user's document_metadata_folder setting can relocate sidecars away
--- from the document. Best-effort: a purgeDir failure doesn't fail
--- remove() itself.
+-- Sidecar cleanup is unconditional (not just Ephemeral Mode) -- see
+-- purgeSidecar.
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
     local path = self:path(source_key, manga_key, chapter_key)
     if path == "" then
@@ -128,11 +136,22 @@ function DownloadsEngine:remove(source_key, manga_key, chapter_key)
             return false, err
         end
     end
-    local sidecar_dir = DocSettings:getSidecarDir(path)
-    if sidecar_dir ~= "" and lfs.attributes(sidecar_dir, "mode") == "directory" then
-        ffiUtil.purgeDir(sidecar_dir)
-    end
+    purgeSidecar(path)
     return true
+end
+
+-- resetProgress drops the reading-progress sidecar of every downloaded
+-- chapter of one manga, leaving the CBZs themselves in place, so they
+-- reopen at page 1. Used by mangabrowser.lua's "Reset reading progress".
+function DownloadsEngine:resetProgress(source_key, manga_key)
+    if not self:tableExists() then
+        return
+    end
+    for _, e in ipairs(self:list() or {}) do
+        if e.sourceKey == source_key and e.mangaKey == manga_key then
+            purgeSidecar(e.path)
+        end
+    end
 end
 
 -- list returns every downloaded chapter, most recently downloaded first.

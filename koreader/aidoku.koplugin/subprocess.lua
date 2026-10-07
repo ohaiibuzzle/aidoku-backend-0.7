@@ -17,7 +17,7 @@ local Trapper = require("ui/trapper")
 local json = require("json")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local Runner = {}
 Runner.__index = Runner

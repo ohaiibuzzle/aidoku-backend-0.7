@@ -17,7 +17,7 @@ local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local SourceSettingsBrowser = Menu:extend{}
 

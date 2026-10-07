@@ -312,9 +312,11 @@ end
 
 -- ===== Read chapters =====
 
--- Marked only automatically, when the reader hits a chapter's end-of-book
--- event (see main.lua's hookEndOfBook) -- there's no manual toggle, so row
--- presence alone means "read"; there's no boolean column to check.
+-- Marked automatically when the reader hits a chapter's end-of-book event
+-- (see main.lua's hookEndOfBook), or manually via mangabrowser.lua's
+-- per-chapter "Mark as read/unread" and whole-manga "Reset reading
+-- progress". Row presence alone means "read"; there's no boolean column to
+-- check, so unmarking is a DELETE.
 function Store:isChapterRead(source_key, manga_key, chapter_key)
     return pstep(false, function()
         local stmt = self.db:prepare(
@@ -331,6 +333,28 @@ function Store:markChapterRead(source_key, manga_key, chapter_key)
         local stmt = self.db:prepare(
             "INSERT OR IGNORE INTO read_chapters (source_key, manga_key, chapter_key) VALUES (?, ?, ?)")
         stmt:bind(source_key, manga_key, chapter_key)
+        stmt:step()
+        stmt:close()
+    end)
+end
+
+function Store:markChapterUnread(source_key, manga_key, chapter_key)
+    pstep(nil, function()
+        local stmt = self.db:prepare(
+            "DELETE FROM read_chapters WHERE source_key=? AND manga_key=? AND chapter_key=?")
+        stmt:bind(source_key, manga_key, chapter_key)
+        stmt:step()
+        stmt:close()
+    end)
+end
+
+-- resetReadChapters unmarks every chapter of one manga. Deliberately leaves
+-- last_read alone -- that's "when was this manga last opened" for the
+-- Library sort, not "how far along am I".
+function Store:resetReadChapters(source_key, manga_key)
+    pstep(nil, function()
+        local stmt = self.db:prepare("DELETE FROM read_chapters WHERE source_key=? AND manga_key=?")
+        stmt:bind(source_key, manga_key)
         stmt:step()
         stmt:close()
     end)

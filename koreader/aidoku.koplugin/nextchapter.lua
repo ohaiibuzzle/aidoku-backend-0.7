@@ -20,7 +20,7 @@ local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local util = require("util")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local NextChapter = {}
 
@@ -64,7 +64,7 @@ function NextChapter.handle(ctx, file_path)
         -- they always run regardless of connectivity.
         local found = InstalledSources.findByKey(ctx.sources_dir, ctx.engine, entry.sourceKey)
         if not found then
-            UIManager:show(InfoMessage:new{ text = _("Could not check for next chapter: this source is no longer installed.") })
+            UIManager:show(InfoMessage:new{ text = _("Source no longer installed.") })
             return
         end
         local source_path = found.path
@@ -142,7 +142,7 @@ function NextChapter.handle(ctx, file_path)
         -- the local-first check above is to let already-downloaded content
         -- just work without a network fuss.
         if not NetworkMgr:isConnected() then
-            UIManager:show(InfoMessage:new{ text = _("No downloaded next chapter, and you're offline."), timeout = 2 })
+            UIManager:show(InfoMessage:new{ text = _("Offline, and the next chapter isn't downloaded."), timeout = 2 })
             return
         end
 
@@ -166,7 +166,7 @@ function NextChapter.handle(ctx, file_path)
         local upcoming = ChapterOrder.after(chapters, entry.chapterKey, 1)
         local next_chapter = upcoming[1]
         if not next_chapter then
-            UIManager:show(InfoMessage:new{ text = _("You're all caught up -- no next chapter yet."), timeout = 2 })
+            UIManager:show(InfoMessage:new{ text = _("No next chapter yet."), timeout = 2 })
             return
         end
         prefetch_ctx.manga = updated

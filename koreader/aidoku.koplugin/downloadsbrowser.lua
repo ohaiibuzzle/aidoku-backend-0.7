@@ -12,7 +12,7 @@ local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local lfs = require("libs/libkoreader-lfs")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local DownloadsBrowser = Menu:extend{
     title = _("Downloaded chapters"),
@@ -78,7 +78,7 @@ function DownloadsBrowser:onMenuSelect(item)
     end
     local entry = item.download_entry
     if lfs.attributes(entry.path, "mode") ~= "file" then
-        UIManager:show(InfoMessage:new{ text = _("That download is no longer available."), timeout = 2 })
+        UIManager:show(InfoMessage:new{ text = _("Download no longer available."), timeout = 2 })
         self:reload()
         return true
     end
@@ -100,7 +100,7 @@ function DownloadsBrowser:onMenuHold(item)
     end
     local entry = item.download_entry
     UIManager:show(ConfirmBox:new{
-        text = T(_("Remove downloaded chapter?\n\n%1"), item.text),
+        text = T(_("Remove download?\n\n%1"), item.text),
         ok_text = _("Remove"),
         ok_callback = function()
             Trapper:wrap(function()

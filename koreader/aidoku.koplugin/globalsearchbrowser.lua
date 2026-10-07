@@ -18,11 +18,11 @@ local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local GlobalSearchBrowser = Menu:extend{
     title = _("Search all sources"),
-    subtitle = _("Hold a result to add or remove it from your library"),
+    subtitle = _("Hold a result to add/remove from library"),
 }
 
 -- Manga.Title is a plain (non-pointer) Go string, so an absent title
@@ -126,7 +126,7 @@ function GlobalSearchBrowser:runSearch(query)
                 UIManager:show(InfoMessage:new{ text = _("No results from any source."), timeout = 2 })
             elseif #failed > 0 then
                 UIManager:show(InfoMessage:new{
-                    text = T(_("Some sources failed to search: %1"), table.concat(failed, ", ")),
+                    text = T(_("Some sources failed: %1"), table.concat(failed, ", ")),
                     timeout = 3,
                 })
             end

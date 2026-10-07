@@ -14,7 +14,7 @@ local Menu = require("ui/widget/menu")
 local OpenWidgets = require("openwidgets")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local FilterBrowser = Menu:extend{
     title = _("Search filters"),

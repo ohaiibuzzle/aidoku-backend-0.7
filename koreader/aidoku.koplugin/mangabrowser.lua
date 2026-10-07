@@ -26,7 +26,7 @@ local UIManager = require("ui/uimanager")
 local lfs = require("libs/libkoreader-lfs")
 local util = require("util")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local MangaBrowser = Menu:extend{}
 
@@ -94,12 +94,37 @@ function MangaBrowser:onLeftButtonTap()
             end,
         }})
     end
+    table.insert(buttons, {{
+        text = _("Reset reading progress…"),
+        callback = function()
+            UIManager:close(dialog)
+            self:promptResetProgress()
+        end,
+    }})
     dialog = ButtonDialog:new{
         shrink_unneeded_width = true,
         anchor = function() return self.title_bar.left_button.image.dimen end,
         buttons = buttons,
     }
     UIManager:show(dialog)
+end
+
+-- promptResetProgress clears every read mark for this manga (so Resume and
+-- "Download next chapters…" start over from the first chapter) and wipes
+-- the saved page position of its downloaded chapters (so they reopen at
+-- page 1). Downloads themselves and the Library's last_read timestamp are
+-- left alone.
+function MangaBrowser:promptResetProgress()
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Reset progress for %1?\n\nClears read marks and page positions."),
+            mangaLabel(self.manga)),
+        ok_text = _("Reset"),
+        ok_callback = function()
+            self.store:resetReadChapters(self.source_key, self.manga.Key)
+            self.downloads_engine:resetProgress(self.source_key, self.manga.Key)
+            self:refresh()
+        end,
+    })
 end
 
 -- downloadedPath returns the local CBZ path for chapter_key if downloaded
@@ -284,8 +309,8 @@ function MangaBrowser:prefetchAhead(chapter)
 end
 
 -- findLastReadChapter returns the Key of the last chapter (in ordered,
--- ascending reading order) marked read via store:markChapterRead (set only
--- on end-of-book -- see the note on this in store.lua), or nil if none of
+-- ascending reading order) marked read via store:markChapterRead (set on
+-- end-of-book or manually -- see the note on this in store.lua), or nil if none of
 -- them are. There's no direct "last read chapter" pointer in store.lua
 -- (only this per-chapter boolean and a separate manga-level lastReadAt
 -- timestamp used for library sorting) -- this is how downloadNext() finds
@@ -331,7 +356,7 @@ function MangaBrowser:downloadNext(n)
         end
     end
     if #upcoming == 0 then
-        UIManager:show(InfoMessage:new{ text = _("You're all caught up -- no next chapter yet."), timeout = 2 })
+        UIManager:show(InfoMessage:new{ text = _("No next chapter yet."), timeout = 2 })
         return
     end
 
@@ -370,7 +395,7 @@ function MangaBrowser:downloadNext(n)
                             -- bulk action isn't an error, it's the user
                             -- stopping partway through on purpose.
                             UIManager:show(InfoMessage:new{
-                                text = T(_("Cancelled -- downloaded %1 of %2 chapters."), i - 1, #upcoming),
+                                text = T(_("Cancelled after %1 of %2 chapters."), i - 1, #upcoming),
                             })
                         else
                             UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), err) })
@@ -401,13 +426,13 @@ function MangaBrowser:promptBulkDownload()
         -- reload() populates self.chapters asynchronously (deferred via
         -- UIManager:nextTick past init()) -- the hamburger menu can in
         -- principle be opened before that's landed.
-        UIManager:show(InfoMessage:new{ text = _("No chapters loaded yet -- try again in a moment."), timeout = 2 })
+        UIManager:show(InfoMessage:new{ text = _("Chapters still loading. Try again shortly."), timeout = 2 })
         return
     end
     local dialog
     dialog = InputDialog:new{
         title = _("Download next chapters"),
-        description = _("How many chapters to download, starting after the last one you've read (or from the first chapter if you haven't read any yet)."),
+        description = _("Chapters to download, starting after the last one read."),
         input = "5",
         input_type = "number",
         buttons = {{
@@ -504,39 +529,56 @@ function MangaBrowser:onMenuSelect(item)
     return true
 end
 
+-- onMenuHold offers a read/unread toggle for every chapter, plus
+-- re-download/remove for downloaded ones. Marking unread only touches the
+-- read flag, not the chapter's saved page position -- that's what
+-- promptResetProgress's whole-manga reset is for.
 function MangaBrowser:onMenuHold(item)
-    local existing = self:downloadedPath(item.chapter.Key)
-    if existing == "" then
-        return true
-    end
+    local chapter_key = item.chapter.Key
+    local is_read = self.store:isChapterRead(self.source_key, self.manga.Key, chapter_key)
 
     local dialog
+    local buttons = {
+        {{
+            text = is_read and _("Mark as unread") or _("Mark as read"),
+            callback = function()
+                UIManager:close(dialog)
+                if is_read then
+                    self.store:markChapterUnread(self.source_key, self.manga.Key, chapter_key)
+                else
+                    self.store:markChapterRead(self.source_key, self.manga.Key, chapter_key)
+                end
+                self:refresh()
+            end,
+        }},
+    }
+    if self:downloadedPath(chapter_key) ~= "" then
+        table.insert(buttons, {{
+            text = _("Re-download"),
+            callback = function()
+                UIManager:close(dialog)
+                Trapper:wrap(function()
+                    self.downloads_engine:remove(self.source_key, self.manga.Key, chapter_key)
+                    self.downloaded_keys[chapter_key] = nil
+                    self:downloadAndOpen(item.chapter)
+                end)
+            end,
+        }})
+        table.insert(buttons, {{
+            text = _("Remove download"),
+            callback = function()
+                UIManager:close(dialog)
+                Trapper:wrap(function()
+                    self.downloads_engine:remove(self.source_key, self.manga.Key, chapter_key)
+                    self.downloaded_keys[chapter_key] = nil
+                    self:refresh()
+                end)
+            end,
+        }})
+    end
     dialog = ButtonDialog:new{
         title = chapterLabel(item.chapter),
-        buttons = {
-            {{
-                text = _("Re-download"),
-                callback = function()
-                    UIManager:close(dialog)
-                    Trapper:wrap(function()
-                        self.downloads_engine:remove(self.source_key, self.manga.Key, item.chapter.Key)
-                        self.downloaded_keys[item.chapter.Key] = nil
-                        self:downloadAndOpen(item.chapter)
-                    end)
-                end,
-            }},
-            {{
-                text = _("Remove download"),
-                callback = function()
-                    UIManager:close(dialog)
-                    Trapper:wrap(function()
-                        self.downloads_engine:remove(self.source_key, self.manga.Key, item.chapter.Key)
-                        self.downloaded_keys[item.chapter.Key] = nil
-                        self:refresh()
-                    end)
-                end,
-            }},
-        },
+        buttons = buttons,
     }
     UIManager:show(dialog)
     return true

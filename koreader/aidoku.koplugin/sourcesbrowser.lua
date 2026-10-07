@@ -14,7 +14,7 @@ local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local SourcesBrowser = Menu:extend{
     title = _("Aidoku sources"),
@@ -144,7 +144,7 @@ function SourcesBrowser:onMenuHold(item)
                 callback = function()
                     UIManager:close(dialog)
                     UIManager:show(ConfirmBox:new{
-                        text = T(_("Remove installed source '%1'?"), item.text),
+                        text = T(_("Remove source '%1'?"), item.text),
                         ok_text = _("Remove"),
                         ok_callback = function()
                             os.remove(item.path)

@@ -9,7 +9,7 @@ about Trapper:wrap().
 local DataStorage = require("datastorage")
 local Runner = require("subprocess")
 local json = require("json")
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local Engine = {}
 Engine.__index = Engine

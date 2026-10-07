@@ -12,10 +12,10 @@ local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local SearchBrowser = Menu:extend{
-    subtitle = _("Hold a result to add or remove it from your library"),
+    subtitle = _("Hold a result to add/remove from library"),
 }
 
 -- Manga.Title is a plain (non-pointer) Go string, so an absent title

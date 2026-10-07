@@ -21,7 +21,7 @@ local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local LibraryBrowser = Menu:extend{
     title = _("Library"),
@@ -73,7 +73,7 @@ function LibraryBrowser:genItemTable()
     end
     if #item_table == 0 then
         table.insert(item_table, {
-            text = _("Your library is empty. Open the menu (top left) to search or browse sources."),
+            text = _("Library is empty. Use the menu (top left) to find manga."),
             dim = true,
             is_placeholder = true,
         })
@@ -216,13 +216,13 @@ function LibraryBrowser:checkForUpdates()
         local message
         if result.status == "update_available" then
             message = T(
-                _("Update available: %1\n(current: %2)"),
+                _("Update available: %1\nInstalled: %2"),
                 result.latest,
                 current_version == "" and _("unknown") or current_version
             )
         else
             message = T(
-                _("Latest release is %1.\nYour installed version could not be determined."),
+                _("Latest: %1\nInstalled version unknown."),
                 result.latest
             )
         end
@@ -244,7 +244,7 @@ function LibraryBrowser:applyUpdate(check_result)
             return
         end
         UIManager:show(InfoMessage:new{
-            text = T(_("Updated to %1. Restart KOReader to apply the update."), applied.version),
+            text = T(_("Updated to %1. Restart KOReader to apply."), applied.version),
         })
     end)
 end
@@ -289,7 +289,7 @@ function LibraryBrowser:onMenuSelect(item)
         local found = source_key and InstalledSources.findByKey(self.sources_dir, self.engine, source_key)
         if not found then
             UIManager:show(InfoMessage:new{
-                text = T(_("'%1' is no longer installed. Hold this entry to remove it from your library."), entry.title),
+                text = T(_("'%1' is no longer installed. Hold to remove it."), entry.title),
             })
             return
         end

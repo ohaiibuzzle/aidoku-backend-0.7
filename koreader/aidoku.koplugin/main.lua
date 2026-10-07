@@ -10,7 +10,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local util = require("util")
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local ChapterCache = require("chaptercache")
 local DownloadsEngine = require("downloadsengine")
@@ -251,13 +251,13 @@ function Aidoku:onAidokuBrowseSources()
     ChapterCache.clear()
     if not self.engine:isAvailable() then
         UIManager:show(InfoMessage:new{
-            text = _("The bundled aidoku-run binary was not found. Run koreader/build.sh in the aidokurunner-go repo to build and bundle it before using this plugin."),
+            text = _("aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."),
         })
         return
     end
     if not self.downloads_engine:isAvailable() then
         UIManager:show(InfoMessage:new{
-            text = _("Could not open the downloads database. Check that the storage device is writable."),
+            text = _("Could not open the downloads database. Is storage writable?"),
         })
         return
     end

@@ -18,7 +18,7 @@ local UIManager = require("ui/uimanager")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local util = require("util")
 local T = require("ffi/util").template
-local _ = require("gettext")
+local _ = require("aidoku_l10n")
 
 local SettingsBrowser = Menu:extend{
     title = _("Settings"),
@@ -77,7 +77,7 @@ function SettingsBrowser:genItemTable()
     return {
         { text = _("Sources"), mandatory=">", is_sources_entry = true },
 
-        { text = _(""), dim = true, bold = true, is_placeholder = true },
+        { text = "", dim = true, bold = true, is_placeholder = true },
         {
             text = _("Prefetch next chapters"),
             mandatory = self.store:isEphemeralMode()
@@ -98,7 +98,7 @@ function SettingsBrowser:genItemTable()
         { text = _("Network concurrency"), mandatory = concurrency_text, is_network_concurrency_entry = true },
         
         -- Advanced settings that *most users* don't need to touch.
-        { text = _(""), dim = true, bold = true, is_placeholder = true },
+        { text = "", dim = true, bold = true, is_placeholder = true },
         {
             text = _("Ephemeral Mode"),
             mandatory = self.store:isEphemeralMode() and _("On") or _("Off"),
@@ -131,7 +131,7 @@ function SettingsBrowser:promptBufferChapters()
     local dialog
     dialog = InputDialog:new{
         title = _("Prefetch next chapters"),
-        description = _("Chapters to download ahead of time when you start reading one. 0 disables prefetching."),
+        description = _("Chapters to download ahead while reading. 0 turns it off."),
         input = tostring(self.store:bufferChapters()),
         input_type = "number",
         buttons = {{
@@ -163,7 +163,7 @@ function SettingsBrowser:promptStorageLimit()
     local dialog
     dialog = InputDialog:new{
         title = _("Storage limit (MB)"),
-        description = _("Oldest chapters are deleted first to stay under the limit. 0 means no limit."),
+        description = _("Oldest chapters are deleted first. 0 means no limit."),
         input = current > 0 and tostring(current / MB) or "0",
         input_type = "number",
         buttons = {{
@@ -195,10 +195,10 @@ function SettingsBrowser:promptRepoURL()
     dialog = InputDialog:new{
         title = _("Source repository URL"),
         description = T(
-            _("The index.min.json URL the repository browser installs sources from. Leave blank to use the default:\n%1"),
+            _("Repository index URL. Leave blank for the default:\n%1"),
             Store.DEFAULT_REPO_URL),
         input = self.store:repoURL(),
-        input_hint = _("https://…/index.min.json"),
+        input_hint = "https://…/index.min.json",
         buttons = {{
             {
                 text = _("Cancel"),
@@ -226,7 +226,7 @@ function SettingsBrowser:promptNetworkConcurrency()
     local dialog
     dialog = InputDialog:new{
         title = _("Network concurrency"),
-        description = _("Number of requests a source can run at once via net.send_all. Leave blank or 0 to use the default (8). Higher values may use more memory."),
+        description = _("Parallel requests per source. Blank or 0 for default (8). Higher uses more memory."),
         input = current > 0 and tostring(current) or "",
         input_type = "number",
         buttons = {{
@@ -261,7 +261,7 @@ function SettingsBrowser:promptFlareSolverrHost()
     local dialog
     dialog = InputDialog:new{
         title = _("FlareSolverr host"),
-        description = _("e.g. localhost:8191 -- used to solve Cloudflare challenges for sources that need it. Leave blank to disable."),
+        description = _("Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."),
         input = self.store:flareSolverrHost(),
         input_hint = _("host:port"),
         buttons = {{
@@ -309,7 +309,7 @@ end
 
 function SettingsBrowser:confirmClearCookies()
     UIManager:show(ConfirmBox:new{
-        text = _("Clear all cookies stored for every source? This can't be undone."),
+        text = _("Clear cookies for all sources? This can't be undone."),
         ok_text = _("Clear"),
         ok_callback = function()
             Trapper:wrap(function()
@@ -367,7 +367,7 @@ function SettingsBrowser:promptEphemeralPath()
     local dialog
     dialog = InputDialog:new{
         title = _("Ephemeral storage path"),
-        description = _("Directory to store downloaded chapters in while Ephemeral Mode is on."),
+        description = _("Where chapters are stored in Ephemeral Mode."),
         input = self.store:ephemeralPath(),
         input_hint = "/dev/shm",
         buttons = {{
@@ -436,7 +436,7 @@ function SettingsBrowser:onMenuSelect(item)
     elseif item.is_buffer_entry then
         if self.store:isEphemeralMode() then
             UIManager:show(InfoMessage:new{
-                text = _("You can only prefetch one chapter ahead while Ephemeral Mode is on."),
+                text = _("Ephemeral Mode limits prefetch to 1 chapter."),
             })
         else
             self:promptBufferChapters()
@@ -446,7 +446,7 @@ function SettingsBrowser:onMenuSelect(item)
     elseif item.is_storage_limit_entry then
         if self.store:isEphemeralMode() then
             UIManager:show(InfoMessage:new{
-                text = _("Storage limit isn't applied while Ephemeral Mode is on."),
+                text = _("Storage limit is off in Ephemeral Mode."),
             })
         else
             self:promptStorageLimit()
