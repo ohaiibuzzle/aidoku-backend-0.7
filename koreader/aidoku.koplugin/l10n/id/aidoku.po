@@ -1,39 +1,40 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# Indonesian translations for aidoku.koplugin package.
+# Copyright (C) 2026 THE aidoku.koplugin'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the aidoku.koplugin package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Automatically generated, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-08 09:53+0700\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"PO-Revision-Date: 2026-10-07 13:35+0700\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: id\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
 #: downloadsbrowser.lua:18 sourcesbrowser.lua:24
 msgid "Downloaded chapters"
-msgstr ""
+msgstr "Bab yang diunduh"
 
 #: downloadsbrowser.lua:46
 msgid "No downloaded chapters yet."
-msgstr ""
+msgstr "Belum ada bab yang diunduh."
 
 #: downloadsbrowser.lua:58
 msgid ""
 "Could not load downloads:\n"
 "%1"
 msgstr ""
+"Tidak dapat memuat unduhan:\n"
+"%1"
 
 #: downloadsbrowser.lua:81
 msgid "Download no longer available."
-msgstr ""
+msgstr "Unduhan tidak lagi tersedia."
 
 #: downloadsbrowser.lua:103
 msgid ""
@@ -41,267 +42,281 @@ msgid ""
 "\n"
 "%1"
 msgstr ""
+"Hapus unduhan?\n"
+"\n"
+"%1"
 
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
-msgstr ""
+msgstr "Hapus"
 
 #: engine.lua:47
 msgid "Fetching repository…"
-msgstr ""
+msgstr "Mengambil repositori…"
 
 #: engine.lua:51
 msgid "Installing…"
-msgstr ""
+msgstr "Memasang…"
 
 #: engine.lua:60
 msgid "Loading cookies…"
-msgstr ""
+msgstr "Memuat cookie…"
 
 #: engine.lua:73
 msgid "Checking for updates…"
-msgstr ""
+msgstr "Memeriksa pembaruan…"
 
 #: engine.lua:77
 msgid "Downloading update…"
-msgstr ""
+msgstr "Mengunduh pembaruan…"
 
 #: engine.lua:81
 msgid "Loading source…"
-msgstr ""
+msgstr "Memuat sumber…"
 
 #: engine.lua:131
 msgid "Searching…"
-msgstr ""
+msgstr "Mencari…"
 
 #: engine.lua:138
 msgid "Loading filters…"
-msgstr ""
+msgstr "Memuat filter…"
 
 #: engine.lua:145
 msgid "Loading settings…"
-msgstr ""
+msgstr "Memuat pengaturan…"
 
 #: engine.lua:175
 msgid "Loading chapters…"
-msgstr ""
+msgstr "Memuat bab…"
 
 #: engine.lua:203
 msgid "Downloading chapter…"
-msgstr ""
+msgstr "Mengunduh bab…"
 
 #: filterbrowser.lua:20
 msgid "Search filters"
-msgstr ""
+msgstr "Filter pencarian"
 
 #: filterbrowser.lua:70 filterbrowser.lua:139
 msgid "Sort: %1"
-msgstr ""
+msgstr "Urutkan: %1"
 
 #: filterbrowser.lua:70
 msgid "default"
-msgstr ""
+msgstr "bawaan"
 
 #: filterbrowser.lua:73
 msgid "Sort: %1 (%2)"
-msgstr ""
+msgstr "Urutkan: %1 (%2)"
 
 #: filterbrowser.lua:73
 msgid "ascending"
-msgstr ""
+msgstr "naik"
 
 #: filterbrowser.lua:73
 msgid "descending"
-msgstr ""
+msgstr "turun"
 
 #: filterbrowser.lua:78 filterbrowser.lua:80 filterbrowser.lua:87
 #: filterbrowser.lua:95 filterbrowser.lua:97 sourcesettingsbrowser.lua:118
 msgid "%1: %2"
-msgstr ""
+msgstr "%1: %2"
 
 #: filterbrowser.lua:78 filterbrowser.lua:87
 msgid "any"
-msgstr ""
+msgstr "apa saja"
 
 #: filterbrowser.lua:89
 msgid "%1: %2 included, %3 excluded"
-msgstr ""
+msgstr "%1: %2 disertakan, %3 dikecualikan"
 
 #: filterbrowser.lua:95
 msgid "unset"
-msgstr ""
+msgstr "tidak diatur"
 
 #: filterbrowser.lua:97
 msgid "no"
-msgstr ""
+msgstr "tidak"
 
 #: filterbrowser.lua:97
 msgid "yes"
-msgstr ""
+msgstr "ya"
 
 #: filterbrowser.lua:118
 msgid "Clear all filters"
-msgstr ""
+msgstr "Hapus semua filter"
 
 #: filterbrowser.lua:119
 msgid "Search with these filters"
-msgstr ""
+msgstr "Cari dengan filter ini"
 
 #: filterbrowser.lua:166
 msgid "Any"
-msgstr ""
+msgstr "Apa saja"
 
 #: globalsearchbrowser.lua:24 globalsearchbrowser.lua:63 librarybrowser.lua:137
 msgid "Search all sources"
-msgstr ""
+msgstr "Cari di semua sumber"
 
 #: globalsearchbrowser.lua:25 searchbrowser.lua:18
 msgid "Hold a result to add/remove from library"
-msgstr ""
+msgstr "Tahan hasil untuk menambah/menghapus dari pustaka"
 
 #: globalsearchbrowser.lua:64 searchbrowser.lua:89
 msgid "Title…"
-msgstr ""
+msgstr "Judul…"
 
 #: globalsearchbrowser.lua:67 mangabrowser.lua:440 searchbrowser.lua:92
 #: settingsbrowser.lua:139 settingsbrowser.lua:171 settingsbrowser.lua:204
 #: settingsbrowser.lua:234 settingsbrowser.lua:269 settingsbrowser.lua:375
 #: sourcesettingsbrowser.lua:235
 msgid "Cancel"
-msgstr ""
+msgstr "Batal"
 
 #: globalsearchbrowser.lua:72 searchbrowser.lua:97
 msgid "Search"
-msgstr ""
+msgstr "Cari"
 
 #: globalsearchbrowser.lua:96
 msgid "No sources installed."
-msgstr ""
+msgstr "Belum ada sumber terpasang."
 
 #: globalsearchbrowser.lua:126
 msgid "No results from any source."
-msgstr ""
+msgstr "Tidak ada hasil dari sumber mana pun."
 
 #: globalsearchbrowser.lua:129
 msgid "Some sources failed: %1"
-msgstr ""
+msgstr "Beberapa sumber gagal: %1"
 
 #: globalsearchbrowser.lua:155 searchbrowser.lua:197
 msgid "Added '%1' to library"
-msgstr ""
+msgstr "'%1' ditambahkan ke pustaka"
 
 #: globalsearchbrowser.lua:155 searchbrowser.lua:197
 msgid "Removed '%1' from library"
-msgstr ""
+msgstr "'%1' dihapus dari pustaka"
 
 #: librarybrowser.lua:27
 msgid "Library"
-msgstr ""
+msgstr "Pustaka"
 
 #: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:103
 msgid "Ephemeral Mode"
-msgstr ""
+msgstr "Mode Sementara"
 
 #. TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
 #: librarybrowser.lua:77
 msgid "Library is empty. Use the menu (top left) to find manga."
-msgstr ""
+msgstr "Pustaka kosong. Gunakan menu (kiri atas) untuk mencari manga."
 
 #: librarybrowser.lua:108 settingsbrowser.lua:24
 msgid "Settings"
-msgstr ""
+msgstr "Pengaturan"
 
 #: librarybrowser.lua:156
 msgid "Sort: Last read"
-msgstr ""
+msgstr "Urutkan: Terakhir dibaca"
 
 #: librarybrowser.lua:156
 msgid "Sort: Name"
-msgstr ""
+msgstr "Urutkan: Nama"
 
 #: librarybrowser.lua:165
 msgid "Check for Updates"
-msgstr ""
+msgstr "Periksa Pembaruan"
 
 #: librarybrowser.lua:207
 msgid ""
 "Could not check for updates:\n"
 "%1"
 msgstr ""
+"Tidak dapat memeriksa pembaruan:\n"
+"%1"
 
 #: librarybrowser.lua:212
 msgid "Plugin is up to date (%1)."
-msgstr ""
+msgstr "Plugin sudah terbaru (%1)."
 
 #: librarybrowser.lua:220
 msgid ""
 "Update available: %1\n"
 "Installed: %2"
 msgstr ""
+"Pembaruan tersedia: %1\n"
+"Terpasang: %2"
 
 #: librarybrowser.lua:222
 msgid "unknown"
-msgstr ""
+msgstr "tidak diketahui"
 
 #: librarybrowser.lua:226
 msgid ""
 "Latest: %1\n"
 "Installed version unknown."
 msgstr ""
+"Terbaru: %1\n"
+"Versi terpasang tidak diketahui."
 
 #: librarybrowser.lua:232
 msgid "Download & Install"
-msgstr ""
+msgstr "Unduh & Pasang"
 
 #: librarybrowser.lua:244
 msgid ""
 "Update failed:\n"
 "%1"
 msgstr ""
+"Pembaruan gagal:\n"
+"%1"
 
 #: librarybrowser.lua:248
 msgid "Updated to %1. Restart KOReader to apply."
-msgstr ""
+msgstr "Diperbarui ke %1. Mulai ulang KOReader untuk menerapkan."
 
 #: librarybrowser.lua:293
 msgid "'%1' is no longer installed. Hold to remove it."
-msgstr ""
+msgstr "'%1' tidak lagi terpasang. Tahan untuk menghapusnya."
 
 #: librarybrowser.lua:322
 msgid "Remove '%1' from your library?"
-msgstr ""
+msgstr "Hapus '%1' dari pustaka Anda?"
 
 #: main.lua:227
 msgid "Aidoku"
-msgstr ""
+msgstr "Aidoku"
 
 #: main.lua:235
 msgid "AidokuRunner for KOReader"
-msgstr ""
+msgstr "AidokuRunner untuk KOReader"
 
 #: main.lua:254
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
+"Biner aidoku-run tidak ditemukan. Bangun ulang plugin dengan koreader/"
+"build.sh."
 
 #: main.lua:260
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr ""
+"Tidak dapat membuka basis data unduhan. Apakah penyimpanan dapat ditulis?"
 
 #: mangabrowser.lua:75
 msgid "Sort: Newest first"
-msgstr ""
+msgstr "Urutkan: Terbaru dulu"
 
 #: mangabrowser.lua:75
 msgid "Sort: Oldest first"
-msgstr ""
+msgstr "Urutkan: Terlama dulu"
 
 #: mangabrowser.lua:90
 msgid "Download next chapters…"
-msgstr ""
+msgstr "Unduh bab berikutnya…"
 
 #: mangabrowser.lua:98
 msgid "Reset reading progress…"
-msgstr ""
+msgstr "Atur ulang progres membaca…"
 
 #: mangabrowser.lua:119
 msgid ""
@@ -309,366 +324,395 @@ msgid ""
 "\n"
 "Clears read marks and page positions."
 msgstr ""
+"Atur ulang progres untuk %1?\n"
+"\n"
+"Menghapus penanda baca dan posisi halaman."
 
 #: mangabrowser.lua:121
 msgid "Reset"
-msgstr ""
+msgstr "Atur ulang"
 
 #: mangabrowser.lua:159
 msgid "Read"
-msgstr ""
+msgstr "Dibaca"
 
 #: mangabrowser.lua:226
 msgid ""
 "Could not load chapters:\n"
 "%1"
 msgstr ""
+"Tidak dapat memuat bab:\n"
+"%1"
 
 #: mangabrowser.lua:270
 msgid "Resume reading from %1?"
-msgstr ""
+msgstr "Lanjutkan membaca dari %1?"
 
 #: mangabrowser.lua:271
 msgid "Resume"
-msgstr ""
+msgstr "Lanjutkan"
 
 #: mangabrowser.lua:272
 msgid "Not now"
-msgstr ""
+msgstr "Nanti saja"
 
 #: mangabrowser.lua:341
 msgid "No chapters to download."
-msgstr ""
+msgstr "Tidak ada bab untuk diunduh."
 
 #: mangabrowser.lua:359 nextchapter.lua:169
 msgid "No next chapter yet."
-msgstr ""
+msgstr "Belum ada bab berikutnya."
 
 #: mangabrowser.lua:374
 msgid "Already downloaded."
-msgstr ""
+msgstr "Sudah diunduh."
 
 #: mangabrowser.lua:388
 msgid "Downloading %1/%2: %3"
-msgstr ""
+msgstr "Mengunduh %1/%2: %3"
 
 #: mangabrowser.lua:392 subprocess.lua:118
 msgid "Cancelled"
-msgstr ""
+msgstr "Dibatalkan"
 
 #: mangabrowser.lua:398
 msgid "Cancelled after %1 of %2 chapters."
-msgstr ""
+msgstr "Dibatalkan setelah %1 dari %2 bab."
 
 #: mangabrowser.lua:401 mangabrowser.lua:481 nextchapter.lua:208
 msgid ""
 "Download failed:\n"
 "%1"
 msgstr ""
+"Unduhan gagal:\n"
+"%1"
 
 #: mangabrowser.lua:429
 msgid "Chapters still loading. Try again shortly."
-msgstr ""
+msgstr "Bab masih dimuat. Coba lagi sebentar lagi."
 
 #: mangabrowser.lua:434
 msgid "Download next chapters"
-msgstr ""
+msgstr "Unduh bab berikutnya"
 
 #: mangabrowser.lua:435
 msgid "Chapters to download, starting after the last one read."
-msgstr ""
+msgstr "Bab yang akan diunduh, dimulai setelah bab terakhir yang dibaca."
 
 #: mangabrowser.lua:445
 msgid "Download"
-msgstr ""
+msgstr "Unduh"
 
 #: mangabrowser.lua:543
 msgid "Mark as read"
-msgstr ""
+msgstr "Tandai sudah dibaca"
 
 #: mangabrowser.lua:543
 msgid "Mark as unread"
-msgstr ""
+msgstr "Tandai belum dibaca"
 
 #: mangabrowser.lua:557
 msgid "Re-download"
-msgstr ""
+msgstr "Unduh ulang"
 
 #: mangabrowser.lua:568
 msgid "Remove download"
-msgstr ""
+msgstr "Hapus unduhan"
 
 #: nextchapter.lua:55 nextchapter.lua:160
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
 msgstr ""
+"Tidak dapat memeriksa bab berikutnya:\n"
+"%1"
 
 #: nextchapter.lua:67
 msgid "Source no longer installed."
-msgstr ""
+msgstr "Sumber tidak lagi terpasang."
 
 #: nextchapter.lua:129 nextchapter.lua:232
 msgid "Continue to '%1'?"
-msgstr ""
+msgstr "Lanjut ke '%1'?"
 
 #: nextchapter.lua:130 nextchapter.lua:233
 msgid "Continue"
-msgstr ""
+msgstr "Lanjut"
 
 #: nextchapter.lua:145
 msgid "Offline, and the next chapter isn't downloaded."
-msgstr ""
+msgstr "Luring, dan bab berikutnya belum diunduh."
 
 #: prefetch.lua:33
 msgid "Chapter %1"
-msgstr ""
+msgstr "Bab %1"
 
 #: repobrowser.lua:24
 msgid "Source repository"
-msgstr ""
+msgstr "Repositori sumber"
 
 #: repobrowser.lua:51
 msgid ""
 "Could not load repository:\n"
 "%1"
 msgstr ""
+"Tidak dapat memuat repositori:\n"
+"%1"
 
 #: repobrowser.lua:103
 msgid ""
 "Install failed:\n"
 "%1"
 msgstr ""
+"Pemasangan gagal:\n"
+"%1"
 
 #: repobrowser.lua:111
 msgid "Installed %1"
-msgstr ""
+msgstr "Terpasang %1"
 
 #: searchbrowser.lua:88
 msgid "Search manga"
-msgstr ""
+msgstr "Cari manga"
 
 #: searchbrowser.lua:123
 msgid ""
 "Search failed:\n"
 "%1"
 msgstr ""
+"Pencarian gagal:\n"
+"%1"
 
 #: searchbrowser.lua:130
 msgid "Filters (%1 set)…"
-msgstr ""
+msgstr "Filter (%1 diatur)…"
 
 #: searchbrowser.lua:130
 msgid "Filters…"
-msgstr ""
+msgstr "Filter…"
 
 #: searchbrowser.lua:145
 msgid "No results."
-msgstr ""
+msgstr "Tidak ada hasil."
 
 #: settingsbrowser.lua:34
 msgid "Ask"
-msgstr ""
+msgstr "Tanya"
 
 #: settingsbrowser.lua:34
 msgid "Auto"
-msgstr ""
+msgstr "Otomatis"
 
 #: settingsbrowser.lua:34 settingsbrowser.lua:104 sourcesettingsbrowser.lua:93
 msgid "Off"
-msgstr ""
+msgstr "Mati"
 
 #: settingsbrowser.lua:60
 msgid "N/A"
-msgstr ""
+msgstr "Tidak ada"
 
 #: settingsbrowser.lua:61 sourcesettingsbrowser.lua:98
 msgid "none"
-msgstr ""
+msgstr "tidak ada"
 
 #: settingsbrowser.lua:63
 msgid " (using %1)"
-msgstr ""
+msgstr " (memakai %1)"
 
 #: settingsbrowser.lua:67 sourcesettingsbrowser.lua:103
 msgid "not set"
-msgstr ""
+msgstr "belum diatur"
 
 #: settingsbrowser.lua:69
 msgid "Custom"
-msgstr ""
+msgstr "Kustom"
 
 #: settingsbrowser.lua:69
 msgid "Default"
-msgstr ""
+msgstr "Bawaan"
 
 #: settingsbrowser.lua:72
 msgid "Default (8)"
-msgstr ""
+msgstr "Bawaan (8)"
 
 #: settingsbrowser.lua:78
 msgid "Sources"
-msgstr ""
+msgstr "Sumber"
 
 #: settingsbrowser.lua:82 settingsbrowser.lua:133
 msgid "Prefetch next chapters"
-msgstr ""
+msgstr "Unduh awal bab berikutnya"
 
 #: settingsbrowser.lua:89
 msgid "Auto-advance at chapter end"
-msgstr ""
+msgstr "Lanjut otomatis di akhir bab"
 
 #: settingsbrowser.lua:94
 msgid "Storage limit"
-msgstr ""
+msgstr "Batas penyimpanan"
 
 #: settingsbrowser.lua:97 settingsbrowser.lua:196
 msgid "Source repository URL"
-msgstr ""
+msgstr "URL repositori sumber"
 
 #: settingsbrowser.lua:98 settingsbrowser.lua:228
 msgid "Network concurrency"
-msgstr ""
+msgstr "Konkurensi jaringan"
 
 #: settingsbrowser.lua:104 sourcesettingsbrowser.lua:93
 msgid "On"
-msgstr ""
+msgstr "Nyala"
 
 #: settingsbrowser.lua:108 settingsbrowser.lua:369
 msgid "Ephemeral storage path"
-msgstr ""
+msgstr "Lokasi penyimpanan sementara"
 
 #: settingsbrowser.lua:112 settingsbrowser.lua:263
 msgid "FlareSolverr host"
-msgstr ""
+msgstr "Host FlareSolverr"
 
 #: settingsbrowser.lua:113
 msgid "Import cookies"
-msgstr ""
+msgstr "Impor cookie"
 
 #: settingsbrowser.lua:114
 msgid "Clear stored cookies"
-msgstr ""
+msgstr "Hapus cookie tersimpan"
 
 #: settingsbrowser.lua:134
 msgid "Chapters to download ahead while reading. 0 turns it off."
-msgstr ""
+msgstr "Bab yang diunduh lebih dulu saat membaca. 0 untuk mematikan."
 
 #: settingsbrowser.lua:144 settingsbrowser.lua:176 settingsbrowser.lua:209
 #: settingsbrowser.lua:239 settingsbrowser.lua:274 settingsbrowser.lua:380
 #: sourcesettingsbrowser.lua:240
 msgid "Set"
-msgstr ""
+msgstr "Atur"
 
 #: settingsbrowser.lua:165
 msgid "Storage limit (MB)"
-msgstr ""
+msgstr "Batas penyimpanan (MB)"
 
 #: settingsbrowser.lua:166
 msgid "Oldest chapters are deleted first. 0 means no limit."
-msgstr ""
+msgstr "Bab terlama dihapus lebih dulu. 0 berarti tanpa batas."
 
 #: settingsbrowser.lua:198
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
 msgstr ""
+"URL indeks repositori. Kosongkan untuk memakai bawaan:\n"
+"%1"
 
 #: settingsbrowser.lua:229
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
 msgstr ""
+"Permintaan paralel per sumber. Kosong atau 0 untuk bawaan (8). Nilai lebih "
+"tinggi memakai lebih banyak memori."
 
 #: settingsbrowser.lua:264
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
+"Menyelesaikan tantangan Cloudflare, mis. localhost:8191. Kosongkan untuk "
+"menonaktifkan."
 
 #: settingsbrowser.lua:266
 msgid "host:port"
-msgstr ""
+msgstr "host:port"
 
 #: settingsbrowser.lua:292
 msgid "Long-press a cookies.txt to import it"
-msgstr ""
+msgstr "Tekan lama cookies.txt untuk mengimpornya"
 
 #: settingsbrowser.lua:302
 msgid ""
 "Import failed:\n"
 "%1"
 msgstr ""
+"Impor gagal:\n"
+"%1"
 
 #: settingsbrowser.lua:312
 msgid "Clear cookies for all sources? This can't be undone."
-msgstr ""
+msgstr "Hapus cookie untuk semua sumber? Tindakan ini tidak dapat dibatalkan."
 
 #: settingsbrowser.lua:313
 msgid "Clear"
-msgstr ""
+msgstr "Hapus"
 
 #: settingsbrowser.lua:318
 msgid "Cookies cleared."
-msgstr ""
+msgstr "Cookie dihapus."
 
 #: settingsbrowser.lua:320
 msgid ""
 "Could not clear cookies:\n"
 "%1"
 msgstr ""
+"Tidak dapat menghapus cookie:\n"
+"%1"
 
 #: settingsbrowser.lua:370
 msgid "Where chapters are stored in Ephemeral Mode."
-msgstr ""
+msgstr "Tempat bab disimpan dalam Mode Sementara."
 
 #: settingsbrowser.lua:391
 msgid "%1 doesn't exist or isn't writable."
-msgstr ""
+msgstr "%1 tidak ada atau tidak dapat ditulis."
 
 #: settingsbrowser.lua:439
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
-msgstr ""
+msgstr "Mode Sementara membatasi unduh awal menjadi 1 bab."
 
 #: settingsbrowser.lua:449
 msgid "Storage limit is off in Ephemeral Mode."
-msgstr ""
+msgstr "Batas penyimpanan nonaktif dalam Mode Sementara."
 
 #: sourcesbrowser.lua:20
 msgid "Aidoku sources"
-msgstr ""
+msgstr "Sumber Aidoku"
 
 #: sourcesbrowser.lua:128
 msgid "Source settings"
-msgstr ""
+msgstr "Pengaturan sumber"
 
 #: sourcesbrowser.lua:143
 msgid "Remove installed source"
-msgstr ""
+msgstr "Hapus sumber terpasang"
 
 #: sourcesbrowser.lua:147
 msgid "Remove source '%1'?"
-msgstr ""
+msgstr "Hapus sumber '%1'?"
 
 #: sourcesettingsbrowser.lua:55
 msgid "%1 settings"
-msgstr ""
+msgstr "Pengaturan %1"
 
 #: sourcesettingsbrowser.lua:75
 msgid ""
 "Could not load settings:\n"
 "%1"
 msgstr ""
+"Tidak dapat memuat pengaturan:\n"
+"%1"
 
 #: sourcesettingsbrowser.lua:123
 msgid "This source has no configurable settings."
-msgstr ""
+msgstr "Sumber ini tidak memiliki pengaturan yang dapat diubah."
 
 #: sourcesettingsbrowser.lua:133
 msgid ""
 "Could not save setting:\n"
 "%1"
 msgstr ""
+"Tidak dapat menyimpan pengaturan:\n"
+"%1"
 
 #: subprocess.lua:131
 msgid "command produced no output"
-msgstr ""
+msgstr "perintah tidak menghasilkan keluaran"

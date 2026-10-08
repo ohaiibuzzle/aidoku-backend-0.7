@@ -73,6 +73,7 @@ function LibraryBrowser:genItemTable()
     end
     if #item_table == 0 then
         table.insert(item_table, {
+            -- TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
             text = _("Library is empty. Use the menu (top left) to find manga."),
             dim = true,
             is_placeholder = true,

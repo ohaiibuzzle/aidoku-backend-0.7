@@ -1,39 +1,41 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# Italian translations for aidoku.koplugin package.
+# Copyright (C) 2026 THE aidoku.koplugin'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the aidoku.koplugin package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Automatically generated, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-08 09:53+0700\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"PO-Revision-Date: 2026-10-07 13:35+0700\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: it\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: downloadsbrowser.lua:18 sourcesbrowser.lua:24
 msgid "Downloaded chapters"
-msgstr ""
+msgstr "Capitoli scaricati"
 
 #: downloadsbrowser.lua:46
 msgid "No downloaded chapters yet."
-msgstr ""
+msgstr "Nessun capitolo scaricato."
 
 #: downloadsbrowser.lua:58
 msgid ""
 "Could not load downloads:\n"
 "%1"
 msgstr ""
+"Impossibile caricare i download:\n"
+"%1"
 
 #: downloadsbrowser.lua:81
 msgid "Download no longer available."
-msgstr ""
+msgstr "Download non più disponibile."
 
 #: downloadsbrowser.lua:103
 msgid ""
@@ -41,267 +43,280 @@ msgid ""
 "\n"
 "%1"
 msgstr ""
+"Rimuovere il download?\n"
+"\n"
+"%1"
 
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
-msgstr ""
+msgstr "Rimuovi"
 
 #: engine.lua:47
 msgid "Fetching repository…"
-msgstr ""
+msgstr "Recupero del repository…"
 
 #: engine.lua:51
 msgid "Installing…"
-msgstr ""
+msgstr "Installazione…"
 
 #: engine.lua:60
 msgid "Loading cookies…"
-msgstr ""
+msgstr "Caricamento dei cookie…"
 
 #: engine.lua:73
 msgid "Checking for updates…"
-msgstr ""
+msgstr "Verifica degli aggiornamenti…"
 
 #: engine.lua:77
 msgid "Downloading update…"
-msgstr ""
+msgstr "Download dell'aggiornamento…"
 
 #: engine.lua:81
 msgid "Loading source…"
-msgstr ""
+msgstr "Caricamento della sorgente…"
 
 #: engine.lua:131
 msgid "Searching…"
-msgstr ""
+msgstr "Ricerca…"
 
 #: engine.lua:138
 msgid "Loading filters…"
-msgstr ""
+msgstr "Caricamento dei filtri…"
 
 #: engine.lua:145
 msgid "Loading settings…"
-msgstr ""
+msgstr "Caricamento delle impostazioni…"
 
 #: engine.lua:175
 msgid "Loading chapters…"
-msgstr ""
+msgstr "Caricamento dei capitoli…"
 
 #: engine.lua:203
 msgid "Downloading chapter…"
-msgstr ""
+msgstr "Download del capitolo…"
 
 #: filterbrowser.lua:20
 msgid "Search filters"
-msgstr ""
+msgstr "Filtri di ricerca"
 
 #: filterbrowser.lua:70 filterbrowser.lua:139
 msgid "Sort: %1"
-msgstr ""
+msgstr "Ordine: %1"
 
 #: filterbrowser.lua:70
 msgid "default"
-msgstr ""
+msgstr "predefinito"
 
 #: filterbrowser.lua:73
 msgid "Sort: %1 (%2)"
-msgstr ""
+msgstr "Ordine: %1 (%2)"
 
 #: filterbrowser.lua:73
 msgid "ascending"
-msgstr ""
+msgstr "crescente"
 
 #: filterbrowser.lua:73
 msgid "descending"
-msgstr ""
+msgstr "decrescente"
 
 #: filterbrowser.lua:78 filterbrowser.lua:80 filterbrowser.lua:87
 #: filterbrowser.lua:95 filterbrowser.lua:97 sourcesettingsbrowser.lua:118
 msgid "%1: %2"
-msgstr ""
+msgstr "%1: %2"
 
 #: filterbrowser.lua:78 filterbrowser.lua:87
 msgid "any"
-msgstr ""
+msgstr "qualsiasi"
 
 #: filterbrowser.lua:89
 msgid "%1: %2 included, %3 excluded"
-msgstr ""
+msgstr "%1: %2 inclusi, %3 esclusi"
 
 #: filterbrowser.lua:95
 msgid "unset"
-msgstr ""
+msgstr "non impostato"
 
 #: filterbrowser.lua:97
 msgid "no"
-msgstr ""
+msgstr "no"
 
 #: filterbrowser.lua:97
 msgid "yes"
-msgstr ""
+msgstr "sì"
 
 #: filterbrowser.lua:118
 msgid "Clear all filters"
-msgstr ""
+msgstr "Cancella tutti i filtri"
 
 #: filterbrowser.lua:119
 msgid "Search with these filters"
-msgstr ""
+msgstr "Cerca con questi filtri"
 
 #: filterbrowser.lua:166
 msgid "Any"
-msgstr ""
+msgstr "Qualsiasi"
 
 #: globalsearchbrowser.lua:24 globalsearchbrowser.lua:63 librarybrowser.lua:137
 msgid "Search all sources"
-msgstr ""
+msgstr "Cerca in tutte le sorgenti"
 
 #: globalsearchbrowser.lua:25 searchbrowser.lua:18
 msgid "Hold a result to add/remove from library"
-msgstr ""
+msgstr "Tieni premuto un risultato per aggiungere/rimuovere dalla libreria"
 
 #: globalsearchbrowser.lua:64 searchbrowser.lua:89
 msgid "Title…"
-msgstr ""
+msgstr "Titolo…"
 
 #: globalsearchbrowser.lua:67 mangabrowser.lua:440 searchbrowser.lua:92
 #: settingsbrowser.lua:139 settingsbrowser.lua:171 settingsbrowser.lua:204
 #: settingsbrowser.lua:234 settingsbrowser.lua:269 settingsbrowser.lua:375
 #: sourcesettingsbrowser.lua:235
 msgid "Cancel"
-msgstr ""
+msgstr "Annulla"
 
 #: globalsearchbrowser.lua:72 searchbrowser.lua:97
 msgid "Search"
-msgstr ""
+msgstr "Cerca"
 
 #: globalsearchbrowser.lua:96
 msgid "No sources installed."
-msgstr ""
+msgstr "Nessuna sorgente installata."
 
 #: globalsearchbrowser.lua:126
 msgid "No results from any source."
-msgstr ""
+msgstr "Nessun risultato da nessuna sorgente."
 
 #: globalsearchbrowser.lua:129
 msgid "Some sources failed: %1"
-msgstr ""
+msgstr "Alcune sorgenti non hanno funzionato: %1"
 
 #: globalsearchbrowser.lua:155 searchbrowser.lua:197
 msgid "Added '%1' to library"
-msgstr ""
+msgstr "'%1' aggiunto alla libreria"
 
 #: globalsearchbrowser.lua:155 searchbrowser.lua:197
 msgid "Removed '%1' from library"
-msgstr ""
+msgstr "'%1' rimosso dalla libreria"
 
 #: librarybrowser.lua:27
 msgid "Library"
-msgstr ""
+msgstr "Libreria"
 
 #: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:103
 msgid "Ephemeral Mode"
-msgstr ""
+msgstr "Modalità effimera"
 
 #. TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
 #: librarybrowser.lua:77
 msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr ""
+"La libreria è vuota. Usa il menu (in alto a sinistra) per cercare manga."
 
 #: librarybrowser.lua:108 settingsbrowser.lua:24
 msgid "Settings"
-msgstr ""
+msgstr "Impostazioni"
 
 #: librarybrowser.lua:156
 msgid "Sort: Last read"
-msgstr ""
+msgstr "Ordine: ultima lettura"
 
 #: librarybrowser.lua:156
 msgid "Sort: Name"
-msgstr ""
+msgstr "Ordine: nome"
 
 #: librarybrowser.lua:165
 msgid "Check for Updates"
-msgstr ""
+msgstr "Verifica aggiornamenti"
 
 #: librarybrowser.lua:207
 msgid ""
 "Could not check for updates:\n"
 "%1"
 msgstr ""
+"Impossibile verificare gli aggiornamenti:\n"
+"%1"
 
 #: librarybrowser.lua:212
 msgid "Plugin is up to date (%1)."
-msgstr ""
+msgstr "Il plugin è aggiornato (%1)."
 
 #: librarybrowser.lua:220
 msgid ""
 "Update available: %1\n"
 "Installed: %2"
 msgstr ""
+"Aggiornamento disponibile: %1\n"
+"Installata: %2"
 
 #: librarybrowser.lua:222
 msgid "unknown"
-msgstr ""
+msgstr "sconosciuta"
 
 #: librarybrowser.lua:226
 msgid ""
 "Latest: %1\n"
 "Installed version unknown."
 msgstr ""
+"Ultima: %1\n"
+"Versione installata sconosciuta."
 
 #: librarybrowser.lua:232
 msgid "Download & Install"
-msgstr ""
+msgstr "Scarica e installa"
 
 #: librarybrowser.lua:244
 msgid ""
 "Update failed:\n"
 "%1"
 msgstr ""
+"Aggiornamento non riuscito:\n"
+"%1"
 
 #: librarybrowser.lua:248
 msgid "Updated to %1. Restart KOReader to apply."
-msgstr ""
+msgstr "Aggiornato alla versione %1. Riavvia KOReader per applicare."
 
 #: librarybrowser.lua:293
 msgid "'%1' is no longer installed. Hold to remove it."
-msgstr ""
+msgstr "'%1' non è più installata. Tieni premuto per rimuoverla."
 
 #: librarybrowser.lua:322
 msgid "Remove '%1' from your library?"
-msgstr ""
+msgstr "Rimuovere '%1' dalla libreria?"
 
 #: main.lua:227
 msgid "Aidoku"
-msgstr ""
+msgstr "Aidoku"
 
 #: main.lua:235
 msgid "AidokuRunner for KOReader"
-msgstr ""
+msgstr "AidokuRunner per KOReader"
 
 #: main.lua:254
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
+"Binario aidoku-run non trovato. Ricompila il plugin con koreader/build.sh."
 
 #: main.lua:260
 msgid "Could not open the downloads database. Is storage writable?"
-msgstr ""
+msgstr "Impossibile aprire il database dei download. La memoria è scrivibile?"
 
 #: mangabrowser.lua:75
 msgid "Sort: Newest first"
-msgstr ""
+msgstr "Ordine: più recenti prima"
 
 #: mangabrowser.lua:75
 msgid "Sort: Oldest first"
-msgstr ""
+msgstr "Ordine: più vecchi prima"
 
 #: mangabrowser.lua:90
 msgid "Download next chapters…"
-msgstr ""
+msgstr "Scarica i prossimi capitoli…"
 
 #: mangabrowser.lua:98
 msgid "Reset reading progress…"
-msgstr ""
+msgstr "Azzera progressi di lettura…"
 
 #: mangabrowser.lua:119
 msgid ""
@@ -309,366 +324,398 @@ msgid ""
 "\n"
 "Clears read marks and page positions."
 msgstr ""
+"Azzerare i progressi di %1?\n"
+"\n"
+"Cancella i segni di lettura e le posizioni delle pagine."
 
 #: mangabrowser.lua:121
 msgid "Reset"
-msgstr ""
+msgstr "Azzera"
 
 #: mangabrowser.lua:159
 msgid "Read"
-msgstr ""
+msgstr "Letto"
 
 #: mangabrowser.lua:226
 msgid ""
 "Could not load chapters:\n"
 "%1"
 msgstr ""
+"Impossibile caricare i capitoli:\n"
+"%1"
 
 #: mangabrowser.lua:270
 msgid "Resume reading from %1?"
-msgstr ""
+msgstr "Riprendere la lettura da %1?"
 
 #: mangabrowser.lua:271
 msgid "Resume"
-msgstr ""
+msgstr "Riprendi"
 
 #: mangabrowser.lua:272
 msgid "Not now"
-msgstr ""
+msgstr "Non ora"
 
 #: mangabrowser.lua:341
 msgid "No chapters to download."
-msgstr ""
+msgstr "Nessun capitolo da scaricare."
 
 #: mangabrowser.lua:359 nextchapter.lua:169
 msgid "No next chapter yet."
-msgstr ""
+msgstr "Nessun capitolo successivo al momento."
 
 #: mangabrowser.lua:374
 msgid "Already downloaded."
-msgstr ""
+msgstr "Già scaricato."
 
 #: mangabrowser.lua:388
 msgid "Downloading %1/%2: %3"
-msgstr ""
+msgstr "Download %1/%2: %3"
 
 #: mangabrowser.lua:392 subprocess.lua:118
 msgid "Cancelled"
-msgstr ""
+msgstr "Annullato"
 
 #: mangabrowser.lua:398
 msgid "Cancelled after %1 of %2 chapters."
-msgstr ""
+msgstr "Annullato dopo %1 capitoli su %2."
 
 #: mangabrowser.lua:401 mangabrowser.lua:481 nextchapter.lua:208
 msgid ""
 "Download failed:\n"
 "%1"
 msgstr ""
+"Download non riuscito:\n"
+"%1"
 
 #: mangabrowser.lua:429
 msgid "Chapters still loading. Try again shortly."
-msgstr ""
+msgstr "Capitoli ancora in caricamento. Riprova tra poco."
 
 #: mangabrowser.lua:434
 msgid "Download next chapters"
-msgstr ""
+msgstr "Scarica i prossimi capitoli"
 
 #: mangabrowser.lua:435
 msgid "Chapters to download, starting after the last one read."
-msgstr ""
+msgstr "Capitoli da scaricare, a partire dopo l'ultimo letto."
 
 #: mangabrowser.lua:445
 msgid "Download"
-msgstr ""
+msgstr "Scarica"
 
 #: mangabrowser.lua:543
 msgid "Mark as read"
-msgstr ""
+msgstr "Segna come letto"
 
 #: mangabrowser.lua:543
 msgid "Mark as unread"
-msgstr ""
+msgstr "Segna come non letto"
 
 #: mangabrowser.lua:557
 msgid "Re-download"
-msgstr ""
+msgstr "Scarica di nuovo"
 
 #: mangabrowser.lua:568
 msgid "Remove download"
-msgstr ""
+msgstr "Rimuovi download"
 
 #: nextchapter.lua:55 nextchapter.lua:160
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
 msgstr ""
+"Impossibile verificare il capitolo successivo:\n"
+"%1"
 
 #: nextchapter.lua:67
 msgid "Source no longer installed."
-msgstr ""
+msgstr "Sorgente non più installata."
 
 #: nextchapter.lua:129 nextchapter.lua:232
 msgid "Continue to '%1'?"
-msgstr ""
+msgstr "Continuare con '%1'?"
 
 #: nextchapter.lua:130 nextchapter.lua:233
 msgid "Continue"
-msgstr ""
+msgstr "Continua"
 
 #: nextchapter.lua:145
 msgid "Offline, and the next chapter isn't downloaded."
-msgstr ""
+msgstr "Offline, e il capitolo successivo non è scaricato."
 
 #: prefetch.lua:33
 msgid "Chapter %1"
-msgstr ""
+msgstr "Capitolo %1"
 
 #: repobrowser.lua:24
 msgid "Source repository"
-msgstr ""
+msgstr "Repository delle sorgenti"
 
 #: repobrowser.lua:51
 msgid ""
 "Could not load repository:\n"
 "%1"
 msgstr ""
+"Impossibile caricare il repository:\n"
+"%1"
 
 #: repobrowser.lua:103
 msgid ""
 "Install failed:\n"
 "%1"
 msgstr ""
+"Installazione non riuscita:\n"
+"%1"
 
 #: repobrowser.lua:111
 msgid "Installed %1"
-msgstr ""
+msgstr "Installato %1"
 
 #: searchbrowser.lua:88
 msgid "Search manga"
-msgstr ""
+msgstr "Cerca manga"
 
 #: searchbrowser.lua:123
 msgid ""
 "Search failed:\n"
 "%1"
 msgstr ""
+"Ricerca non riuscita:\n"
+"%1"
 
 #: searchbrowser.lua:130
 msgid "Filters (%1 set)…"
-msgstr ""
+msgstr "Filtri (%1 impostati)…"
 
 #: searchbrowser.lua:130
 msgid "Filters…"
-msgstr ""
+msgstr "Filtri…"
 
 #: searchbrowser.lua:145
 msgid "No results."
-msgstr ""
+msgstr "Nessun risultato."
 
 #: settingsbrowser.lua:34
 msgid "Ask"
-msgstr ""
+msgstr "Chiedi"
 
 #: settingsbrowser.lua:34
 msgid "Auto"
-msgstr ""
+msgstr "Auto"
 
 #: settingsbrowser.lua:34 settingsbrowser.lua:104 sourcesettingsbrowser.lua:93
 msgid "Off"
-msgstr ""
+msgstr "Disattivato"
 
 #: settingsbrowser.lua:60
 msgid "N/A"
-msgstr ""
+msgstr "N/D"
 
 #: settingsbrowser.lua:61 sourcesettingsbrowser.lua:98
 msgid "none"
-msgstr ""
+msgstr "nessuno"
 
 #: settingsbrowser.lua:63
 msgid " (using %1)"
-msgstr ""
+msgstr " (in uso: %1)"
 
 #: settingsbrowser.lua:67 sourcesettingsbrowser.lua:103
 msgid "not set"
-msgstr ""
+msgstr "non impostato"
 
 #: settingsbrowser.lua:69
 msgid "Custom"
-msgstr ""
+msgstr "Personalizzato"
 
 #: settingsbrowser.lua:69
 msgid "Default"
-msgstr ""
+msgstr "Predefinito"
 
 #: settingsbrowser.lua:72
 msgid "Default (8)"
-msgstr ""
+msgstr "Predefinito (8)"
 
 #: settingsbrowser.lua:78
 msgid "Sources"
-msgstr ""
+msgstr "Sorgenti"
 
 #: settingsbrowser.lua:82 settingsbrowser.lua:133
 msgid "Prefetch next chapters"
-msgstr ""
+msgstr "Pre-scarica i capitoli successivi"
 
 #: settingsbrowser.lua:89
 msgid "Auto-advance at chapter end"
-msgstr ""
+msgstr "Avanzamento automatico a fine capitolo"
 
 #: settingsbrowser.lua:94
 msgid "Storage limit"
-msgstr ""
+msgstr "Limite di spazio"
 
 #: settingsbrowser.lua:97 settingsbrowser.lua:196
 msgid "Source repository URL"
-msgstr ""
+msgstr "URL del repository delle sorgenti"
 
 #: settingsbrowser.lua:98 settingsbrowser.lua:228
 msgid "Network concurrency"
-msgstr ""
+msgstr "Richieste di rete simultanee"
 
 #: settingsbrowser.lua:104 sourcesettingsbrowser.lua:93
 msgid "On"
-msgstr ""
+msgstr "Attivato"
 
 #: settingsbrowser.lua:108 settingsbrowser.lua:369
 msgid "Ephemeral storage path"
-msgstr ""
+msgstr "Percorso archiviazione effimera"
 
 #: settingsbrowser.lua:112 settingsbrowser.lua:263
 msgid "FlareSolverr host"
-msgstr ""
+msgstr "Host FlareSolverr"
 
 #: settingsbrowser.lua:113
 msgid "Import cookies"
-msgstr ""
+msgstr "Importa cookie"
 
 #: settingsbrowser.lua:114
 msgid "Clear stored cookies"
-msgstr ""
+msgstr "Cancella cookie salvati"
 
 #: settingsbrowser.lua:134
 msgid "Chapters to download ahead while reading. 0 turns it off."
-msgstr ""
+msgstr "Capitoli da scaricare in anticipo durante la lettura. 0 lo disattiva."
 
 #: settingsbrowser.lua:144 settingsbrowser.lua:176 settingsbrowser.lua:209
 #: settingsbrowser.lua:239 settingsbrowser.lua:274 settingsbrowser.lua:380
 #: sourcesettingsbrowser.lua:240
 msgid "Set"
-msgstr ""
+msgstr "Imposta"
 
 #: settingsbrowser.lua:165
 msgid "Storage limit (MB)"
-msgstr ""
+msgstr "Limite di spazio (MB)"
 
 #: settingsbrowser.lua:166
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr ""
+"Prima vengono eliminati i capitoli più vecchi. 0 significa nessun limite."
 
 #: settingsbrowser.lua:198
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
 msgstr ""
+"URL dell'indice del repository. Lascia vuoto per il predefinito:\n"
+"%1"
 
 #: settingsbrowser.lua:229
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
 msgstr ""
+"Richieste parallele per sorgente. Vuoto o 0 per il predefinito (8). Valori "
+"più alti usano più memoria."
 
 #: settingsbrowser.lua:264
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
+"Risolve le sfide Cloudflare, es. localhost:8191. Lascia vuoto per "
+"disattivare."
 
 #: settingsbrowser.lua:266
 msgid "host:port"
-msgstr ""
+msgstr "host:porta"
 
 #: settingsbrowser.lua:292
 msgid "Long-press a cookies.txt to import it"
-msgstr ""
+msgstr "Tieni premuto un cookies.txt per importarlo"
 
 #: settingsbrowser.lua:302
 msgid ""
 "Import failed:\n"
 "%1"
 msgstr ""
+"Importazione non riuscita:\n"
+"%1"
 
 #: settingsbrowser.lua:312
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr ""
+"Cancellare i cookie di tutte le sorgenti? L'operazione non può essere "
+"annullata."
 
 #: settingsbrowser.lua:313
 msgid "Clear"
-msgstr ""
+msgstr "Cancella"
 
 #: settingsbrowser.lua:318
 msgid "Cookies cleared."
-msgstr ""
+msgstr "Cookie cancellati."
 
 #: settingsbrowser.lua:320
 msgid ""
 "Could not clear cookies:\n"
 "%1"
 msgstr ""
+"Impossibile cancellare i cookie:\n"
+"%1"
 
 #: settingsbrowser.lua:370
 msgid "Where chapters are stored in Ephemeral Mode."
-msgstr ""
+msgstr "Dove vengono salvati i capitoli in modalità effimera."
 
 #: settingsbrowser.lua:391
 msgid "%1 doesn't exist or isn't writable."
-msgstr ""
+msgstr "%1 non esiste o non è scrivibile."
 
 #: settingsbrowser.lua:439
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
-msgstr ""
+msgstr "La modalità effimera limita il pre-download a 1 capitolo."
 
 #: settingsbrowser.lua:449
 msgid "Storage limit is off in Ephemeral Mode."
-msgstr ""
+msgstr "Il limite di spazio è disattivato in modalità effimera."
 
 #: sourcesbrowser.lua:20
 msgid "Aidoku sources"
-msgstr ""
+msgstr "Sorgenti Aidoku"
 
 #: sourcesbrowser.lua:128
 msgid "Source settings"
-msgstr ""
+msgstr "Impostazioni sorgente"
 
 #: sourcesbrowser.lua:143
 msgid "Remove installed source"
-msgstr ""
+msgstr "Rimuovi sorgente installata"
 
 #: sourcesbrowser.lua:147
 msgid "Remove source '%1'?"
-msgstr ""
+msgstr "Rimuovere la sorgente '%1'?"
 
 #: sourcesettingsbrowser.lua:55
 msgid "%1 settings"
-msgstr ""
+msgstr "Impostazioni di %1"
 
 #: sourcesettingsbrowser.lua:75
 msgid ""
 "Could not load settings:\n"
 "%1"
 msgstr ""
+"Impossibile caricare le impostazioni:\n"
+"%1"
 
 #: sourcesettingsbrowser.lua:123
 msgid "This source has no configurable settings."
-msgstr ""
+msgstr "Questa sorgente non ha impostazioni configurabili."
 
 #: sourcesettingsbrowser.lua:133
 msgid ""
 "Could not save setting:\n"
 "%1"
 msgstr ""
+"Impossibile salvare l'impostazione:\n"
+"%1"
 
 #: subprocess.lua:131
 msgid "command produced no output"
-msgstr ""
+msgstr "il comando non ha prodotto output"
