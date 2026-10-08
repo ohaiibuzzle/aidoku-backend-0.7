@@ -7,7 +7,10 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type memSettings struct{ m map[string]any }
@@ -123,6 +126,87 @@ func TestNetSendFlareSolverrRetry(t *testing.T) {
 	if sawSecondUA != "TestBrowser/1.0" {
 		t.Fatalf("expected persisted UA to be applied to a later request with no explicit UA, got %q", sawSecondUA)
 	}
+}
+
+// TestConcurrentChallengesSolveOnce: several goroutines (as net.send_all
+// runs them) hitting the same challenge must share one FlareSolverr solve.
+func TestConcurrentChallengesSolveOnce(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("cf_clearance"); err == nil && r.Header.Get("User-Agent") == "TestBrowser/1.0" && c.Value == "solved" {
+			w.Write([]byte("ok"))
+			return
+		}
+		w.Header().Set("Server", "cloudflare")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte("Just a moment..."))
+	}))
+	defer target.Close()
+	targetURL, _ := url.Parse(target.URL)
+
+	var solves atomic.Int32
+	flare := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		solves.Add(1)
+		time.Sleep(200 * time.Millisecond) // long enough for every sender to queue up behind this solve
+		resp := flaresolverrResponse{Status: "ok"}
+		resp.Solution.UserAgent = "TestBrowser/1.0"
+		resp.Solution.Cookies = []flaresolverrCookie{{Name: "cf_clearance", Value: "solved", Domain: targetURL.Hostname(), Path: "/"}}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer flare.Close()
+
+	jar, _ := cookiejar.New(nil)
+	n := &Net{
+		Store:        NewStore(),
+		Client:       &http.Client{Jar: jar},
+		FlareSolverr: NewFlareSolverrClient(flare.URL),
+		Settings:     newSyncMemSettings(),
+		SourceKey:    "testsource",
+	}
+
+	const senders = 8
+	results := make([]netResult, senders)
+	descriptors := make([]int32, senders)
+	for i := range descriptors {
+		descriptors[i] = n.Store.Store(&NetRequest{Method: NetMethodGet, URL: targetURL, Headers: map[string]string{}})
+	}
+	var wg sync.WaitGroup
+	for i, d := range descriptors {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = n.send(context.Background(), d)
+		}()
+	}
+	wg.Wait()
+
+	if got := solves.Load(); got != 1 {
+		t.Fatalf("expected exactly 1 FlareSolverr solve, got %d", got)
+	}
+	for i, d := range descriptors {
+		req, _ := n.request(d)
+		if results[i] != netSuccess || string(req.ResponseData) != "ok" {
+			t.Fatalf("sender %d: result %v, body %q", i, results[i], req.ResponseData)
+		}
+	}
+}
+
+type syncMemSettings struct {
+	mu sync.Mutex
+	*memSettings
+}
+
+func newSyncMemSettings() *syncMemSettings { return &syncMemSettings{memSettings: newMemSettings()} }
+
+func (s *syncMemSettings) Object(key string) any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.memSettings.Object(key)
+}
+
+func (s *syncMemSettings) SetValue(key string, value any) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.memSettings.SetValue(key, value)
 }
 
 func TestIsCloudflareChallenge(t *testing.T) {

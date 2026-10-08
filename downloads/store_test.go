@@ -42,6 +42,40 @@ func TestRecordAndPath(t *testing.T) {
 	}
 }
 
+// TestUnusedPathAvoidsAnotherChaptersFile: the pre-write check that keeps a
+// second same-named chapter from overwriting the first one's file at all.
+func TestUnusedPathAvoidsAnotherChaptersFile(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	omake := writeFile(t, dir, "Omake.cbz", 100)
+	if _, err := s.Record("src.key", "src.aix", "manga1", "ch1", omake, "Manga", "Omake", nil, nil); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	if got, err := s.UnusedPath("src.key", "manga1", "ch1", omake); err != nil || got != omake {
+		t.Errorf("same chapter: UnusedPath = %q, %v, want its own path back", got, err)
+	}
+	other, err := s.UnusedPath("src.key", "manga1", "ch2", omake)
+	if err != nil {
+		t.Fatalf("UnusedPath: %v", err)
+	}
+	if other == omake || filepath.Dir(other) != dir || filepath.Ext(other) != ".cbz" {
+		t.Errorf("other chapter: UnusedPath = %q, want a distinct .cbz in %s", other, dir)
+	}
+	if again, _ := s.UnusedPath("src.key", "manga1", "ch2", omake); again != other {
+		t.Errorf("UnusedPath not stable across calls: %q vs %q", again, other)
+	}
+	fresh := filepath.Join(dir, "Chapter 3.cbz")
+	if got, _ := s.UnusedPath("src.key", "manga1", "ch3", fresh); got != fresh {
+		t.Errorf("unowned path: UnusedPath = %q, want %q", got, fresh)
+	}
+}
+
 // TestRecordDisambiguatesCollidingFilename guards against two different
 // chapters (different chapter keys) whose titles happen to sanitize to the
 // identical filename leaving the index with two rows permanently pointing

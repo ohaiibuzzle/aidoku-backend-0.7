@@ -15,6 +15,7 @@ local DocSettings = require("docsettings")
 local SQ3 = require("lua-ljsqlite3/init")
 local ffiUtil = require("ffi/util")
 local lfs = require("libs/libkoreader-lfs")
+local _ = require("aidoku_l10n")
 
 local DownloadsEngine = {}
 DownloadsEngine.__index = DownloadsEngine
@@ -51,6 +52,33 @@ local function purgeSidecar(path)
     end
 end
 
+-- query prepares sql, binds binds (if any), and returns fn(stmt) -- or
+-- fallback instead of raising if any step fails (a busy timeout running
+-- out under a concurrent aidoku-run write, a damaged index.db after power
+-- loss, ...). Every caller is a UI screen that doesn't expect an error, so
+-- an unguarded prepare/step would crash it. The statement is always closed.
+local function query(conn, fallback, sql, binds, fn)
+    local ok, stmt = pcall(conn.prepare, conn, sql)
+    if not ok then
+        return fallback
+    end
+    local ok_run, result = pcall(function()
+        if binds then
+            stmt:bind(unpack(binds))
+        end
+        return fn(stmt)
+    end)
+    pcall(stmt.close, stmt)
+    if not ok_run then
+        return fallback
+    end
+    return result
+end
+
+local function firstRow(stmt)
+    return stmt:step()
+end
+
 function DownloadsEngine.new(downloads_dir)
     local self = setmetatable({
         downloads_dir = downloads_dir,
@@ -72,31 +100,43 @@ function DownloadsEngine:isAvailable()
 end
 
 -- tableExists is the "has aidoku-run ever recorded a download" check --
--- sqlite_master always exists even in a brand-new/empty database, so this
--- never errors, unlike querying `downloads` directly on a fresh install.
+-- sqlite_master always exists even in a brand-new/empty database, unlike
+-- querying `downloads` directly on a fresh install. An unreadable database
+-- counts as "no table", so every caller degrades to its empty result.
 function DownloadsEngine:tableExists()
     if not self.conn then
         return false
     end
-    local count = self.conn:rowexec(
+    local ok, count = pcall(self.conn.rowexec, self.conn,
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='downloads'")
-    return (tonumber(count) or 0) > 0
+    return ok and (tonumber(count) or 0) > 0
 end
 
--- path returns the local CBZ path for a chapter, or "" if not downloaded.
--- source_key is the source's stable manifest ID (e.g. "en.weebcentral"),
--- not its installed file's path -- see the downloads Go package doc for
--- why entries are keyed by that instead.
-function DownloadsEngine:path(source_key, manga_key, chapter_key)
+-- indexedPath returns the path recorded for a chapter, or "" if there's no
+-- row -- whether or not that file still exists. Only remove() wants this;
+-- everything else goes through path().
+function DownloadsEngine:indexedPath(source_key, manga_key, chapter_key)
     if not self:tableExists() then
         return ""
     end
-    local stmt = self.conn:prepare(
-        "SELECT path FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?")
-    stmt:bind(source_key, manga_key, chapter_key)
-    local row = stmt:step()
-    stmt:close()
+    local row = query(self.conn, nil,
+        "SELECT path FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?",
+        { source_key, manga_key, chapter_key }, firstRow)
     return row and row[1] or ""
+end
+
+-- path returns the local CBZ path for a chapter, or "" if not downloaded --
+-- including a stale row whose file is gone (deleted from KOReader's file
+-- browser, or left behind by aidoku-run's same-filename disambiguation), so
+-- no caller ever tries to open a missing file. source_key is the source's
+-- stable manifest ID (e.g. "en.weebcentral"), not its installed file's
+-- path -- see the downloads Go package doc for why entries are keyed by that.
+function DownloadsEngine:path(source_key, manga_key, chapter_key)
+    local p = self:indexedPath(source_key, manga_key, chapter_key)
+    if p ~= "" and lfs.attributes(p, "mode") ~= "file" then
+        return ""
+    end
+    return p
 end
 
 -- byPath is the reverse lookup: given a local file path (as opened in the
@@ -106,10 +146,8 @@ function DownloadsEngine:byPath(file_path)
     if not self:tableExists() then
         return nil
     end
-    local stmt = self.conn:prepare("SELECT " .. ENTRY_COLUMNS .. " FROM downloads WHERE path=?")
-    stmt:bind(file_path)
-    local row = stmt:step()
-    stmt:close()
+    local row = query(self.conn, nil,
+        "SELECT " .. ENTRY_COLUMNS .. " FROM downloads WHERE path=?", { file_path }, firstRow)
     if not row then
         return nil
     end
@@ -121,15 +159,13 @@ end
 -- Sidecar cleanup is unconditional (not just Ephemeral Mode) -- see
 -- purgeSidecar.
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
-    local path = self:path(source_key, manga_key, chapter_key)
+    local path = self:indexedPath(source_key, manga_key, chapter_key)
     if path == "" then
         return true
     end
-    local stmt = self.conn:prepare(
-        "DELETE FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?")
-    stmt:bind(source_key, manga_key, chapter_key)
-    stmt:step()
-    stmt:close()
+    -- File first: if that fails the row stays, so a later remove/prune can
+    -- retry, instead of leaving a file nothing indexes (and so nothing ever
+    -- deletes).
     if lfs.attributes(path, "mode") == "file" then
         local ok, err = os.remove(path)
         if not ok then
@@ -137,6 +173,12 @@ function DownloadsEngine:remove(source_key, manga_key, chapter_key)
         end
     end
     purgeSidecar(path)
+    local deleted = query(self.conn, false,
+        "DELETE FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?",
+        { source_key, manga_key, chapter_key }, function(stmt) stmt:step() return true end)
+    if not deleted then
+        return false
+    end
     return true
 end
 
@@ -147,36 +189,33 @@ function DownloadsEngine:resetProgress(source_key, manga_key)
     if not self:tableExists() then
         return
     end
-    for _, e in ipairs(self:list() or {}) do
+    for _idx, e in ipairs(self:list() or {}) do
         if e.sourceKey == source_key and e.mangaKey == manga_key then
             purgeSidecar(e.path)
         end
     end
 end
 
--- list returns every downloaded chapter, most recently downloaded first.
--- pcall-wrapped so a busy-timeout expiry (a concurrent aidoku-run write
--- holding the file) returns (nil, err) instead of raising -- matching
--- what downloadsbrowser.lua's caller already checks for.
+-- list returns every downloaded chapter, most recently downloaded first, or
+-- (nil, err) if the index couldn't be read -- what downloadsbrowser.lua's
+-- caller checks for.
 function DownloadsEngine:list()
     if not self:tableExists() then
         return {}
     end
-    local ok, entries_or_err = pcall(function()
-        local stmt = self.conn:prepare(
-            "SELECT " .. ENTRY_COLUMNS .. " FROM downloads ORDER BY downloaded_at DESC")
-        local entries = {}
-        local row = {}
-        while stmt:step(row) do
-            table.insert(entries, rowToEntry(row))
-        end
-        stmt:close()
-        return entries
-    end)
-    if not ok then
-        return nil, entries_or_err
+    local entries = query(self.conn, nil,
+        "SELECT " .. ENTRY_COLUMNS .. " FROM downloads ORDER BY downloaded_at DESC", nil,
+        function(stmt)
+            local out, row = {}, {}
+            while stmt:step(row) do
+                table.insert(out, rowToEntry(row))
+            end
+            return out
+        end)
+    if not entries then
+        return nil, _("Could not read the downloads index.")
     end
-    return entries_or_err
+    return entries
 end
 
 -- totalBytes returns the sum of every indexed download's size.
@@ -184,7 +223,8 @@ function DownloadsEngine:totalBytes()
     if not self:tableExists() then
         return 0
     end
-    return tonumber(self.conn:rowexec("SELECT SUM(size_bytes) FROM downloads")) or 0
+    local ok, total = pcall(self.conn.rowexec, self.conn, "SELECT SUM(size_bytes) FROM downloads")
+    return ok and tonumber(total) or 0
 end
 
 -- prune deletes the oldest downloads (index entry + file) until under
@@ -229,7 +269,7 @@ end
 -- (keep_path = the newly opened path) -- see mangabrowser.lua/nextchapter.lua/
 -- settingsbrowser.lua.
 function DownloadsEngine:removeAllExcept(keep_path)
-    for _, e in ipairs(self:list() or {}) do
+    for _idx, e in ipairs(self:list() or {}) do
         if e.path ~= keep_path then
             self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
         end
@@ -248,31 +288,28 @@ function DownloadsEngine:reassociate(old_source_key, new_source_key)
     -- present under old_source_key, drop the old_source_key row instead of
     -- overwriting the existing one (presumably the more recently
     -- verified-working one) -- same rule as Store.Reassociate in Go.
-    local del_stmt = self.conn:prepare([[
+    local function step(stmt) stmt:step() return true end
+    if not query(self.conn, false, [[
         DELETE FROM downloads
         WHERE source_key = ?
         AND EXISTS (
             SELECT 1 FROM downloads AS d2
             WHERE d2.source_key = ? AND d2.manga_key = downloads.manga_key AND d2.chapter_key = downloads.chapter_key
         )
-    ]])
-    del_stmt:bind(old_source_key, new_source_key)
-    del_stmt:step()
-    del_stmt:close()
+    ]], { old_source_key, new_source_key }, step) then
+        return 0
+    end
 
     -- lua-ljsqlite3 doesn't expose sqlite3_changes, so count the rows the
     -- UPDATE below is about to touch first, immediately before running it.
-    local count_stmt = self.conn:prepare("SELECT count(*) FROM downloads WHERE source_key=?")
-    count_stmt:bind(old_source_key)
-    local row = count_stmt:step()
-    count_stmt:close()
+    local row = query(self.conn, nil, "SELECT count(*) FROM downloads WHERE source_key=?",
+        { old_source_key }, firstRow)
     local n = (row and tonumber(row[1])) or 0
 
-    local upd_stmt = self.conn:prepare("UPDATE downloads SET source_key = ? WHERE source_key = ?")
-    upd_stmt:bind(new_source_key, old_source_key)
-    upd_stmt:step()
-    upd_stmt:close()
-
+    if not query(self.conn, false, "UPDATE downloads SET source_key = ? WHERE source_key = ?",
+        { new_source_key, old_source_key }, step) then
+        return 0
+    end
     return n
 end
 

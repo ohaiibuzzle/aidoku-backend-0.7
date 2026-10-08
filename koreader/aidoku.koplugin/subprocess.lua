@@ -22,14 +22,8 @@ local _ = require("aidoku_l10n")
 local Runner = {}
 Runner.__index = Runner
 
--- stderr_log_name should be distinct per bundled binary sharing this
--- module, so two Runners can't stomp on each other's captured stderr if
--- calls happen to overlap.
-function Runner.new(bin_path, stderr_log_name)
-    return setmetatable({
-        bin_path = bin_path,
-        stderr_log_name = stderr_log_name or "aidoku-stderr.log",
-    }, Runner)
+function Runner.new(bin_path)
+    return setmetatable({ bin_path = bin_path }, Runner)
 end
 
 -- isAvailable reports whether the bundled binary exists at bin_path (it
@@ -98,40 +92,56 @@ local function buildCommand(bin_path, stderr_path, args, env, low_priority)
     return table.concat(parts, " ") .. "; echo"
 end
 
+-- errorMessage picks what to show the user out of a failed command's
+-- stderr: aidoku-run's own "error: ..." line (the last one, prefix
+-- stripped), not the "[download] page N/M" progress or guest "[print]"
+-- lines that precede it; else the last non-empty line.
+local function errorMessage(stderr)
+    local last_error, last_line
+    for line in stderr:gmatch("[^\n]+") do
+        if line:match("%S") then
+            last_line = line
+            local msg = line:match("^error: (.*)")
+            if msg then
+                last_error = msg
+            end
+        end
+    end
+    return last_error or last_line
+end
+
 -- exec runs the binary with args, returning trimmed stdout on success or
--- nil plus an error message (stderr, if any was captured, else a generic
--- message) on failure/cancellation. env, if given, is a table of
+-- nil plus an error message (see errorMessage, else a generic message) on
+-- failure/cancellation. env, if given, is a table of
 -- {VAR = value} exported into the command's environment (e.g.
 -- FLARESOLVERR_HOST). See buildCommand() for low_priority.
 function Runner:exec(args, progress_text, env, low_priority)
-    -- /tmp rather than DataStorage's cache dir: this file is truncated and
-    -- recreated on every single subprocess call (including cheap, frequent
-    -- ones like per-source manifest reads) and is only ever read back on
-    -- failure, so keeping it off persistent storage avoids pure write churn
-    -- on eMMC. Matches the same tmpfs precedent cmd/aidoku-run's own cookie
-    -- file uses on the Go side (os.TempDir()).
-    local stderr_path = "/tmp/" .. self.stderr_log_name
+    -- One file per call (os.tmpname, under /tmp -- tmpfs, so no eMMC write
+    -- churn): a background prefetch and a foreground call can overlap, and a
+    -- shared file meant one's error popup could show the other's stderr.
+    local stderr_path = os.tmpname()
     local cmd = buildCommand(self.bin_path, stderr_path, args, env, low_priority)
 
     local completed, output = Trapper:dismissablePopen(cmd, progress_text)
+    local stderr = ""
+    local f = io.open(stderr_path, "r")
+    if f then
+        stderr = f:read("*a") or ""
+        f:close()
+    end
+    -- A cancelled call's process may still be running and writing here; on
+    -- Linux, unlinking under it is harmless.
+    os.remove(stderr_path)
     if not completed then
         return nil, _("Cancelled")
     end
 
     output = output and output:gsub("%s+$", "") or ""
     if output == "" then
-        local err_text = ""
-        local f = io.open(stderr_path, "r")
-        if f then
-            err_text = f:read("*a") or ""
-            f:close()
-        end
-        err_text = err_text:gsub("%s+$", "")
-        if err_text == "" then
-            err_text = _("command produced no output")
-        end
-        logger.warn("aidoku: command failed:", cmd, err_text)
-        return nil, err_text
+        -- Full stderr goes to the log for debugging; only the error line is
+        -- shown to the user.
+        logger.warn("aidoku: command failed:", cmd, stderr)
+        return nil, errorMessage(stderr) or _("command produced no output")
     end
     return output
 end

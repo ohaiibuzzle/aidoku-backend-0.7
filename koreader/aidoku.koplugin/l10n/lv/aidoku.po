@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 09:53+0700\n"
+"POT-Creation-Date: 2026-10-08 14:30+0700\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -51,6 +51,10 @@ msgstr ""
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
 msgstr "Noņemt"
+
+#: downloadsengine.lua:216
+msgid "Could not read the downloads index."
+msgstr "Nevarēja nolasīt lejupielāžu sarakstu."
 
 #: engine.lua:47
 msgid "Fetching repository…"
@@ -211,7 +215,9 @@ msgstr "Īslaicīgais režīms"
 #. TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
 #: librarybrowser.lua:77
 msgid "Library is empty. Use the menu (top left) to find manga."
-msgstr "Bibliotēka ir tukša. Izmantojiet izvēlni (augšējā kreisajā stūrī), lai atrastu mangu."
+msgstr ""
+"Bibliotēka ir tukša. Izmantojiet izvēlni (augšējā kreisajā stūrī), lai "
+"atrastu mangu."
 
 #: librarybrowser.lua:108 settingsbrowser.lua:24
 msgid "Settings"
@@ -295,7 +301,9 @@ msgstr "AidokuRunner KOReader lietotnei"
 
 #: main.lua:254
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
-msgstr "Nav atrasts aidoku-run bināro fails. Pārbūvējiet spraudni ar koreader/build.sh."
+msgstr ""
+"Nav atrasts aidoku-run bināro fails. Pārbūvējiet spraudni ar koreader/"
+"build.sh."
 
 #: main.lua:260
 msgid "Could not open the downloads database. Is storage writable?"
@@ -371,7 +379,7 @@ msgstr "Jau lejupielādēts."
 msgid "Downloading %1/%2: %3"
 msgstr "Lejupielādē %1/%2: %3"
 
-#: mangabrowser.lua:392 subprocess.lua:118
+#: mangabrowser.lua:392 subprocess.lua:136
 msgid "Cancelled"
 msgstr "Atcelts"
 
@@ -712,6 +720,6 @@ msgstr ""
 "Nevarēja saglabāt iestatījumu:\n"
 "%1"
 
-#: subprocess.lua:131
+#: subprocess.lua:144
 msgid "command produced no output"
 msgstr "komanda neradīja izvadi"

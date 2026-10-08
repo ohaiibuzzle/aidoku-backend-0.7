@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +36,11 @@ type FlareSolverrClient struct {
 	// Defaults to a client with a generous timeout, since solving a
 	// challenge in a real browser routinely takes tens of seconds.
 	HTTPClient *http.Client
+
+	// mu serializes solves: net.send_all fans one guest batch out to several
+	// goroutines, and without it every one that hit the same challenge would
+	// start its own browser solve. See maybeRetry.
+	mu sync.Mutex
 }
 
 // NewFlareSolverrClient returns a client for the given host, or nil if host
@@ -215,6 +221,20 @@ func (fs *flareSolverrRetryer) maybeRetry(ctx context.Context, client *http.Clie
 	if fs == nil || fs.Client == nil || httpReq.Method != http.MethodGet || !isCloudflareChallenge(resp, body) {
 		return resp, body
 	}
+	if !fs.Client.mu.TryLock() {
+		// Another goroutine is mid-solve. Once it's done, its cookies are in
+		// the shared jar and its UA is persisted, so retry with those first
+		// and only solve again if that's still challenged.
+		fs.Client.mu.Lock()
+		defer fs.Client.mu.Unlock()
+		if ua := fs.persistedUserAgent(); ua != "" {
+			if resp2, data2, ok := retryGet(ctx, client, httpReq, ua); ok && !isCloudflareChallenge(resp2, data2) {
+				return resp2, data2
+			}
+		}
+	} else {
+		defer fs.Client.mu.Unlock()
+	}
 	solution, err := fs.Client.Solve(ctx, httpReq.URL.String())
 	if err != nil || solution == nil {
 		return resp, body
@@ -229,19 +249,29 @@ func (fs *flareSolverrRetryer) maybeRetry(ctx context.Context, client *http.Clie
 		fs.persistUserAgent(solution.UserAgent)
 	}
 
-	retryReq, err := http.NewRequestWithContext(ctx, http.MethodGet, httpReq.URL.String(), nil)
-	if err != nil {
-		return resp, body
-	}
-	retryReq.Header = httpReq.Header.Clone()
-	if solution.UserAgent != "" {
-		retryReq.Header.Set("User-Agent", solution.UserAgent)
-	}
-	resp2, data2, err2 := doHTTPRequest(client, retryReq)
-	if err2 != nil {
+	resp2, data2, ok := retryGet(ctx, client, httpReq, solution.UserAgent)
+	if !ok {
 		return resp, body
 	}
 	return resp2, data2
+}
+
+// retryGet re-sends httpReq as a body-less GET, overriding its User-Agent
+// with ua if non-empty.
+func retryGet(ctx context.Context, client *http.Client, httpReq *http.Request, ua string) (*http.Response, []byte, bool) {
+	retryReq, err := http.NewRequestWithContext(ctx, http.MethodGet, httpReq.URL.String(), nil)
+	if err != nil {
+		return nil, nil, false
+	}
+	retryReq.Header = httpReq.Header.Clone()
+	if ua != "" {
+		retryReq.Header.Set("User-Agent", ua)
+	}
+	resp, data, err := doHTTPRequest(client, retryReq)
+	if err != nil {
+		return nil, nil, false
+	}
+	return resp, data, true
 }
 
 // isCloudflareChallenge reports whether resp/body look like a Cloudflare

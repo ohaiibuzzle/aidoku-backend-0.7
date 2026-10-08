@@ -15,9 +15,9 @@ func TestResolveOutputPath_Flat(t *testing.T) {
 	title := "Chapter 1"
 	chapter := models.Chapter{Title: &title}
 
-	got, err := resolveOutputPath(filepath.Join(dir, "Chapter 1.cbz"), "", manga, chapter)
+	got, err := ResolveOutputPath(filepath.Join(dir, "Chapter 1.cbz"), "", manga, chapter)
 	if err != nil {
-		t.Fatalf("resolveOutputPath: %v", err)
+		t.Fatalf("ResolveOutputPath: %v", err)
 	}
 	want := filepath.Join(dir, "Chapter 1.cbz")
 	if got != want {
@@ -31,9 +31,9 @@ func TestResolveOutputPath_MangaDirCreatedAndSanitized(t *testing.T) {
 	title := "Chapter 1"
 	chapter := models.Chapter{Title: &title}
 
-	got, err := resolveOutputPath(filepath.Join(dir, "Chapter 1.cbz"), `Bad? Name: <Title> [src.key]`, manga, chapter)
+	got, err := ResolveOutputPath(filepath.Join(dir, "Chapter 1.cbz"), `Bad? Name: <Title> [src.key]`, manga, chapter)
 	if err != nil {
-		t.Fatalf("resolveOutputPath: %v", err)
+		t.Fatalf("ResolveOutputPath: %v", err)
 	}
 	wantDir := filepath.Join(dir, "Bad- Name- -Title- [src.key]")
 	want := filepath.Join(wantDir, "Chapter 1.cbz")
@@ -51,9 +51,9 @@ func TestResolveOutputPath_SanitizesChapterFilenameToo(t *testing.T) {
 	title := "Chapter 1"
 	chapter := models.Chapter{Title: &title}
 
-	got, err := resolveOutputPath(filepath.Join(dir, `Chapter: 1?.cbz`), "Manga Folder", manga, chapter)
+	got, err := ResolveOutputPath(filepath.Join(dir, `Chapter: 1?.cbz`), "Manga Folder", manga, chapter)
 	if err != nil {
-		t.Fatalf("resolveOutputPath: %v", err)
+		t.Fatalf("ResolveOutputPath: %v", err)
 	}
 	want := filepath.Join(dir, "Manga Folder", "Chapter- 1-.cbz")
 	if got != want {
@@ -73,9 +73,9 @@ func TestResolveOutputPath_MangaDirNameTraversalRejected(t *testing.T) {
 	title := "Chapter 1"
 	chapter := models.Chapter{Title: &title}
 
-	got, err := resolveOutputPath(filepath.Join(dir, "downloads", "Chapter 1.cbz"), "..", manga, chapter)
+	got, err := ResolveOutputPath(filepath.Join(dir, "downloads", "Chapter 1.cbz"), "..", manga, chapter)
 	if err != nil {
-		t.Fatalf("resolveOutputPath: %v", err)
+		t.Fatalf("ResolveOutputPath: %v", err)
 	}
 	if !strings.HasPrefix(got, filepath.Join(dir, "downloads")) {
 		t.Errorf("resolved path %q escaped the downloads directory %q", got, filepath.Join(dir, "downloads"))
@@ -105,9 +105,9 @@ func TestResolveOutputPath_Empty(t *testing.T) {
 	title := "Chapter 1"
 	chapter := models.Chapter{Title: &title}
 
-	got, err := resolveOutputPath("", "ignored", manga, chapter)
+	got, err := ResolveOutputPath("", "ignored", manga, chapter)
 	if err != nil {
-		t.Fatalf("resolveOutputPath: %v", err)
+		t.Fatalf("ResolveOutputPath: %v", err)
 	}
 	if want := "Test Manga - Chapter 1.cbz"; got != want {
 		t.Errorf("got %q, want %q", got, want)

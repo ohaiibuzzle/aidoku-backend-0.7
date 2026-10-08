@@ -270,17 +270,13 @@ func (s *Store) Record(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaT
 	return e, nil
 }
 
-// disambiguatePath renames the just-downloaded file at path if some other
-// (manga_key, chapter_key) under sourceKey already has an index row
-// pointing at that exact path -- two chapters whose titles sanitize to the
-// same filename would otherwise both end up recorded against one path.
-// It can't recover the first chapter's bytes (the second download already
-// overwrote them on disk before Record was called), but it stops the
-// index staying wrong afterward: the second chapter gets its own file, and
-// the first's row is left pointing at nothing, which existingDownload/Path
-// already treat as "not downloaded yet" rather than silently resolving to
-// the wrong content.
-func (s *Store) disambiguatePath(sourceKey, mangaKey, chapterKey, path string) (string, error) {
+// UnusedPath returns path if no other (manga_key, chapter_key) under
+// sourceKey is recorded against it, else a variant with a short hash of
+// this chapter's keys appended -- two chapters whose titles sanitize to the
+// same filename (e.g. both "Omake") would otherwise share one file. Callers
+// should pick the write path through this *before* writing, so the second
+// download never overwrites the first chapter's file.
+func (s *Store) UnusedPath(sourceKey, mangaKey, chapterKey, path string) (string, error) {
 	var ownerManga, ownerChapter string
 	err := s.db.QueryRow(`SELECT manga_key, chapter_key FROM downloads WHERE source_key = ? AND path = ?`, sourceKey, path).Scan(&ownerManga, &ownerChapter)
 	if err == sql.ErrNoRows {
@@ -299,7 +295,21 @@ func (s *Store) disambiguatePath(sourceKey, mangaKey, chapterKey, path string) (
 	// FAT32/exFAT-illegal character sneaking back in.
 	ext := filepath.Ext(path)
 	sum := sha256.Sum256([]byte(mangaKey + "\x00" + chapterKey))
-	newPath := fmt.Sprintf("%s [%s]%s", strings.TrimSuffix(path, ext), hex.EncodeToString(sum[:])[:8], ext)
+	return fmt.Sprintf("%s [%s]%s", strings.TrimSuffix(path, ext), hex.EncodeToString(sum[:])[:8], ext), nil
+}
+
+// disambiguatePath is Record's backstop for a collision UnusedPath couldn't
+// prevent: two different same-named chapters downloading at once (their
+// per-chapter locks don't exclude each other), so neither was recorded yet
+// when the other checked. The first chapter's bytes are already overwritten
+// by then; this only renames the surviving file to the second chapter's
+// unique name, leaving the first's row pointing at nothing -- which readers
+// of the index treat as "not downloaded", not as the wrong content.
+func (s *Store) disambiguatePath(sourceKey, mangaKey, chapterKey, path string) (string, error) {
+	newPath, err := s.UnusedPath(sourceKey, mangaKey, chapterKey, path)
+	if err != nil || newPath == path {
+		return newPath, err
+	}
 	if err := os.Rename(path, newPath); err != nil {
 		return "", fmt.Errorf("downloads: disambiguating colliding filename: %w", err)
 	}
@@ -361,12 +371,15 @@ func (s *Store) Remove(sourceKey, mangaKey, chapterKey string) error {
 	if path == "" {
 		return nil
 	}
+	// File first: if that fails, the row stays so a later Remove/Prune can
+	// retry, instead of leaving a file nothing indexes (and so nothing ever
+	// deletes).
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("downloads: removing file %s: %w", path, err)
+	}
 	if _, err := s.db.Exec(`DELETE FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?`,
 		sourceKey, mangaKey, chapterKey); err != nil {
 		return fmt.Errorf("downloads: deleting index entry: %w", err)
-	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("downloads: removing file %s: %w", path, err)
 	}
 	return nil
 }

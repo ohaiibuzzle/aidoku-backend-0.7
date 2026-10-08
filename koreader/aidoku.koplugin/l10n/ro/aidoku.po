@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 09:53+0700\n"
+"POT-Creation-Date: 2026-10-08 14:30+0700\n"
 "PO-Revision-Date: 2026-10-07 13:35+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -51,6 +51,10 @@ msgstr ""
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
 msgstr "Șterge"
+
+#: downloadsengine.lua:216
+msgid "Could not read the downloads index."
+msgstr "Nu s-a putut citi indexul descărcărilor."
 
 #: engine.lua:47
 msgid "Fetching repository…"
@@ -376,7 +380,7 @@ msgstr "Deja descărcat."
 msgid "Downloading %1/%2: %3"
 msgstr "Se descarcă %1/%2: %3"
 
-#: mangabrowser.lua:392 subprocess.lua:118
+#: mangabrowser.lua:392 subprocess.lua:136
 msgid "Cancelled"
 msgstr "Anulat"
 
@@ -718,6 +722,6 @@ msgstr ""
 "Setarea nu a putut fi salvată:\n"
 "%1"
 
-#: subprocess.lua:131
+#: subprocess.lua:144
 msgid "command produced no output"
 msgstr "comanda nu a produs nicio ieșire"

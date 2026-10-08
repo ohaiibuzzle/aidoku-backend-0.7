@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 )
 
 type Store struct {
@@ -17,6 +18,9 @@ type Store struct {
 	path     string
 	values   map[string]any
 	defaults map[string]any
+	// dirty is every key this process has set/removed since its last
+	// successful save -- the only keys save() writes over what's on disk.
+	dirty map[string]bool
 }
 
 // Open loads an existing store from path, or starts empty if the file
@@ -27,22 +31,13 @@ func Open(path string) (*Store, error) {
 		path:     path,
 		values:   make(map[string]any),
 		defaults: make(map[string]any),
+		dirty:    make(map[string]bool),
 	}
 	if path == "" {
 		return s, nil
 	}
-	data, err := os.ReadFile(path)
+	raw, err := readTagged(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil
-		}
-		return nil, err
-	}
-	if len(data) == 0 {
-		return s, nil
-	}
-	var raw map[string]taggedValue
-	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
 	for k, tv := range raw {
@@ -51,19 +46,83 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
+// readTagged reads the on-disk store, treating a missing or empty file as
+// empty.
+func readTagged(path string) (map[string]taggedValue, error) {
+	raw := map[string]taggedValue{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return raw, nil
+		}
+		return nil, err
+	}
+	if len(data) == 0 {
+		return raw, nil
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+// Locked runs fn while holding an exclusive flock(2) on path+".lock", so
+// separate aidoku-run processes doing read-modify-write on the same file
+// (settings.json here, cookies.json in cmd/aidoku-run) can't interleave and
+// drop each other's changes. The lock file is never deleted, for the same
+// reason as downloads.AcquireLock's marker files.
+func Locked(path string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return fn()
+}
+
 func (s *Store) save() error {
 	if s.path == "" {
 		return nil
 	}
-	// Snapshot values under the lock, then do JSON marshal + disk I/O
-	// unlocked -- SetValue releases s.mu before calling save(), so two
-	// concurrent SetValues (e.g. net.send_all's per-descriptor goroutines
-	// each hitting defaults.set) would otherwise range s.values here while
-	// another goroutine mutates it, which is a fatal, unrecoverable
-	// concurrent map read/write in Go.
+	return Locked(s.path, s.saveLocked)
+}
+
+// saveLocked merges this process's dirty keys into whatever is on disk now
+// (not the snapshot Open read): another aidoku-run process -- e.g. a
+// background prefetch download -- may have saved since, and writing the whole
+// in-memory map back would silently revert its changes.
+func (s *Store) saveLocked() error {
+	onDisk, err := readTagged(s.path)
+	if err != nil {
+		// Corrupt file: nothing to merge with, so fall back to rewriting it
+		// from memory rather than failing every save forever.
+		onDisk = map[string]taggedValue{}
+		s.mu.Lock()
+		for k := range s.values {
+			s.dirty[k] = true
+		}
+		s.mu.Unlock()
+	}
+
+	// The map is read and the dirty set cleared under s.mu; marshal + disk
+	// I/O happen unlocked. SetValue releases s.mu before calling save(), so
+	// ranging s.values without it is a fatal concurrent map read/write.
 	s.mu.Lock()
-	tagged := make(map[string]taggedValue, len(s.values))
-	for k, v := range s.values {
+	written := s.dirty
+	s.dirty = make(map[string]bool)
+	for k := range written {
+		v, ok := s.values[k]
+		if !ok {
+			delete(onDisk, k)
+			continue
+		}
 		tv, ok := tag(v)
 		if !ok {
 			// A caller passed a type SetValue's contract doesn't support
@@ -74,9 +133,22 @@ func (s *Store) save() error {
 			fmt.Fprintf(os.Stderr, "settingsstore: %q has unsupported value type %T, not persisted\n", k, v)
 			continue
 		}
-		tagged[k] = tv
+		onDisk[k] = tv
 	}
 	s.mu.Unlock()
+
+	err = s.write(onDisk)
+	if err != nil {
+		s.mu.Lock()
+		for k := range written {
+			s.dirty[k] = true
+		}
+		s.mu.Unlock()
+	}
+	return err
+}
+
+func (s *Store) write(tagged map[string]taggedValue) error {
 	data, err := json.Marshal(tagged)
 	if err != nil {
 		return err
@@ -205,6 +277,7 @@ func (s *Store) SetValue(key string, value any) error {
 	} else {
 		s.values[key] = value
 	}
+	s.dirty[key] = true
 	s.mu.Unlock()
 	return s.save()
 }

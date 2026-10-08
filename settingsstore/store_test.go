@@ -31,3 +31,46 @@ func TestSetValueConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestSaveKeepsOtherProcessesChanges: two Stores opened on the same file
+// stand in for two aidoku-run processes (e.g. a background prefetch and a
+// "settings set"). Each one's save must keep the other's keys, not write
+// its own stale snapshot over them.
+func TestSaveKeepsOtherProcessesChanges(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	a, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open a: %v", err)
+	}
+	b, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open b: %v", err)
+	}
+
+	if err := b.SetValue("src.userChoice", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetValue("src.token", "abc"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Remove("src.token"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetValue("src.other", true); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got := c.Object("src.userChoice"); got != "new" {
+		t.Errorf("userChoice = %v, want new (lost to the other store's save)", got)
+	}
+	if got := c.Object("src.token"); got != nil {
+		t.Errorf("token = %v, want removed", got)
+	}
+	if got := c.Object("src.other"); got != true {
+		t.Errorf("other = %v, want true", got)
+	}
+}

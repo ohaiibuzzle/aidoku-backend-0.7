@@ -22,7 +22,7 @@ Engine.__index = Engine
 -- changing it in Settings takes effect on the next call with no restart.
 function Engine.new(bin_path, env_fn)
     return setmetatable({
-        runner = Runner.new(bin_path, "aidoku-run-stderr.log"),
+        runner = Runner.new(bin_path),
         env_fn = env_fn,
     }, Engine)
 end

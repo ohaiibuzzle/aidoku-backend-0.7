@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 09:53+0700\n"
+"POT-Creation-Date: 2026-10-08 14:30+0700\n"
 "PO-Revision-Date: 2026-10-07 13:35+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -49,6 +49,10 @@ msgstr ""
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
 msgstr "মুছুন"
+
+#: downloadsengine.lua:216
+msgid "Could not read the downloads index."
+msgstr "ডাউনলোড সূচি পড়া যায়নি।"
 
 #: engine.lua:47
 msgid "Fetching repository…"
@@ -370,7 +374,7 @@ msgstr "ইতিমধ্যে ডাউনলোড হয়েছে।"
 msgid "Downloading %1/%2: %3"
 msgstr "ডাউনলোড হচ্ছে %1/%2: %3"
 
-#: mangabrowser.lua:392 subprocess.lua:118
+#: mangabrowser.lua:392 subprocess.lua:136
 msgid "Cancelled"
 msgstr "বাতিল হয়েছে"
 
@@ -710,6 +714,6 @@ msgstr ""
 "সেটিং সংরক্ষণ করা যায়নি:\n"
 "%1"
 
-#: subprocess.lua:131
+#: subprocess.lua:144
 msgid "command produced no output"
 msgstr "কমান্ড কোনো আউটপুট দেয়নি"

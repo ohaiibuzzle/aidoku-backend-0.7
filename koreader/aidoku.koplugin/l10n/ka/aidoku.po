@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 09:53+0700\n"
+"POT-Creation-Date: 2026-10-08 14:30+0700\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -49,6 +49,10 @@ msgstr ""
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
 msgstr "წაშლა"
+
+#: downloadsengine.lua:216
+msgid "Could not read the downloads index."
+msgstr "ჩამოტვირთვების ინდექსის წაკითხვა ვერ მოხერხდა."
 
 #: engine.lua:47
 msgid "Fetching repository…"
@@ -209,7 +213,8 @@ msgstr "დროებითი რეჟიმი"
 #. TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
 #: librarybrowser.lua:77
 msgid "Library is empty. Use the menu (top left) to find manga."
-msgstr "ბიბლიოთეკა ცარიელია. მანგის საპოვნელად გამოიყენეთ მენიუ (ზემოთ მარცხნივ)."
+msgstr ""
+"ბიბლიოთეკა ცარიელია. მანგის საპოვნელად გამოიყენეთ მენიუ (ზემოთ მარცხნივ)."
 
 #: librarybrowser.lua:108 settingsbrowser.lua:24
 msgid "Settings"
@@ -293,11 +298,14 @@ msgstr "AidokuRunner KOReader-ისთვის"
 
 #: main.lua:254
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
-msgstr "aidoku-run ფაილი ვერ მოიძებნა. ხელახლა ააწყვეთ მოდული koreader/build.sh-ით."
+msgstr ""
+"aidoku-run ფაილი ვერ მოიძებნა. ხელახლა ააწყვეთ მოდული koreader/build.sh-ით."
 
 #: main.lua:260
 msgid "Could not open the downloads database. Is storage writable?"
-msgstr "ჩამოტვირთვების მონაცემთა ბაზა ვერ გაიხსნა. ჩასაწერად ხელმისაწვდომია მეხსიერება?"
+msgstr ""
+"ჩამოტვირთვების მონაცემთა ბაზა ვერ გაიხსნა. ჩასაწერად ხელმისაწვდომია "
+"მეხსიერება?"
 
 #: mangabrowser.lua:75
 msgid "Sort: Newest first"
@@ -369,7 +377,7 @@ msgstr "უკვე ჩამოტვირთულია."
 msgid "Downloading %1/%2: %3"
 msgstr "მიმდინარეობს ჩამოტვირთვა %1/%2: %3"
 
-#: mangabrowser.lua:392 subprocess.lua:118
+#: mangabrowser.lua:392 subprocess.lua:136
 msgid "Cancelled"
 msgstr "გაუქმებულია"
 
@@ -614,7 +622,9 @@ msgstr ""
 #: settingsbrowser.lua:264
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
-msgstr "აგვარებს Cloudflare-ის შემოწმებებს, მაგ. localhost:8191. ცარიელი დატოვეთ გასათიშად."
+msgstr ""
+"აგვარებს Cloudflare-ის შემოწმებებს, მაგ. localhost:8191. ცარიელი დატოვეთ "
+"გასათიშად."
 
 #: settingsbrowser.lua:266
 msgid "host:port"
@@ -708,6 +718,6 @@ msgstr ""
 "პარამეტრის შენახვა ვერ მოხერხდა:\n"
 "%1"
 
-#: subprocess.lua:131
+#: subprocess.lua:144
 msgid "command produced no output"
 msgstr "ბრძანებამ გამომავალი არ მოგვცა"

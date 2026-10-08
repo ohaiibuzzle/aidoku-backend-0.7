@@ -29,6 +29,10 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
+      # Syntax-check the plugin with LuaJIT, the interpreter KOReader runs
+      # (stock luac 5.x accepts/rejects slightly different syntax).
+      - run: sudo apt-get install -y luajit
+      - run: for f in koreader/aidoku.koplugin/*.lua; do luajit -b "$f" /dev/null || exit 1; done
 
   build:
     needs: test

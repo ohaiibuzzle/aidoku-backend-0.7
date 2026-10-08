@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 09:53+0700\n"
+"POT-Creation-Date: 2026-10-08 14:30+0700\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -49,6 +49,10 @@ msgstr ""
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
 msgstr "Kendu"
+
+#: downloadsengine.lua:216
+msgid "Could not read the downloads index."
+msgstr "Ezin izan da deskargen indizea irakurri."
 
 #: engine.lua:47
 msgid "Fetching repository…"
@@ -209,7 +213,8 @@ msgstr "Aldi baterako modua"
 #. TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
 #: librarybrowser.lua:77
 msgid "Library is empty. Use the menu (top left) to find manga."
-msgstr "Liburutegia hutsik dago. Erabili menua (goian ezkerrean) mangak bilatzeko."
+msgstr ""
+"Liburutegia hutsik dago. Erabili menua (goian ezkerrean) mangak bilatzeko."
 
 #: librarybrowser.lua:108 settingsbrowser.lua:24
 msgid "Settings"
@@ -273,7 +278,8 @@ msgstr ""
 
 #: librarybrowser.lua:248
 msgid "Updated to %1. Restart KOReader to apply."
-msgstr "%1 bertsiora eguneratu da. Berrabiarazi KOReader aldaketak aplikatzeko."
+msgstr ""
+"%1 bertsiora eguneratu da. Berrabiarazi KOReader aldaketak aplikatzeko."
 
 #: librarybrowser.lua:293
 msgid "'%1' is no longer installed. Hold to remove it."
@@ -293,11 +299,14 @@ msgstr "AidokuRunner KOReaderrerako"
 
 #: main.lua:254
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
-msgstr "Ez da aidoku-run binarioa aurkitu. Eraiki berriro plugina koreader/build.sh-rekin."
+msgstr ""
+"Ez da aidoku-run binarioa aurkitu. Eraiki berriro plugina koreader/build.sh-"
+"rekin."
 
 #: main.lua:260
 msgid "Could not open the downloads database. Is storage writable?"
-msgstr "Ezin izan da deskargen datu-basea ireki. Idazteko modukoa al da biltegia?"
+msgstr ""
+"Ezin izan da deskargen datu-basea ireki. Idazteko modukoa al da biltegia?"
 
 #: mangabrowser.lua:75
 msgid "Sort: Newest first"
@@ -369,7 +378,7 @@ msgstr "Dagoeneko deskargatuta."
 msgid "Downloading %1/%2: %3"
 msgstr "Deskargatzen %1/%2: %3"
 
-#: mangabrowser.lua:392 subprocess.lua:118
+#: mangabrowser.lua:392 subprocess.lua:136
 msgid "Cancelled"
 msgstr "Bertan behera utzi da"
 
@@ -607,12 +616,16 @@ msgstr ""
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
-msgstr "Iturri bakoitzeko eskaera paraleloak. Hutsik edo 0 lehenetsia (8) erabiltzeko. Handiagoak memoria gehiago erabiltzen du."
+msgstr ""
+"Iturri bakoitzeko eskaera paraleloak. Hutsik edo 0 lehenetsia (8) "
+"erabiltzeko. Handiagoak memoria gehiago erabiltzen du."
 
 #: settingsbrowser.lua:264
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
-msgstr "Cloudflare erronkak ebazten ditu, adibidez localhost:8191. Utzi hutsik desgaitzeko."
+msgstr ""
+"Cloudflare erronkak ebazten ditu, adibidez localhost:8191. Utzi hutsik "
+"desgaitzeko."
 
 #: settingsbrowser.lua:266
 msgid "host:port"
@@ -706,6 +719,6 @@ msgstr ""
 "Ezin izan da ezarpena gorde:\n"
 "%1"
 
-#: subprocess.lua:131
+#: subprocess.lua:144
 msgid "command produced no output"
 msgstr "komandoak ez du irteerarik sortu"

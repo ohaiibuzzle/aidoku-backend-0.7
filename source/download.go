@@ -27,15 +27,12 @@ import (
 // since it's applied after this default.
 const defaultPageUserAgent = "Mozilla/5.0 (iPad; CPU iPad OS 26_5_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/605.1.15"
 
-// DownloadPage resolves a single Page's content to its raw image bytes,
+// downloadPage resolves a single Page's content to its raw image bytes,
 // handling all three PageContent kinds: URL (HTTP GET, with Context
 // applied as request headers), Image (a host.Store descriptor holding a
 // previously-decoded image.Image or raw bytes), and ZipFile (a zip
-// downloaded from URL, with the page being one entry inside it).
-func (s *Source) DownloadPage(ctx context.Context, page models.Page) ([]byte, error) {
-	return s.downloadPage(ctx, page, nil)
-}
-
+// downloaded from URL, with the page being one entry inside it, cached in
+// zipCache across a chapter's pages).
 func (s *Source) downloadPage(ctx context.Context, page models.Page, zipCache map[string][]byte) ([]byte, error) {
 	switch page.Content.Kind {
 	case models.PageContentKindURL:
@@ -188,7 +185,7 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 		return "", fmt.Errorf("source: chapter %q has no pages", chapter.Key)
 	}
 
-	outputPath, err = resolveOutputPath(outputPath, mangaDirName, manga, chapter)
+	outputPath, err = ResolveOutputPath(outputPath, mangaDirName, manga, chapter)
 	if err != nil {
 		return "", err
 	}
@@ -288,14 +285,14 @@ func defaultCBZName(manga models.Manga, chapter models.Chapter) string {
 	return sanitizeFilename(fmt.Sprintf("%s - %s", MangaLabel(manga), ChapterLabel(chapter))) + ".cbz"
 }
 
-// resolveOutputPath computes the final, sanitized path DownloadChapterCBZ
-// should write to and makes sure its directory exists, creating a
-// mangaDirName subdirectory along the way if one was requested. Split out
-// from DownloadChapterCBZ so this path/filesystem logic -- the only new
-// behavior a manga-folder feature actually needs -- can be unit tested
-// without a working page-fetching Source (network/WASM), which this
-// package's existing tests have no fixture for.
-func resolveOutputPath(outputPath, mangaDirName string, manga models.Manga, chapter models.Chapter) (string, error) {
+// ResolveOutputPath computes the final, sanitized path DownloadChapterCBZ
+// will write to and makes sure its directory exists, creating a
+// mangaDirName subdirectory along the way if one was requested. Exported so
+// a caller can learn the real path before the download (e.g. to steer clear
+// of a filename another chapter already owns); passing its result back to
+// DownloadChapterCBZ with mangaDirName "" resolves to the same path, since
+// sanitizing is idempotent.
+func ResolveOutputPath(outputPath, mangaDirName string, manga models.Manga, chapter models.Chapter) (string, error) {
 	if outputPath == "" {
 		outputPath = defaultCBZName(manga, chapter)
 	} else {
@@ -358,7 +355,7 @@ var filenameSanitizer = strings.NewReplacer(
 // sanitizeFilename is the single authoritative point that turns a
 // manga/chapter title into a safe path component. filenameSanitizer only
 // strips characters illegal on FAT32/exFAT -- "." and ".." contain none of
-// those, so they'd otherwise pass through untouched. resolveOutputPath's
+// those, so they'd otherwise pass through untouched. ResolveOutputPath's
 // mangaDirName is used as a bare path component with nothing appended to
 // neutralize that (unlike the chapter filename, which always gets a
 // ".cbz" suffix), so a manga title of exactly ".." there would resolve

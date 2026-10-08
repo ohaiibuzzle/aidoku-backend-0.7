@@ -349,58 +349,67 @@ func run(dir, command string, args []string) error {
 			mangaDirName = args[4]
 		}
 
-		// Only an indexed download (downloadsDir given) can even check
-		// whether this chapter is already local, so the cross-process lock
-		// -- which exists purely to prevent two invocations from
-		// downloading the same indexed chapter at once, see
-		// downloads.AcquireLock's doc -- only applies then. A bare,
-		// non-indexed download (downloadsDir == "") has nothing to
-		// deduplicate against and stays lock-free, same as before.
-		if downloadsDir != "" {
-			lock, err := downloads.AcquireLock(src.Key, updated.Key, chapter.Key)
+		// A bare, non-indexed download (downloadsDir == "") has nothing to
+		// deduplicate against or record into, so it skips all of the below.
+		if downloadsDir == "" {
+			path, err := src.DownloadChapterCBZ(ctx, *updated, *chapter, outputPath, mangaDirName, printDownloadProgress)
 			if err != nil {
-				return fmt.Errorf("acquiring download lock: %w", err)
+				return err
 			}
-			defer lock.Release()
+			fmt.Println(path)
+			return nil
+		}
 
-			// Whoever held this lock before us may have just finished
-			// downloading this exact chapter while we were blocked
-			// waiting for it -- re-check the index now that we own the
-			// lock, rather than unconditionally re-fetching every page a
-			// concurrent invocation already fetched. os.Stat guards
-			// against a stale row whose file was since deleted out from
-			// under it (see mangabrowser.lua's downloadedPath for the
-			// same defensive re-check on the Lua side).
-			if existing, err := existingDownload(downloadsDir, src.Key, updated.Key, chapter.Key); err == nil && existing != "" {
+		// The cross-process lock exists purely to stop two invocations
+		// downloading the same indexed chapter at once -- see
+		// downloads.AcquireLock's doc.
+		lock, err := downloads.AcquireLock(src.Key, updated.Key, chapter.Key)
+		if err != nil {
+			return fmt.Errorf("acquiring download lock: %w", err)
+		}
+		defer lock.Release()
+
+		store, err := downloads.Open(downloadsDir)
+		if err != nil {
+			return fmt.Errorf("opening downloads index: %w", err)
+		}
+		defer store.Close()
+
+		// Whoever held this lock before us may have just finished
+		// downloading this exact chapter while we were blocked waiting for
+		// it -- re-check the index now that we own the lock, rather than
+		// unconditionally re-fetching every page. os.Stat guards against a
+		// stale row whose file was since deleted out from under it.
+		if existing, err := store.Path(src.Key, updated.Key, chapter.Key); err == nil && existing != "" {
+			if _, statErr := os.Stat(existing); statErr == nil {
 				fmt.Println(existing)
 				return nil
 			}
 		}
 
-		path, err := src.DownloadChapterCBZ(ctx, *updated, *chapter, outputPath, mangaDirName, func(current, total int) {
-			fmt.Fprintf(os.Stderr, "[download] page %d/%d\n", current, total)
-		})
+		// Steer clear of a filename another chapter already owns (two
+		// chapters titled e.g. "Omake") before writing, so this download
+		// can't overwrite that chapter's file.
+		path, err := source.ResolveOutputPath(outputPath, mangaDirName, *updated, *chapter)
 		if err != nil {
+			return err
+		}
+		if path, err = store.UnusedPath(src.Key, updated.Key, chapter.Key, path); err != nil {
+			return err
+		}
+		if path, err = src.DownloadChapterCBZ(ctx, *updated, *chapter, path, "", printDownloadProgress); err != nil {
 			return err
 		}
 		// Recording here, in the same process/invocation that just wrote
 		// the CBZ, means a failed or killed download can never leave the
-		// index pointing at a file that doesn't exist (or vice versa) --
-		// the two-step "download, then separately tell an index about it"
-		// a caller could otherwise do has a window for exactly that kind of
-		// inconsistency.
-		if downloadsDir != "" {
-			// recordDownload's returned path can differ from the one just
-			// written: a colliding filename against a different chapter
-			// gets disambiguated (renamed) as part of recording, see
-			// downloads.Store.disambiguatePath.
-			recorded, err := recordDownload(downloadsDir, src.Key, dir, *updated, *chapter, path)
-			if err != nil {
-				return fmt.Errorf("recording download: %w", err)
-			}
-			path = recorded
+		// index pointing at a file that doesn't exist (or vice versa). The
+		// recorded path can still differ from the one just written, see
+		// downloads.Store.disambiguatePath.
+		entry, err := store.Record(src.Key, dir, updated.Key, chapter.Key, path, source.MangaLabel(*updated), source.ChapterLabel(*chapter), chapter.ChapterNumber, chapter.VolumeNumber)
+		if err != nil {
+			return fmt.Errorf("recording download: %w", err)
 		}
-		fmt.Println(path)
+		fmt.Println(entry.Path)
 		return nil
 
 	default:
@@ -409,43 +418,8 @@ func run(dir, command string, args []string) error {
 	}
 }
 
-// recordDownload indexes a just-written CBZ into the downloads index at
-// downloadsDir. sourceKey is the source's stable manifest ID (survives a
-// source update renaming its installed file, unlike sourcePath -- see the
-// downloads package doc); sourcePath is the loaded source's own
-// path/directory, kept only as a display/debugging hint.
-func recordDownload(downloadsDir, sourceKey, sourcePath string, manga models.Manga, chapter models.Chapter, path string) (string, error) {
-	store, err := downloads.Open(downloadsDir)
-	if err != nil {
-		return "", fmt.Errorf("opening downloads index: %w", err)
-	}
-	defer store.Close()
-	entry, err := store.Record(sourceKey, sourcePath, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber)
-	if err != nil {
-		return "", err
-	}
-	return entry.Path, nil
-}
-
-// existingDownload returns the already-recorded local path for
-// (sourceKey, mangaKey, chapterKey) at downloadsDir, or "" if it isn't
-// indexed or its file has since gone missing (a stale row, treated the same
-// as "not downloaded" rather than an error -- see mangabrowser.lua's
-// downloadedPath for the same defensive re-check on the Lua side).
-func existingDownload(downloadsDir, sourceKey, mangaKey, chapterKey string) (string, error) {
-	store, err := downloads.Open(downloadsDir)
-	if err != nil {
-		return "", fmt.Errorf("opening downloads index: %w", err)
-	}
-	defer store.Close()
-	path, err := store.Path(sourceKey, mangaKey, chapterKey)
-	if err != nil || path == "" {
-		return "", err
-	}
-	if _, statErr := os.Stat(path); statErr != nil {
-		return "", nil
-	}
-	return path, nil
+func printDownloadProgress(current, total int) {
+	fmt.Fprintf(os.Stderr, "[download] page %d/%d\n", current, total)
 }
 
 func printJSON(v any) error {
@@ -585,6 +559,16 @@ func persistCookies(path string, cookies []*http.Cookie) {
 	if len(cookies) == 0 {
 		return
 	}
+	// Under a cross-process lock: a background prefetch's FlareSolverr solve
+	// and a foreground command's can otherwise both read, merge, and write,
+	// with the second write dropping the first's cookies.
+	_ = settingsstore.Locked(path, func() error {
+		mergeCookies(path, cookies)
+		return nil
+	})
+}
+
+func mergeCookies(path string, cookies []*http.Cookie) {
 	f := readCookieFile(path)
 	byDomain := map[string][]cookieEntry{}
 	for _, e := range entriesFromNetscape(cookies) {
@@ -713,7 +697,7 @@ func handleCookie(path string, args []string) error {
 		return nil
 
 	case "clear":
-		if err := writeCookieFile(path, cookieFile{}); err != nil {
+		if err := settingsstore.Locked(path, func() error { return writeCookieFile(path, cookieFile{}) }); err != nil {
 			return err
 		}
 		fmt.Println("cleared all stored cookies")

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 09:53+0700\n"
+"POT-Creation-Date: 2026-10-08 14:30+0700\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -50,6 +50,10 @@ msgstr ""
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
 msgstr "Eltávolítás"
+
+#: downloadsengine.lua:216
+msgid "Could not read the downloads index."
+msgstr "A letöltési index nem olvasható."
 
 #: engine.lua:47
 msgid "Fetching repository…"
@@ -294,7 +298,9 @@ msgstr "AidokuRunner KOReaderhez"
 
 #: main.lua:254
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
-msgstr "Az aidoku-run program nem található. Építse újra a bővítményt a koreader/build.sh szkripttel."
+msgstr ""
+"Az aidoku-run program nem található. Építse újra a bővítményt a koreader/"
+"build.sh szkripttel."
 
 #: main.lua:260
 msgid "Could not open the downloads database. Is storage writable?"
@@ -370,7 +376,7 @@ msgstr "Már letöltve."
 msgid "Downloading %1/%2: %3"
 msgstr "Letöltés %1/%2: %3"
 
-#: mangabrowser.lua:392 subprocess.lua:118
+#: mangabrowser.lua:392 subprocess.lua:136
 msgid "Cancelled"
 msgstr "Megszakítva"
 
@@ -616,7 +622,8 @@ msgstr ""
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
-"Cloudflare-kihívások megoldása, pl. localhost:8191. Hagyja üresen a letiltáshoz."
+"Cloudflare-kihívások megoldása, pl. localhost:8191. Hagyja üresen a "
+"letiltáshoz."
 
 #: settingsbrowser.lua:266
 msgid "host:port"
@@ -710,6 +717,6 @@ msgstr ""
 "A beállítás nem menthető:\n"
 "%1"
 
-#: subprocess.lua:131
+#: subprocess.lua:144
 msgid "command produced no output"
 msgstr "a parancs nem adott kimenetet"

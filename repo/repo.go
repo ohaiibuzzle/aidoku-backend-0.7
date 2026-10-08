@@ -14,7 +14,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// httpClient bounds how long a stalled server can hold a request before it
+// starts answering, without capping the whole transfer -- http.DefaultClient
+// has no timeout at all, so a stalled connection used to hang the process
+// forever (and a KOReader-dismissed call keeps the process running anyway).
+var httpClient = &http.Client{Transport: func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = 30 * time.Second
+	return t
+}()}
 
 // Index is a parsed repository index.
 type Index struct {
@@ -59,7 +70,7 @@ func FetchIndex(ctx context.Context, indexURL string) (*Index, error) {
 	if err != nil {
 		return nil, fmt.Errorf("repo: building request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("repo: fetching %s: %w", indexURL, err)
 	}
@@ -183,7 +194,7 @@ func download(ctx context.Context, url, destDir, name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("repo: building request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("repo: downloading %s: %w", url, err)
 	}

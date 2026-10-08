@@ -44,32 +44,10 @@ func extensionFor(data []byte) string {
 	return ".jpg"
 }
 
-// Write creates a CBZ archive at path from pages, in order. Each entry is
-// stored (not deflated) since page images are already compressed formats;
-// deflating them again would only cost CPU for no size benefit.
-//
-// Write requires every page's bytes up front, so it holds the whole
-// chapter in memory at once. Callers assembling pages incrementally (e.g.
-// downloading them one at a time) should use NewWriter instead, which
-// writes each page to disk as soon as it arrives.
-func Write(path string, pages [][]byte) error {
-	w, err := NewWriter(path, len(pages))
-	if err != nil {
-		return err
-	}
-	for _, data := range pages {
-		if err := w.WritePage(data); err != nil {
-			w.Abort()
-			return err
-		}
-	}
-	return w.Close()
-}
-
 // Writer builds a CBZ archive one page at a time, so a caller streaming
 // pages in (e.g. downloading them from a source) never needs to hold more
-// than one page's bytes in memory -- unlike Write, which requires the
-// whole chapter up front. This matters on memory-constrained devices
+// than one page's bytes in memory. Entries are stored (not deflated):
+// page images are already compressed, so deflating only costs CPU. This matters on memory-constrained devices
 // (e.g. Kindle) where a long, high-resolution chapter buffered entirely in
 // RAM before the first byte hits disk can be enough to get the process
 // OOM-killed mid-download.

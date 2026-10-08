@@ -12,12 +12,28 @@ var (
 	pngMagic  = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0x00}
 )
 
+// writeAll writes every page through a Writer, the way a streaming caller
+// would one page at a time.
+func writeAll(path string, pages [][]byte) error {
+	w, err := NewWriter(path, len(pages))
+	if err != nil {
+		return err
+	}
+	for _, data := range pages {
+		if err := w.WritePage(data); err != nil {
+			w.Abort()
+			return err
+		}
+	}
+	return w.Close()
+}
+
 func TestWriteCreatesReadableArchive(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "chapter.cbz")
 	pages := [][]byte{jpegMagic, pngMagic}
 
-	if err := Write(path, pages); err != nil {
+	if err := writeAll(path, pages); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -48,7 +64,7 @@ func TestWriteCreatesReadableArchive(t *testing.T) {
 func TestWriteLeavesNoTempFileOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "chapter.cbz")
-	if err := Write(path, [][]byte{jpegMagic}); err != nil {
+	if err := writeAll(path, [][]byte{jpegMagic}); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -72,7 +88,7 @@ func TestWriteLeavesNoTempFileOnSuccess(t *testing.T) {
 // mean "is this chapter downloaded" must never be lied to.
 func TestWriteFailureLeavesNoFileAtFinalPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "does-not-exist", "chapter.cbz")
-	if err := Write(path, [][]byte{jpegMagic}); err == nil {
+	if err := writeAll(path, [][]byte{jpegMagic}); err == nil {
 		t.Fatal("Write into a nonexistent directory succeeded, want an error")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {

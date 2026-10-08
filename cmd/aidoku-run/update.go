@@ -20,9 +20,10 @@ import (
 )
 
 // defaultUpdateRepo is the GitHub "owner/repo" slug releases are fetched
-// from. Overridable via AIDOKU_UPDATE_REPO (threaded from Lua's
-// sourceEnv(), same mechanism as FLARESOLVERR_HOST/AIDOKU_SETTINGS_DIR) for
-// forks that publish their own releases under a different slug.
+// from. Overridable via the AIDOKU_UPDATE_REPO process environment variable
+// (not a plugin setting -- engine.lua deliberately doesn't thread it through
+// sourceEnv()) for forks that publish their own releases under a different
+// slug.
 const defaultUpdateRepo = "ohaiibuzzle/aidoku-backend-0.7"
 
 // maxUpdateAssetBytes bounds both the downloaded zip and its extracted
@@ -33,6 +34,15 @@ const defaultUpdateRepo = "ohaiibuzzle/aidoku-backend-0.7"
 // to spare on decompressing an oversized payload (see the Memory
 // constraints section in CLAUDE.md).
 const maxUpdateAssetBytes = 64 << 20 // 64MB
+
+// updateHTTPClient: same response-header-only timeout as repo's client, so a
+// stalled server can't hang the process while a slow but live ~10MB asset
+// download still completes.
+var updateHTTPClient = &http.Client{Transport: func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = 30 * time.Second
+	return t
+}()}
 
 func handleUpdate(ctx context.Context, args []string) error {
 	if len(args) < 1 {
@@ -144,7 +154,7 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 	req.Header.Set("User-Agent", "aidoku-run")
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := updateHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("update: fetching latest release: %w", err)
 	}
@@ -219,8 +229,10 @@ type updateApplyResult struct {
 // valid after its backing path is renamed or unlinked, the same property
 // the cross-process download lock's never-deleted marker files rely on.
 func applyUpdate(ctx context.Context, pluginDir, assetURL string) (*updateApplyResult, error) {
-	if !strings.HasPrefix(assetURL, "https://") && !strings.HasPrefix(assetURL, "http://") {
-		return nil, fmt.Errorf("update: refusing non-http(s) asset URL %q", assetURL)
+	// https only: TLS is the only thing vouching for this zip (there's no
+	// signature check), and GitHub's browser_download_url is always https.
+	if !strings.HasPrefix(assetURL, "https://") {
+		return nil, fmt.Errorf("update: refusing non-https asset URL %q", assetURL)
 	}
 	pluginDir = filepath.Clean(pluginDir)
 	parent := filepath.Dir(pluginDir)
@@ -274,7 +286,7 @@ func downloadToTemp(ctx context.Context, url string) (string, error) {
 	}
 	req.Header.Set("User-Agent", "aidoku-run")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := updateHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("update: downloading %s: %w", url, err)
 	}

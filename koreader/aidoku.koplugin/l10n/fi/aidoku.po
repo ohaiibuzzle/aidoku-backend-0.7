@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-08 09:53+0700\n"
+"POT-Creation-Date: 2026-10-08 14:30+0700\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -50,6 +50,10 @@ msgstr ""
 #: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:148
 msgid "Remove"
 msgstr "Poista"
+
+#: downloadsengine.lua:216
+msgid "Could not read the downloads index."
+msgstr "Latausindeksiä ei voitu lukea."
 
 #: engine.lua:47
 msgid "Fetching repository…"
@@ -274,7 +278,9 @@ msgstr ""
 
 #: librarybrowser.lua:248
 msgid "Updated to %1. Restart KOReader to apply."
-msgstr "Päivitetty versioon %1. Käynnistä KOReader uudelleen, jotta muutokset tulevat voimaan."
+msgstr ""
+"Päivitetty versioon %1. Käynnistä KOReader uudelleen, jotta muutokset "
+"tulevat voimaan."
 
 #: librarybrowser.lua:293
 msgid "'%1' is no longer installed. Hold to remove it."
@@ -294,11 +300,14 @@ msgstr "AidokuRunner KOReaderille"
 
 #: main.lua:254
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
-msgstr "aidoku-run-ohjelmaa ei löytynyt. Rakenna laajennus uudelleen koreader/build.sh-skriptillä."
+msgstr ""
+"aidoku-run-ohjelmaa ei löytynyt. Rakenna laajennus uudelleen koreader/"
+"build.sh-skriptillä."
 
 #: main.lua:260
 msgid "Could not open the downloads database. Is storage writable?"
-msgstr "Latausten tietokantaa ei voitu avata. Onko tallennustila kirjoitettavissa?"
+msgstr ""
+"Latausten tietokantaa ei voitu avata. Onko tallennustila kirjoitettavissa?"
 
 #: mangabrowser.lua:75
 msgid "Sort: Newest first"
@@ -370,7 +379,7 @@ msgstr "On jo ladattu."
 msgid "Downloading %1/%2: %3"
 msgstr "Ladataan %1/%2: %3"
 
-#: mangabrowser.lua:392 subprocess.lua:118
+#: mangabrowser.lua:392 subprocess.lua:136
 msgid "Cancelled"
 msgstr "Peruutettu"
 
@@ -616,7 +625,8 @@ msgstr ""
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
-"Ratkaisee Cloudflare-haasteet, esim. localhost:8191. Jätä tyhjäksi poistaaksesi käytöstä."
+"Ratkaisee Cloudflare-haasteet, esim. localhost:8191. Jätä tyhjäksi "
+"poistaaksesi käytöstä."
 
 #: settingsbrowser.lua:266
 msgid "host:port"
@@ -710,6 +720,6 @@ msgstr ""
 "Asetusta ei voitu tallentaa:\n"
 "%1"
 
-#: subprocess.lua:131
+#: subprocess.lua:144
 msgid "command produced no output"
 msgstr "komento ei tuottanut tulostetta"
