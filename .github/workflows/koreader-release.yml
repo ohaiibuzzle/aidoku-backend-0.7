@@ -1,11 +1,7 @@
 name: KOReader plugin release
 
 # Builds the aidoku.koplugin bundle for every target koreader/build.sh
-# supports (armv6, armv7, arm64, x64 -- all linux, since Kindle, Kobo,
-# PocketBook, reMarkable, Sony, Cervantes and Android all run a Linux
-# kernel and this project is pure Go / no cgo). Every push to main/senpai
-# and every v*.*.* tag builds and uploads the zips as workflow artifacts;
-# only a tag push additionally attaches them to a GitHub release.
+# supports
 on:
   push:
     branches:
@@ -13,9 +9,14 @@ on:
       - senpai
     tags:
       - "v*.*.*"
+  # Gate PRs on the same test + build matrix (no release step runs for them)
+  pull_request:
+    branches:
+      - main
+      - senpai
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -46,6 +47,15 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Compute bundle name
+        # github.ref_name is "<n>/merge" on a PR, which isn't a valid filename
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "BUNDLE_SUFFIX=pr-${{ github.event.number }}" >> "$GITHUB_ENV"
+          else
+            echo "BUNDLE_SUFFIX=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          fi
+
       - name: Build binaries for ${{ matrix.target.name }}
         env:
           CGO_ENABLED: "0"
@@ -60,43 +70,36 @@ jobs:
           chmod +x "$out_dir/aidoku-run"
 
       - name: Assemble plugin bundle
-        # Copies everything except bin/ (the repo's bin/ is a gitignored
-        # local dev scratch dir -- the binaries just built above are what
-        # ships).
         run: rsync -a --exclude='bin' koreader/aidoku.koplugin/ staging/aidoku.koplugin/
 
       - name: Stamp version
         # VERSION ships inside the bundle so an installed copy can read its
-        # own version at runtime (cmd/aidoku-run's `update check` compares
-        # this against the latest release's tag) -- the tag/sha otherwise
-        # only exists in this workflow's own naming of the zip/artifact,
-        # which the installed files never see. Tag builds get the real
-        # version; branch builds (main/senpai, not release-worthy) get a
-        # "dev-<sha>" marker that `update check` reports as
-        # status=unknown_current rather than a comparable version.
+        # own version at runtime 
         run: |
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "${{ github.ref_name }}" > staging/aidoku.koplugin/VERSION
           else
-            echo "dev-${{ github.sha }}" > staging/aidoku.koplugin/VERSION
+            echo "dev-${{ github.event.pull_request.head.sha || github.sha }}" > staging/aidoku.koplugin/VERSION
           fi
 
       - name: Package zip
         run: |
           set -euo pipefail
           cd staging
-          zip -r "../aidoku-koplugin-${{ matrix.target.name }}-${{ github.ref_name }}.zip" aidoku.koplugin
+          zip -r "../aidoku-koplugin-${{ matrix.target.name }}-${BUNDLE_SUFFIX}.zip" aidoku.koplugin
 
       - uses: actions/upload-artifact@v7
         with:
           name: aidoku-koplugin-${{ matrix.target.name }}
-          path: aidoku-koplugin-${{ matrix.target.name }}-${{ github.ref_name }}.zip
+          path: aidoku-koplugin-${{ matrix.target.name }}-${{ env.BUNDLE_SUFFIX }}.zip
           if-no-files-found: error
 
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
