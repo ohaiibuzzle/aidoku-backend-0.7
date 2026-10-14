@@ -8,6 +8,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -109,12 +110,49 @@ func LoadZip(ctx context.Context, zipPath string, interpConfig runtime.Config, s
 	return s, nil
 }
 
+// Caps on the individual members a source bundle is read through, mirroring
+// repo's whole-archive (maxAixBytes) and index (maxIndexBytes) caps. A real
+// main.wasm is a few MB and a real source.json/filters.json/settings.json
+// well under 1MB, so these only ever reject a bogus or hostile bundle -- for
+// a zip, an entry that inflates far beyond its tiny on-disk archive.
+const (
+	// maxWasmBytes caps main.wasm, the one genuinely large member: the same
+	// 64MB repo.maxAixBytes allows for the whole archive it came in.
+	maxWasmBytes = host.MaxResponseBytes
+	// maxManifestBytes caps source.json/filters.json/settings.json/icon.png:
+	// the same 16MB repo.maxIndexBytes allows for a repository index.
+	maxManifestBytes = 16 << 20
+)
+
+// readFileLimited reads name out of fsys through host.ReadAllLimited and
+// closes it, so an oversized member fails loudly instead of inflating
+// unbounded into memory (the target devices have 256-512MB of RAM). An
+// honest Stat size -- a plain file, or a zip entry's declared
+// UncompressedSize64 -- is rejected up front; a header that lies small is
+// still bounded by the limited read, since archive/zip enforces the entry's
+// declared size against the stream it decompresses.
+func readFileLimited(fsys fs.FS, name string, max int64) ([]byte, error) {
+	if info, err := fs.Stat(fsys, name); err == nil && info.Size() > max {
+		return nil, fmt.Errorf("source: %s: larger than %d bytes", name, max)
+	}
+	f, err := fsys.Open(name)
+	if err != nil {
+		return nil, fmt.Errorf("source: %s: %w", name, err)
+	}
+	defer f.Close()
+	data, err := host.ReadAllLimited(f, max)
+	if err != nil {
+		return nil, fmt.Errorf("source: %s: %w", name, err)
+	}
+	return data, nil
+}
+
 // loadFS mirrors Source.init(url:interpreterConfig:): reads source.json
 // (and optionally filters.json/settings.json/icon.png) from fsys, loads
 // main.wasm, and synthesizes the language/base-URL settings Source.swift
 // adds on top of the manifest.
 func loadFS(ctx context.Context, fsys fs.FS, interpConfig runtime.Config, settings SettingsStore) (*Source, error) {
-	infoBytes, err := fs.ReadFile(fsys, "source.json")
+	infoBytes, err := readFileLimited(fsys, "source.json", maxManifestBytes)
 	if err != nil {
 		return nil, fmt.Errorf("source: reading source.json: %w", err)
 	}
@@ -137,8 +175,15 @@ func loadFS(ctx context.Context, fsys fs.FS, interpConfig runtime.Config, settin
 		s.ContentRating = models.SourceContentRatingSafe
 	}
 
-	if iconBytes, err := fs.ReadFile(fsys, "icon.png"); err == nil {
+	iconBytes, err := readFileLimited(fsys, "icon.png", maxManifestBytes)
+	switch {
+	case err == nil:
 		s.IconData = iconBytes
+	case errors.Is(err, fs.ErrNotExist):
+		// icon.png is optional; absent is fine. A size-limit violation is
+		// not, and falls through to the error below.
+	default:
+		return nil, fmt.Errorf("source: reading icon.png: %w", err)
 	}
 
 	var urls []string
@@ -151,20 +196,34 @@ func loadFS(ctx context.Context, fsys fs.FS, interpConfig runtime.Config, settin
 		s.staticListings = append(s.staticListings, l.Listing)
 	}
 
-	if filtersBytes, err := fs.ReadFile(fsys, "filters.json"); err == nil {
+	filtersBytes, err := readFileLimited(fsys, "filters.json", maxManifestBytes)
+	switch {
+	case err == nil:
 		if err := json.Unmarshal(filtersBytes, &s.staticFilters); err != nil {
 			return nil, fmt.Errorf("source: parsing filters.json: %w", err)
 		}
+	case errors.Is(err, fs.ErrNotExist):
+		// filters.json is optional; absent is fine. A size-limit violation
+		// is not, and falls through to the error below.
+	default:
+		return nil, fmt.Errorf("source: reading filters.json: %w", err)
 	}
 
 	var staticSettings []models.Setting
-	if settingsBytes, err := fs.ReadFile(fsys, "settings.json"); err == nil {
+	settingsBytes, err := readFileLimited(fsys, "settings.json", maxManifestBytes)
+	switch {
+	case err == nil:
 		if err := json.Unmarshal(settingsBytes, &staticSettings); err != nil {
 			return nil, fmt.Errorf("source: parsing settings.json: %w", err)
 		}
+	case errors.Is(err, fs.ErrNotExist):
+		// settings.json is optional; absent is fine. A size-limit violation
+		// is not, and falls through to the error below.
+	default:
+		return nil, fmt.Errorf("source: reading settings.json: %w", err)
 	}
 
-	wasmBytes, err := fs.ReadFile(fsys, "main.wasm")
+	wasmBytes, err := readFileLimited(fsys, "main.wasm", maxWasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("source: reading main.wasm: %w", err)
 	}

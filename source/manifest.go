@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 )
@@ -37,7 +36,7 @@ func ReadManifest(path string) (*ManifestInfo, error) {
 
 	var data []byte
 	if info.IsDir() {
-		data, err = os.ReadFile(filepath.Join(path, "source.json"))
+		data, err = readFileLimited(os.DirFS(path), "source.json", maxManifestBytes)
 		if err != nil {
 			return nil, fmt.Errorf("source: reading source.json: %w", err)
 		}
@@ -51,7 +50,7 @@ func ReadManifest(path string) (*ManifestInfo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("source: %s has no Payload/ directory: %w", path, err)
 		}
-		data, err = fs.ReadFile(sub, "source.json")
+		data, err = readFileLimited(sub, "source.json", maxManifestBytes)
 		if err != nil {
 			return nil, fmt.Errorf("source: reading source.json: %w", err)
 		}

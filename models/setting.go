@@ -143,11 +143,10 @@ type TextSetting struct {
 	DefaultValue           *string
 }
 
-type ButtonSetting struct {
-	Destructive  *bool
-	ConfirmTitle *string
-	ConfirmText  *string
-}
+// ButtonSetting is a unit variant on the wire: the guest writes no payload
+// at all for `SettingValue::Button`, so there is nothing to decode and no
+// fields to hold.
+type ButtonSetting struct{}
 
 type LinkSetting struct {
 	URL      string
@@ -167,12 +166,12 @@ type LoginSetting struct {
 	URL                  *string
 	URLKey               *string
 	LogoutTitle          *string
-	PKCE                 *bool
+	PKCE                 bool
 	TokenURL             *string
 	CallbackScheme       *string
-	UseEmail             *bool
+	UseEmail             bool
 	LocalStorageKeys     []string
-	ClearCookiesOnLogout *bool
+	ClearCookiesOnLogout bool
 }
 
 type PageSettingIconKind uint8
@@ -200,7 +199,7 @@ type PageSetting struct {
 
 type EditableListSetting struct {
 	LineLimit    *int64
-	Inline       *bool
+	Inline       bool
 	Placeholder  *string
 	DefaultValue []string
 }
@@ -329,6 +328,8 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		}
 		s.Segment = v
 	case SettingTypeText:
+		// Text { placeholder, autocapitalization_type, autocorrection_disabled,
+		//        keyboard_type, return_key_type, secure, default }
 		v := &TextSetting{}
 		if v.Placeholder, err = decodeOptionalString(r); err != nil {
 			return err
@@ -336,13 +337,13 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		if v.AutocapitalizationType, err = decodeOptionalI64(r); err != nil {
 			return err
 		}
+		if v.AutocorrectionDisabled, err = decodeOptionalBool(r); err != nil {
+			return err
+		}
 		if v.KeyboardType, err = decodeOptionalI64(r); err != nil {
 			return err
 		}
 		if v.ReturnKeyType, err = decodeOptionalI64(r); err != nil {
-			return err
-		}
-		if v.AutocorrectionDisabled, err = decodeOptionalBool(r); err != nil {
 			return err
 		}
 		if v.Secure, err = decodeOptionalBool(r); err != nil {
@@ -353,17 +354,8 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		}
 		s.Text = v
 	case SettingTypeButton:
-		v := &ButtonSetting{}
-		if v.Destructive, err = decodeOptionalBool(r); err != nil {
-			return err
-		}
-		if v.ConfirmTitle, err = decodeOptionalString(r); err != nil {
-			return err
-		}
-		if v.ConfirmText, err = decodeOptionalString(r); err != nil {
-			return err
-		}
-		s.Button = v
+		// unit variant: no payload at all
+		s.Button = &ButtonSetting{}
 	case SettingTypeLink:
 		v := &LinkSetting{}
 		if v.URL, err = r.ReadString(); err != nil {
@@ -374,6 +366,9 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		}
 		s.Link = v
 	case SettingTypeLogin:
+		// Login { method, url, url_key, logout_title, pkce(bool), token_url,
+		//         callback_scheme, use_email(bool), local_storage_keys,
+		//         clear_cookies_on_log_out(bool) }
 		v := &LoginSetting{}
 		method, err := r.ReadString()
 		if err != nil {
@@ -389,7 +384,7 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		if v.LogoutTitle, err = decodeOptionalString(r); err != nil {
 			return err
 		}
-		if v.PKCE, err = decodeOptionalBool(r); err != nil {
+		if v.PKCE, err = r.ReadBool(); err != nil {
 			return err
 		}
 		if v.TokenURL, err = decodeOptionalString(r); err != nil {
@@ -398,13 +393,13 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		if v.CallbackScheme, err = decodeOptionalString(r); err != nil {
 			return err
 		}
-		if v.UseEmail, err = decodeOptionalBool(r); err != nil {
+		if v.UseEmail, err = r.ReadBool(); err != nil {
 			return err
 		}
 		if v.LocalStorageKeys, err = decodeOptionalStringSlice(r); err != nil {
 			return err
 		}
-		if v.ClearCookiesOnLogout, err = decodeOptionalBool(r); err != nil {
+		if v.ClearCookiesOnLogout, err = r.ReadBool(); err != nil {
 			return err
 		}
 		s.Login = v
@@ -467,11 +462,12 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		}
 		s.Page = v
 	case SettingTypeEditableList:
+		// EditableList { line_limit, inline(bool), placeholder, default }
 		v := &EditableListSetting{}
 		if v.LineLimit, err = decodeOptionalI64(r); err != nil {
 			return err
 		}
-		if v.Inline, err = decodeOptionalBool(r); err != nil {
+		if v.Inline, err = r.ReadBool(); err != nil {
 			return err
 		}
 		if v.Placeholder, err = decodeOptionalString(r); err != nil {
@@ -550,29 +546,25 @@ func (s *Setting) UnmarshalJSON(data []byte) error {
 		AutocorrectionDisabled *bool   `json:"autocorrectionDisabled"`
 		Secure                 *bool   `json:"secure"`
 
-		Destructive  *bool   `json:"destructive"`
-		ConfirmTitle *string `json:"confirmTitle"`
-		ConfirmText  *string `json:"confirmText"`
-
 		URL      *string `json:"url"`
 		External *bool   `json:"external"`
 
 		Method               *LoginMethod `json:"method"`
 		URLKey               *string      `json:"urlKey"`
 		LogoutTitle          *string      `json:"logoutTitle"`
-		PKCE                 *bool        `json:"pkce"`
+		PKCE                 bool         `json:"pkce"`
 		TokenURL             *string      `json:"tokenUrl"`
 		CallbackScheme       *string      `json:"callbackScheme"`
-		UseEmail             *bool        `json:"useEmail"`
+		UseEmail             bool         `json:"useEmail"`
 		LocalStorageKeys     []string     `json:"localStorageKeys"`
-		ClearCookiesOnLogout *bool        `json:"clearCookiesOnLogOut"`
+		ClearCookiesOnLogout bool         `json:"clearCookiesOnLogOut"`
 
 		InlineTitle *bool                `json:"inlineTitle"`
 		Icon        *pageSettingIconJSON `json:"icon"`
 		Info        *string              `json:"info"`
 
 		LineLimit *int64 `json:"lineLimit"`
-		Inline    *bool  `json:"inline"`
+		Inline    bool   `json:"inline"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -665,7 +657,8 @@ func (s *Setting) UnmarshalJSON(data []byte) error {
 		}
 		s.Text = v
 	case SettingTypeButton:
-		s.Button = &ButtonSetting{Destructive: raw.Destructive, ConfirmTitle: raw.ConfirmTitle, ConfirmText: raw.ConfirmText}
+		// unit variant: no associated data
+		s.Button = &ButtonSetting{}
 	case SettingTypeLink:
 		v := &LinkSetting{External: raw.External}
 		if raw.URL != nil {

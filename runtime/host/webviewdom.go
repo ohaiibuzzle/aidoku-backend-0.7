@@ -554,6 +554,20 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		if !ok {
 			return nil, nil
 		}
+		// A real DOM raises HierarchyRequestError when the node being
+		// inserted is the target itself or one of its ancestors; net/html's
+		// AppendChild has no such check. Accepting it leaves a cycle in the
+		// child graph, and every host traversal of that graph (nodeText/
+		// renderNode in htmlnode.go, queryNodes below) recurses without a
+		// bound, so the cycle aborts the whole process with an
+		// unrecoverable "fatal error: stack overflow" -- reachable from any
+		// page script through webview_load. Checked before the detach below
+		// so a rejected call leaves the tree untouched.
+		for n := parent; n != nil; n = n.Parent {
+			if n == child {
+				return nil, fmt.Errorf("HierarchyRequestError: the new child element is an ancestor of the parent")
+			}
+		}
 		if child.Parent != nil {
 			child.Parent.RemoveChild(child)
 		}

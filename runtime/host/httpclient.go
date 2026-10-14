@@ -5,6 +5,8 @@ import (
 	"net/http/cookiejar"
 	"sync"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // defaultHTTPTimeout bounds a request with no explicit net.set_timeout,
@@ -46,14 +48,22 @@ func (defaultUAInjector) RoundTrip(req *http.Request) (*http.Response, error) {
 // and WebView both default to this client when no override is configured,
 // so a cookie set during a webview challenge (e.g. Cloudflare clearance)
 // is automatically picked up by subsequent net.send() calls, and vice
-// versa. A shared jar across sources is safe: cookiejar.Jar still scopes
-// cookies per-domain, so unrelated sources' cookies never mix.
+// versa. The jar scopes cookies to their registrable domain (it is built
+// with a PublicSuffixList), so unrelated sources' cookies never mix: an
+// attacker-controlled host cannot set a cookie for "co.uk" and have it sent
+// to every other host under that public suffix.
 //
 // Unlike Go's default client it presents a browser User-Agent (see
 // defaultUserAgent), so sites gatekeeping on UA respond normally.
 func SharedHTTPClient() *http.Client {
 	sharedHTTPClientOnce.Do(func() {
-		jar, _ := cookiejar.New(nil)
+		// PublicSuffixList is what makes the jar's per-domain scoping
+		// meaningful. Without it cookiejar skips RFC 6265's public-suffix
+		// rejection and keys buckets by the last two labels, so one host
+		// could set Domain=co.uk and have that cookie sent by every other
+		// *.co.uk host in this process-wide jar (cross-source injection,
+		// and a way to break another site's cf_clearance).
+		jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		sharedHTTPClient = &http.Client{Jar: jar, Transport: defaultUAInjector{}, Timeout: defaultHTTPTimeout}
 	})
 	return sharedHTTPClient
