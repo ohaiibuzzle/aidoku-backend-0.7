@@ -523,11 +523,9 @@ func writeCookieFile(path string, f cookieFile) error {
 		return err
 	}
 	tmpPath := tmp.Name()
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
+	// Best-effort: CreateTemp already made it 0600, and FAT refuses chmod
+	// (EPERM) when the process doesn't own the mount.
+	_ = tmp.Chmod(0o600)
 	if _, err := tmp.Write(b); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)

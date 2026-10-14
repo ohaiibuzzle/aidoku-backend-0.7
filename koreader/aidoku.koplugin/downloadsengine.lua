@@ -94,8 +94,7 @@ function DownloadsEngine.new(downloads_dir)
         conn = nil,
     }, DownloadsEngine)
     local ok, conn = pcall(SQ3.open, downloads_dir .. "/index.db")
-    if ok then
-        conn:set_busy_timeout(5000)
+    if ok and pcall(conn.set_busy_timeout, conn, 5000) then
         self.conn = conn
     end
     return self
@@ -290,43 +289,6 @@ function DownloadsEngine:removeAllExcept(keep_path)
             self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
         end
     end
-end
-
--- reassociate repoints every downloaded-chapter entry under old_source_key
--- to new_source_key -- a manual repair for entries a source rename/update
--- left orphaned (see the downloads Go package doc). Returns how many
--- entries were moved.
-function DownloadsEngine:reassociate(old_source_key, new_source_key)
-    if not self:tableExists() then
-        return 0
-    end
-    -- If new_source_key already has an entry for some (manga, chapter) also
-    -- present under old_source_key, drop the old_source_key row instead of
-    -- overwriting the existing one (presumably the more recently
-    -- verified-working one) -- same rule as Store.Reassociate in Go.
-    local function step(stmt) stmt:step() return true end
-    if not query(self.conn, false, [[
-        DELETE FROM downloads
-        WHERE source_key = ?
-        AND EXISTS (
-            SELECT 1 FROM downloads AS d2
-            WHERE d2.source_key = ? AND d2.manga_key = downloads.manga_key AND d2.chapter_key = downloads.chapter_key
-        )
-    ]], { old_source_key, new_source_key }, step) then
-        return 0
-    end
-
-    -- lua-ljsqlite3 doesn't expose sqlite3_changes, so count the rows the
-    -- UPDATE below is about to touch first, immediately before running it.
-    local row = query(self.conn, nil, "SELECT count(*) FROM downloads WHERE source_key=?",
-        { old_source_key }, firstRow)
-    local n = (row and tonumber(row[1])) or 0
-
-    if not query(self.conn, false, "UPDATE downloads SET source_key = ? WHERE source_key = ?",
-        { new_source_key, old_source_key }, step) then
-        return 0
-    end
-    return n
 end
 
 return DownloadsEngine

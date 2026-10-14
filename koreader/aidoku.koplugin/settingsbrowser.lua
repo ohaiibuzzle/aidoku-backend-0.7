@@ -17,8 +17,18 @@ local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local util = require("util")
-local T = require("ffi/util").template
+local ffiUtil = require("ffi/util")
+local T = ffiUtil.template
 local _ = require("aidoku_l10n")
+
+-- Upper bounds for numeric settings: past these a typo fills the card
+-- (prefetch) or exhausts RAM (concurrency) on a 256MB device.
+local MAX_PREFETCH = 10
+local MAX_CONCURRENCY = 32
+
+local function showInvalid(text)
+    UIManager:show(InfoMessage:new{ text = text })
+end
 
 local SettingsBrowser = Menu:extend{
     title = _("Settings"),
@@ -146,9 +156,11 @@ function SettingsBrowser:promptBufferChapters()
                 callback = function()
                     local n = tonumber(dialog:getInputText())
                     UIManager:close(dialog)
-                    if n and n >= 0 then
+                    if n and n >= 0 and n <= MAX_PREFETCH then
                         self.store:setBufferChapters(math.floor(n))
                         self:refresh()
+                    else
+                        showInvalid(T(_("Enter a number from 0 to %1."), MAX_PREFETCH))
                     end
                 end,
             },
@@ -178,9 +190,11 @@ function SettingsBrowser:promptStorageLimit()
                 callback = function()
                     local mb = tonumber(dialog:getInputText())
                     UIManager:close(dialog)
-                    if mb and mb >= 0 then
+                    if mb and mb >= 0 and mb < math.huge then
                         self.store:setDownloadLimitBytes(math.floor(mb * MB))
                         self:refresh()
+                    else
+                        showInvalid(_("Enter 0 or a positive number."))
                     end
                 end,
             },
@@ -245,9 +259,11 @@ function SettingsBrowser:promptNetworkConcurrency()
                     if text == "" then
                         self.store:setNetworkConcurrency(0)
                         self:refresh()
-                    elseif n and n > 0 then
+                    elseif n and n >= 0 and n <= MAX_CONCURRENCY then
                         self.store:setNetworkConcurrency(math.floor(n))
                         self:refresh()
+                    else
+                        showInvalid(T(_("Enter a number from 0 to %1."), MAX_CONCURRENCY))
                     end
                 end,
             },
@@ -332,7 +348,14 @@ end
 -- refresh_callback also resyncs LibraryBrowser's copies.
 function SettingsBrowser:toggleEphemeralMode()
     local enabling = not self.store:isEphemeralMode()
-    if not enabling then
+    if enabling then
+        local path = self.store:ephemeralPath()
+        local problem = self:ephemeralPathProblem(path)
+        if problem then
+            showInvalid(problem)
+            return
+        end
+    else
         self.downloads_engine:removeAllExcept(nil)
     end
     self.store:setEphemeralMode(enabling)
@@ -370,6 +393,21 @@ function SettingsBrowser:pathIsWritable(path)
     return true
 end
 
+-- ephemeralPathProblem returns a user-facing reason path can't be the
+-- Ephemeral Mode dir, or nil. The persistent downloads dir is refused: its
+-- index.db is the real library, and Ephemeral Mode's removeAllExcept would
+-- delete every chapter in it.
+function SettingsBrowser:ephemeralPathProblem(path)
+    if not self:pathIsWritable(path) then
+        return T(_("%1 doesn't exist or isn't writable."), path)
+    end
+    local real = ffiUtil.realpath(path)
+    local persistent = ffiUtil.realpath(self.aidoku.persistent_downloads_dir)
+    if real and persistent and real == persistent then
+        return _("The Ephemeral storage path can't be the normal downloads folder.")
+    end
+end
+
 function SettingsBrowser:promptEphemeralPath()
     local dialog
     dialog = InputDialog:new{
@@ -393,10 +431,9 @@ function SettingsBrowser:promptEphemeralPath()
                     if path == "" then
                         return
                     end
-                    if not self:pathIsWritable(path) then
-                        UIManager:show(InfoMessage:new{
-                            text = T(_("%1 doesn't exist or isn't writable."), path),
-                        })
+                    local problem = self:ephemeralPathProblem(path)
+                    if problem then
+                        showInvalid(problem)
                         return
                     end
                     if self.store:isEphemeralMode() and path ~= self.store:ephemeralPath() then

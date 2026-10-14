@@ -2,7 +2,7 @@
 Lists installed .aix sources in a sources directory, as
 {text = "<display name> (<languages>)", mandatory = "v<version>",
 name = "<display name>", path = "<sources_dir>/<file>.aix",
-key = "<source's manifest id>", version = <int, or nil if unreadable>}
+key = "<source's manifest id>, or nil if unreadable>", version = <int, or nil if unreadable>}
 entries -- shared by sourcesbrowser.lua, globalsearchbrowser.lua,
 librarybrowser.lua (findByKey), and repobrowser.lua.
 
@@ -40,12 +40,10 @@ function InstalledSources.list(sources_dir, engine)
         if entry:match("%.aix$") then
             local path = sources_dir .. "/" .. entry
             local manifest = engine:manifest(path)
-            -- Fallback for a manifest that couldn't be read: the bare
-            -- filename, matching displayName()'s own fallback -- no worse
-            -- than treating the whole filename as the identity, which is
-            -- what every source's identity amounted to before source_key
-            -- existed.
-            local key = entry:gsub("%.aix$", "")
+            -- nil when the manifest couldn't be read: the filename changes on
+            -- update, so anything persisted under it would be orphaned.
+            -- Callers must not open/bookmark a source without a key.
+            local key = nil
             if manifest and type(manifest.key) == "string" and manifest.key ~= "" then
                 key = manifest.key
             end

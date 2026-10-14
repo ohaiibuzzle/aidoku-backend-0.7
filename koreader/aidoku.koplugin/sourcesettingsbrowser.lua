@@ -12,7 +12,6 @@ handful of settings a source typically has, unlike a chapter list).
 
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
-local NetworkMgr = require("ui/network/manager")
 local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
@@ -67,21 +66,21 @@ function SourceSettingsBrowser:onCloseWidget()
     OpenWidgets.remove(self)
 end
 
+-- No runWhenConnected: settings are local; a source whose settings list
+-- needs the network just fails into the error message below.
 function SourceSettingsBrowser:reload()
-    NetworkMgr:runWhenConnected(function()
-        Trapper:wrap(function()
-            local schema, err = self.engine:settingsList(self.source_path)
-            if not schema then
-                UIManager:show(require("ui/widget/infomessage"):new{ text = T(_("Could not load settings:\n%1"), err) })
-                return
-            end
-            self.entries = flatten(schema, "")
-            self.values = {}
-            for _, entry in ipairs(self.entries) do
-                self.values[entry.setting.Key] = self.engine:settingsGet(self.source_path, entry.setting.Key)
-            end
-            self:refresh()
-        end)
+    Trapper:wrap(function()
+        local schema, err = self.engine:settingsList(self.source_path)
+        if not schema then
+            UIManager:show(require("ui/widget/infomessage"):new{ text = T(_("Could not load settings:\n%1"), err) })
+            return
+        end
+        self.entries = flatten(schema, "")
+        self.values = {}
+        for _, entry in ipairs(self.entries) do
+            self.values[entry.setting.Key] = self.engine:settingsGet(self.source_path, entry.setting.Key)
+        end
+        self:refresh()
     end)
 end
 

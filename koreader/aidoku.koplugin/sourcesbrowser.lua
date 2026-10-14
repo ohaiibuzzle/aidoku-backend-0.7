@@ -95,6 +95,10 @@ function SourcesBrowser:onMenuSelect(item)
             is_borderless = true,
             title_bar_fm_style = true,
         })
+    elseif not item.key then
+        UIManager:show(require("ui/widget/infomessage"):new{
+            text = _("Couldn't read this source. Try again, or reinstall it."),
+        })
     else
         local SearchBrowser = require("searchbrowser")
         UIManager:show(SearchBrowser:new{

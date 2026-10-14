@@ -107,8 +107,10 @@ end
 -- downloads immediately rather than only on the next plugin-instance
 -- construction.
 function Aidoku:refreshDownloadsDir()
+    -- Kept on self so settingsbrowser.lua can refuse it as the Ephemeral path.
+    self.persistent_downloads_dir = dataSubdir("downloads")
     self.downloads_dir = self.store:isEphemeralMode()
-        and self.store:ephemeralPath() or dataSubdir("downloads")
+        and self.store:ephemeralPath() or self.persistent_downloads_dir
     util.makePath(self.downloads_dir)
     self.downloads_engine = DownloadsEngine.new(self.downloads_dir)
 end

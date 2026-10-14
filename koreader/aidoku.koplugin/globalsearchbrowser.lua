@@ -99,7 +99,7 @@ function GlobalSearchBrowser:runSearch(query)
             local item_table = {}
             local failed = {}
             for _, src in ipairs(sources) do
-                local result = self.engine:search(src.path, query, 1)
+                local result = src.key and self.engine:search(src.path, query, 1)
                 local entries = result and type(result.Entries) == "table" and result.Entries or nil
                 if entries then
                     for _, manga in ipairs(entries) do

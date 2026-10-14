@@ -246,12 +246,10 @@ func download(ctx context.Context, url, destDir, name string) (string, error) {
 	// previously (0666 minus the typical 022 umask); chmod explicitly so
 	// the rename doesn't silently tighten the installed .aix's permissions
 	// as a side effect of this change (same reasoning as
-	// settingsstore.save()'s identical chmod).
-	if err := tmp.Chmod(0o644); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return "", fmt.Errorf("repo: setting permissions on %s: %w", dest, err)
-	}
+	// settingsstore.save()'s identical chmod). Best-effort: FAT refuses it
+	// (EPERM) when the process doesn't own the mount, and FAT ignores
+	// permissions anyway.
+	_ = tmp.Chmod(0o644)
 	n, err := io.Copy(tmp, io.LimitReader(resp.Body, maxAixBytes+1))
 	if err == nil && n > maxAixBytes {
 		err = fmt.Errorf("larger than %d bytes", maxAixBytes)
@@ -260,6 +258,13 @@ func download(ctx context.Context, url, destDir, name string) (string, error) {
 		tmp.Close()
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("repo: writing %s: %w", dest, err)
+	}
+	// fsync before rename: removeOtherVersions deletes the old .aix next, so
+	// a power loss must not leave an empty file as the only copy.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("repo: syncing %s: %w", dest, err)
 	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(tmpPath)

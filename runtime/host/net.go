@@ -177,6 +177,9 @@ type Net struct {
 // descriptor batch would spin up one thread per descriptor with no cap.
 const defaultSendAllMaxConcurrency = 8
 
+// maxRequestTimeout caps net.set_timeout -- see its handler.
+const maxRequestTimeout = 5 * time.Minute
+
 func (n *Net) maxConcurrency() int {
 	if n.MaxConcurrency > 0 {
 		return n.MaxConcurrency
@@ -299,7 +302,14 @@ func LinkNet(builder wazero.HostModuleBuilder, n *Net) wazero.HostModuleBuilder 
 			if !ok {
 				return int32(netInvalidDescriptor)
 			}
-			req.Timeout = time.Duration(value * float64(time.Second))
+			// Clamped: a source passing milliseconds as seconds would
+			// otherwise hold the chapter flock for hours. NaN/<=0 means the
+			// client default, as 0 always did.
+			if !(value > 0) {
+				req.Timeout = 0
+				return int32(netSuccess)
+			}
+			req.Timeout = time.Duration(min(value, maxRequestTimeout.Seconds()) * float64(time.Second))
 			return int32(netSuccess)
 		}).
 		Export("set_timeout")

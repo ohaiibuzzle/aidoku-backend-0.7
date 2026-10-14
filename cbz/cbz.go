@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -165,10 +166,16 @@ const tempPattern = ".cbz-*.tmp"
 // RAM disk, where each one otherwise holds memory until reboot. A live
 // Writer touches its file every page, so a generous olderThan spares it.
 func RemoveStaleTemps(dir string, olderThan time.Duration) {
-	matches, _ := filepath.Glob(filepath.Join(dir, tempPattern))
-	for _, m := range matches {
-		if fi, err := os.Stat(m); err == nil && time.Since(fi.ModTime()) > olderThan {
-			os.Remove(m)
+	// Not filepath.Glob: it treats dir as a pattern too, and the plugin's
+	// manga dirs end in "[source_key]", which Glob reads as a char class.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, ".cbz-") || !strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > olderThan {
+			os.Remove(filepath.Join(dir, name))
 		}
 	}
 }

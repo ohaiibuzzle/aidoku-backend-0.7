@@ -181,11 +181,9 @@ func (s *Store) write(tagged map[string]taggedValue) error {
 	// os.CreateTemp always creates with 0600, not the 0644 os.WriteFile
 	// used previously; chmod explicitly so the rename doesn't silently
 	// tighten settings.json's permissions as a side effect of this change.
-	if err := tmp.Chmod(0o644); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
+	// Best-effort: FAT refuses it (EPERM) when the process doesn't own the
+	// mount, and FAT ignores permissions anyway.
+	_ = tmp.Chmod(0o644)
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)

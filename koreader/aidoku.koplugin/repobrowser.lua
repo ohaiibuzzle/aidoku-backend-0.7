@@ -59,7 +59,9 @@ function RepoBrowser:reload()
         -- index happens to order it.
         local installed_version_by_key = {}
         for _, installed in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
-            installed_version_by_key[installed.key] = installed.version
+            if installed.key then
+                installed_version_by_key[installed.key] = installed.version
+            end
         end
         -- See the null-decoding note in mangabrowser.lua: a repo entry with
         -- no sources, or a source with no languages, decodes those fields

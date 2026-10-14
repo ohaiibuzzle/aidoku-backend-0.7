@@ -124,7 +124,11 @@ func TestExtensionFor(t *testing.T) {
 }
 
 func TestRemoveStaleTemps(t *testing.T) {
-	dir := t.TempDir()
+	// Bracketed like the plugin's manga dirs ("Title [source_key]").
+	dir := filepath.Join(t.TempDir(), "Title [en.foo]")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	stale := filepath.Join(dir, ".cbz-1.tmp")
 	fresh := filepath.Join(dir, ".cbz-2.tmp")
 	other := filepath.Join(dir, "keep.cbz")
