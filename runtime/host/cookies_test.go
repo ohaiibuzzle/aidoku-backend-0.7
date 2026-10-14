@@ -1,6 +1,8 @@
 package host
 
 import (
+	"net/http/cookiejar"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -76,5 +78,26 @@ func TestParseNetscapeCookiesSkipsExpiredAttr(t *testing.T) {
 	}
 	if strings.TrimPrefix(cookies[0].Domain, ".") == "" {
 		t.Fatalf("expected a domain, got %q", cookies[0].Domain)
+	}
+}
+
+// A host-only cookie must not reach subdomains once in the jar.
+func TestForJarKeepsHostOnly(t *testing.T) {
+	cookies, err := ParseNetscapeCookies([]byte("comix.to\tFALSE\t/\tFALSE\t0\ts\t1\n.comix.to\tTRUE\t/\tFALSE\t0\td\t2\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	u := &url.URL{Scheme: "https", Host: "comix.to", Path: "/"}
+	jar.SetCookies(u, ForJar(u, cookies))
+	sub := jar.Cookies(&url.URL{Scheme: "https", Host: "a.comix.to", Path: "/"})
+	if len(sub) != 1 || sub[0].Name != "d" {
+		t.Fatalf("subdomain got %v, want only the domain cookie", sub)
+	}
+	if got := jar.Cookies(u); len(got) != 2 {
+		t.Fatalf("host got %v, want both", got)
+	}
+	if cookies[0].Domain != "comix.to" {
+		t.Fatalf("ForJar mutated its input: %q", cookies[0].Domain)
 	}
 }

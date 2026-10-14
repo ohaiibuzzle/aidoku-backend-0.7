@@ -815,6 +815,9 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		return err
 	}
 	if err := must(vm.RegisterFunc("__setInterval", func(ms int) int {
+		// AddTimer treats interval 0 as one-shot; browsers clamp an
+		// interval to at least 4ms (HTML timer nesting rule) and repeat.
+		ms = max(ms, 4)
 		return d.loop.AddTimer(time.Duration(ms)*time.Millisecond, time.Duration(ms)*time.Millisecond, func(id int, vm *quickjs.VM) {
 			_, _ = vm.Call("__fireTimer", id)
 		})

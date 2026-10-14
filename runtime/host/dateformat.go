@@ -60,10 +60,11 @@ func isLDMLLetter(c rune) bool {
 func ldmlToken(c rune, count int) string {
 	switch c {
 	case 'y', 'Y':
-		if count >= 4 {
-			return "2006"
+		// LDML: only "yy" is the two-digit year; "y" is the full year.
+		if count == 2 {
+			return "06"
 		}
-		return "06"
+		return "2006"
 	case 'M', 'L':
 		switch {
 		case count >= 4:

@@ -21,6 +21,13 @@ import (
 // starts answering, without capping the whole transfer -- http.DefaultClient
 // has no timeout at all, so a stalled connection used to hang the process
 // forever (and a KOReader-dismissed call keeps the process running anyway).
+// Response caps: arbitrary repo URLs are network input (a real index is well
+// under 1MB, a real .aix a few MB).
+const (
+	maxIndexBytes = 16 << 20
+	maxAixBytes   = 64 << 20
+)
+
 var httpClient = &http.Client{Transport: func() *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.ResponseHeaderTimeout = 30 * time.Second
@@ -80,7 +87,7 @@ func FetchIndex(ctx context.Context, indexURL string) (*Index, error) {
 	}
 
 	var idx Index
-	if err := json.NewDecoder(resp.Body).Decode(&idx); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxIndexBytes)).Decode(&idx); err != nil {
 		return nil, fmt.Errorf("repo: decoding %s: %w", indexURL, err)
 	}
 
@@ -180,10 +187,26 @@ func removeOtherVersions(dir, id, keepName string) {
 		if name == keepName || e.IsDir() {
 			continue
 		}
-		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix) {
+		// Only digits may sit between prefix and suffix (Version is an int):
+		// ids may contain '-', so "en.foo-vip-v3.aix" is another source, not
+		// an old "en.foo".
+		ver, ok := strings.CutPrefix(name, prefix)
+		if ok && strings.HasSuffix(ver, suffix) && isDigits(strings.TrimSuffix(ver, suffix)) {
 			_ = os.Remove(filepath.Join(dir, name))
 		}
 	}
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // download streams the body of url into destDir/name, returning the
@@ -229,7 +252,11 @@ func download(ctx context.Context, url, destDir, name string) (string, error) {
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("repo: setting permissions on %s: %w", dest, err)
 	}
-	if _, err := io.Copy(tmp, resp.Body); err != nil {
+	n, err := io.Copy(tmp, io.LimitReader(resp.Body, maxAixBytes+1))
+	if err == nil && n > maxAixBytes {
+		err = fmt.Errorf("larger than %d bytes", maxAixBytes)
+	}
+	if err != nil {
 		tmp.Close()
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("repo: writing %s: %w", dest, err)

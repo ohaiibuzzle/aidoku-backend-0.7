@@ -196,7 +196,10 @@ end
 -- instead. Requires downloads_dir too, since it's the next positional CLI
 -- arg -- passing one without the other inserts an empty placeholder so
 -- later args don't shift.
-function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name)
+--
+-- redownload re-fetches even an already-indexed chapter (aidoku-run's
+-- `redownload`), replacing the old file only once the new one is complete.
+function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name, redownload)
     -- Not "silent and false or ...": that's the classic Lua and/or-ternary
     -- trap -- it misfires whenever the "true" branch value is itself falsy,
     -- which false always is.
@@ -204,7 +207,7 @@ function Engine:download(source_path, manga_key, chapter_key, out_path, download
     if silent then
         progress_text = nil
     end
-    local args = { source_path, "download", manga_key, chapter_key, out_path }
+    local args = { source_path, redownload and "redownload" or "download", manga_key, chapter_key, out_path }
     if downloads_dir or manga_dir_name then
         table.insert(args, downloads_dir or "")
     end

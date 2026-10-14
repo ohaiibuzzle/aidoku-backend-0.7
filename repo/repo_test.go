@@ -294,3 +294,18 @@ func TestInstallDoesNotTouchFinalPathUntilComplete(t *testing.T) {
 		t.Fatalf("final path missing after successful Install: %v", err)
 	}
 }
+
+func TestRemoveOtherVersionsSparesIDsSharingAPrefix(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"en.foo-v1.aix", "en.foo-v2.aix", "en.foo-vip-v3.aix", "en.foo-v2-v1.aix"} {
+		if err := os.WriteFile(filepath.Join(dir, n), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	removeOtherVersions(dir, "en.foo", "en.foo-v2.aix")
+	for n, want := range map[string]bool{"en.foo-v1.aix": false, "en.foo-v2.aix": true, "en.foo-vip-v3.aix": true, "en.foo-v2-v1.aix": true} {
+		if _, err := os.Stat(filepath.Join(dir, n)); (err == nil) != want {
+			t.Errorf("%s exists=%v, want %v", n, err == nil, want)
+		}
+	}
+}

@@ -4,16 +4,18 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
 	"image/png"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/cbz"
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
@@ -64,7 +66,7 @@ func (s *Source) downloadURL(ctx context.Context, rawURL string, headers models.
 		return nil, fmt.Errorf("source: fetching %s: unexpected status %s", rawURL, resp.Status)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := host.ReadAllLimited(resp.Body, host.MaxResponseBytes)
 	if err != nil {
 		return nil, fmt.Errorf("source: reading %s: %w", rawURL, err)
 	}
@@ -156,7 +158,9 @@ func (s *Source) downloadZipEntry(ctx context.Context, zipURL, filePath string, 
 			return nil, fmt.Errorf("source: opening %s in zip %s: %w", filePath, zipURL, err)
 		}
 		defer rc.Close()
-		return io.ReadAll(rc)
+		// The entry's declared size is the zip's say-so: bound what it
+		// actually inflates to (a few-KB entry can expand to GBs).
+		return host.ReadAllLimited(rc, host.MaxResponseBytes)
 	}
 	return nil, fmt.Errorf("source: entry %q not found in zip %s", filePath, zipURL)
 }
@@ -363,7 +367,7 @@ var filenameSanitizer = strings.NewReplacer(
 // every caller is safe, not just the ones that happen to append a fixed
 // suffix.
 func sanitizeFilename(s string) string {
-	s = strings.TrimSpace(filenameSanitizer.Replace(s))
+	s = filenameSanitizer.Replace(s)
 	// ASCII control characters (0x00-0x1F, 0x7F) are illegal on the same
 	// FAT32/exFAT filesystems filenameSanitizer targets, but contain none of
 	// the punctuation it replaces, so they'd otherwise pass through
@@ -376,8 +380,41 @@ func sanitizeFilename(s string) string {
 		}
 		return r
 	}, s)
+	// Trim only after dropping control characters: trimming first left
+	// "Omake \x01" as "Omake " here and "Omake" on a second pass, so
+	// ResolveOutputPath's result didn't survive DownloadChapterCBZ's re-sanitize.
+	s = truncateFilename(strings.TrimSpace(s))
 	if s == "." || s == ".." {
 		return "-"
 	}
 	return s
+}
+
+// maxFilenameBytes keeps a sanitized name under ext4's 255-byte NAME_MAX
+// (and FAT32/exFAT's 255 UTF-16 units, never more than the UTF-8 byte
+// count) with room left for UnusedPath's " [xxxxxxxx]" and ".cbz".
+const maxFilenameBytes = 200
+
+// truncateFilename shortens an over-long name to head + " ~hash~ " + tail,
+// cut on rune boundaries. Keeping the tail preserves the plugin's
+// " [source_key]" manga-dir suffix (so two sources' copies of one long title
+// stay apart), and the hash of the full name keeps two long titles that
+// share a prefix and suffix apart. Deterministic, so the same title always
+// maps to the same name; names that fit are returned untouched.
+func truncateFilename(s string) string {
+	if len(s) <= maxFilenameBytes {
+		return s
+	}
+	const tailBytes = 48
+	sum := sha256.Sum256([]byte(s))
+	mid := " ~" + hex.EncodeToString(sum[:4]) + "~ "
+	head := maxFilenameBytes - tailBytes - len(mid)
+	for head > 0 && !utf8.RuneStart(s[head]) {
+		head--
+	}
+	tail := len(s) - tailBytes
+	for tail < len(s) && !utf8.RuneStart(s[tail]) {
+		tail++
+	}
+	return strings.TrimRight(s[:head], " ") + mid + strings.TrimLeft(s[tail:], " ")
 }

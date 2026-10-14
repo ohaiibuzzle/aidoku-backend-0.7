@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 var (
@@ -119,5 +120,29 @@ func TestExtensionFor(t *testing.T) {
 				t.Errorf("extensionFor(%q) = %q, want %q", tt.name, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRemoveStaleTemps(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, ".cbz-1.tmp")
+	fresh := filepath.Join(dir, ".cbz-2.tmp")
+	other := filepath.Join(dir, "keep.cbz")
+	for _, p := range []string{stale, fresh, other} {
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(stale, old, old)
+	os.Chtimes(other, old, old)
+	RemoveStaleTemps(dir, time.Hour)
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("stale temp kept: %v", err)
+	}
+	for _, p := range []string{fresh, other} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s removed: %v", p, err)
+		}
 	}
 }

@@ -45,9 +45,13 @@ function SearchBrowser:init()
     -- UIManager:show(self) -- showing the InputDialog here would get
     -- painted first and then buried under this Menu when the caller shows
     -- it next. Defer to the next tick so it shows on top instead.
+    -- Wrapped: outside a Trapper coroutine the filters subprocess falls
+    -- back to a blocking io.popen, freezing the UI with no progress shown.
     UIManager:nextTick(function()
-        self:reloadFilters()
-        self:promptQuery()
+        Trapper:wrap(function()
+            self:reloadFilters()
+            self:promptQuery()
+        end)
     end)
 end
 

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 )
@@ -111,5 +112,33 @@ func TestResolveOutputPath_Empty(t *testing.T) {
 	}
 	if want := "Test Manga - Chapter 1.cbz"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestSanitizeFilenameIdempotentAroundControlChars(t *testing.T) {
+	once := sanitizeFilename("Omake \x01")
+	if once != "Omake" || sanitizeFilename(once) != once {
+		t.Fatalf("got %q then %q, want stable %q", once, sanitizeFilename(once), "Omake")
+	}
+}
+
+func TestSanitizeFilenameTruncatesLongNames(t *testing.T) {
+	long := strings.Repeat("漫", 90) + " [multi.mangadex]" // 287 bytes
+	got := sanitizeFilename(long)
+	if len(got) > maxFilenameBytes || !utf8.ValidString(got) {
+		t.Fatalf("got %d bytes (valid UTF-8: %v): %q", len(got), utf8.ValidString(got), got)
+	}
+	if !strings.HasSuffix(got, " [multi.mangadex]") {
+		t.Errorf("source-key suffix lost: %q", got)
+	}
+	if sanitizeFilename(got) != got {
+		t.Errorf("not idempotent: %q -> %q", got, sanitizeFilename(got))
+	}
+	other := sanitizeFilename(strings.Repeat("漫", 45) + "画" + strings.Repeat("漫", 44) + " [multi.mangadex]")
+	if other == got {
+		t.Errorf("two different long titles truncated to the same name %q", got)
+	}
+	if short := "Yotsuba to! [multi.mangadex]"; sanitizeFilename(short) != short {
+		t.Errorf("short name changed: %q", sanitizeFilename(short))
 	}
 }

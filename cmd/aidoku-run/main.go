@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ohaiibuzzle/aidokurunner-go/cbz"
 	"github.com/ohaiibuzzle/aidokurunner-go/downloads"
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 	"github.com/ohaiibuzzle/aidokurunner-go/repo"
@@ -24,6 +25,7 @@ import (
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime/host"
 	"github.com/ohaiibuzzle/aidokurunner-go/settingsstore"
 	"github.com/ohaiibuzzle/aidokurunner-go/source"
+	"github.com/tetratelabs/wazero"
 )
 
 func main() {
@@ -75,6 +77,9 @@ commands:
                                      SQLite index there (see the downloads package); if manga-dir-name is
                                      given, output.cbz's directory gets a new sanitized subdirectory named
                                      after it created, and the archive is written inside that instead
+  redownload <same args as download>
+                                     like download, but re-fetches even if the chapter is already
+                                     indexed, replacing the old file only once the new one is complete
   cookie load <cookies.txt>          load cookies from a Netscape cookies.txt file (cf_clearance etc.);
                                      merges into the store by domain+name, leaving other cookies for the
                                      same domain (and every other domain) untouched
@@ -147,9 +152,25 @@ func run(dir, command string, args []string) error {
 		return handleUpdate(ctx, args)
 	}
 
-	src, err := source.LoadPath(ctx, dir, runtime.Config{
-		PrintHandler: func(s string) { fmt.Fprintln(os.Stderr, "[print]", s) },
-		Settings:     settings,
+	// Every aidoku-run is a fresh process, so only an on-disk cache saves
+	// recompiling main.wasm per command. Purely an optimization: failing to
+	// open it just means compiling from scratch.
+	cacheDir := filepath.Join(os.TempDir(), "aidoku-run-wazero-cache")
+	if dir := os.Getenv("AIDOKU_SETTINGS_DIR"); dir != "" {
+		cacheDir = filepath.Join(dir, "wazero-cache")
+	}
+	compilationCache, err := wazero.NewCompilationCacheWithDir(cacheDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: wazero compilation cache unavailable: %v\n", err)
+		compilationCache = nil
+	} else {
+		defer compilationCache.Close(ctx)
+	}
+
+	interpConfig := runtime.Config{
+		PrintHandler:     func(s string) { fmt.Fprintln(os.Stderr, "[print]", s) },
+		Settings:         settings,
+		CompilationCache: compilationCache,
 		// When FLARESOLVERR_HOST is set and a source's request hits a
 		// Cloudflare challenge, the resulting cookies get persisted here
 		// too (in addition to the in-memory jar), same as `cookie load`.
@@ -157,7 +178,19 @@ func run(dir, command string, args []string) error {
 			persistCookies(cookiePath, cookies)
 		},
 		NetworkConcurrency: host.NetworkConcurrencyFromEnv(),
-	}, settings)
+	}
+	src, err := source.LoadPath(ctx, dir, interpConfig, settings)
+	if err != nil && compilationCache != nil {
+		// wazero fails compilation on a corrupt cache entry (checksum
+		// mismatch) instead of recompiling, and never deletes it -- so one
+		// bad file would fail every command for that source, every run
+		// (confirmed on-device). Drop the cache and retry once uncached;
+		// the next run repopulates it.
+		fmt.Fprintf(os.Stderr, "warning: retrying without wazero compilation cache: %v\n", err)
+		_ = os.RemoveAll(cacheDir)
+		interpConfig.CompilationCache = nil
+		src, err = source.LoadPath(ctx, dir, interpConfig, settings)
+	}
 	if err != nil {
 		return fmt.Errorf("loading source: %w", err)
 	}
@@ -317,10 +350,11 @@ func run(dir, command string, args []string) error {
 		}
 		return printJSON(pages)
 
-	case "download":
+	case "download", "redownload":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: download <manga-key> <chapter-key> [output.cbz] [downloads-index-dir]")
+			return fmt.Errorf("usage: %s <manga-key> <chapter-key> [output.cbz] [downloads-index-dir] [manga-dir-name]", command)
 		}
+		redownload := command == "redownload"
 		manga := models.Manga{Key: args[0]}
 		updated, err := src.GetMangaUpdate(ctx, manga, true, true, nil)
 		if err != nil {
@@ -380,7 +414,12 @@ func run(dir, command string, args []string) error {
 		// it -- re-check the index now that we own the lock, rather than
 		// unconditionally re-fetching every page. os.Stat guards against a
 		// stale row whose file was since deleted out from under it.
-		if existing, err := store.Path(src.Key, updated.Key, chapter.Key); err == nil && existing != "" {
+		// redownload skips this on purpose, and replaces the old file only
+		// once the new one is fully written (cbz.Writer's atomic rename) --
+		// the plugin used to delete first, losing the only copy whenever
+		// the re-fetch failed or the user was offline.
+		existing, _ := store.Path(src.Key, updated.Key, chapter.Key)
+		if existing != "" && !redownload {
 			if _, statErr := os.Stat(existing); statErr == nil {
 				fmt.Println(existing)
 				return nil
@@ -397,6 +436,7 @@ func run(dir, command string, args []string) error {
 		if path, err = store.UnusedPath(src.Key, updated.Key, chapter.Key, path); err != nil {
 			return err
 		}
+		cbz.RemoveStaleTemps(filepath.Dir(path), time.Hour)
 		if path, err = src.DownloadChapterCBZ(ctx, *updated, *chapter, path, "", printDownloadProgress); err != nil {
 			return err
 		}
@@ -408,6 +448,9 @@ func run(dir, command string, args []string) error {
 		entry, err := store.Record(src.Key, dir, updated.Key, chapter.Key, path, source.MangaLabel(*updated), source.ChapterLabel(*chapter), chapter.ChapterNumber, chapter.VolumeNumber)
 		if err != nil {
 			return fmt.Errorf("recording download: %w", err)
+		}
+		if redownload && existing != "" && existing != entry.Path {
+			_ = os.Remove(existing) // the title (and so its filename) changed since
 		}
 		fmt.Println(entry.Path)
 		return nil
@@ -445,24 +488,21 @@ type cookieEntry struct {
 // added in one invocation are injected on the next.
 type cookieFile map[string][]cookieEntry
 
-func readCookieFile(path string) cookieFile {
+// readCookieFile returns an empty cookieFile if path is missing or corrupt;
+// corrupt reports the latter, so a caller about to write can keep a copy.
+func readCookieFile(path string) (f cookieFile, corrupt bool) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return cookieFile{}
+		return cookieFile{}, false
 	}
-	var f cookieFile
 	if err := json.Unmarshal(b, &f); err != nil {
-		// Surface this rather than silently treating a corrupt file as
-		// "no cookies": a caller that goes on to persistCookies() after
-		// this would otherwise overwrite the file with only the newly
-		// solved cookies, permanently discarding whatever else was in it.
 		fmt.Fprintf(os.Stderr, "aidoku-run: cookie file %s is corrupt, ignoring: %v\n", path, err)
-		return cookieFile{}
+		return cookieFile{}, true
 	}
 	if f == nil {
 		f = cookieFile{}
 	}
-	return f
+	return f, false
 }
 
 // writeCookieFile writes via a temp file + rename in the same directory
@@ -569,7 +609,12 @@ func persistCookies(path string, cookies []*http.Cookie) {
 }
 
 func mergeCookies(path string, cookies []*http.Cookie) {
-	f := readCookieFile(path)
+	f, corrupt := readCookieFile(path)
+	if corrupt {
+		// Writing below would otherwise permanently replace whatever was
+		// in it with only these cookies.
+		_ = os.Rename(path, path+".corrupt")
+	}
 	byDomain := map[string][]cookieEntry{}
 	for _, e := range entriesFromNetscape(cookies) {
 		if e.Domain == "" {
@@ -675,7 +720,7 @@ func handleCookie(path string, args []string) error {
 		return nil
 
 	case "list":
-		f := readCookieFile(path)
+		f, _ := readCookieFile(path)
 		if len(f) == 0 {
 			fmt.Println("(no cookies stored)")
 			return nil
@@ -713,7 +758,7 @@ func handleCookie(path string, args []string) error {
 // its own domain URL and is then sent on any request to that host (from any
 // source), which is exactly the URLSession.shared behavior upstream relies on.
 func injectCookies(src *source.Source, path string) {
-	f := readCookieFile(path)
+	f, _ := readCookieFile(path)
 	if len(f) == 0 {
 		return
 	}

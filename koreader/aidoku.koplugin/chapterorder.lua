@@ -31,13 +31,22 @@ function ChapterOrder.orderedByReading(chapters)
         table.insert(positional, chapters[i])
     end
 
-    local numbered = {}
-    for _, c in ipairs(positional) do
+    -- table.sort isn't stable: tie-break on source position so several
+    -- releases of one chapter number (MangaDex lists one per scanlation
+    -- group) keep a deterministic order.
+    local numbered, pos = {}, {}
+    for i, c in ipairs(positional) do
         if ChapterOrder.number(c) then
             table.insert(numbered, c)
+            pos[c] = i
         end
     end
-    table.sort(numbered, function(a, b) return a.ChapterNumber < b.ChapterNumber end)
+    table.sort(numbered, function(a, b)
+        if a.ChapterNumber ~= b.ChapterNumber then
+            return a.ChapterNumber < b.ChapterNumber
+        end
+        return pos[a] < pos[b]
+    end)
 
     local ordered = {}
     local ni = 1
@@ -104,7 +113,21 @@ end
 
 -- after returns up to `count` chapters immediately following current_key in
 -- reading order. Empty if current_key is last or unrecognized.
-function ChapterOrder.after(chapters, current_key, count)
+local function scanlatorsOf(chapter)
+    if type(chapter.Scanlators) == "table" and #chapter.Scanlators > 0 then
+        return table.concat(chapter.Scanlators, "\0")
+    end
+    return nil
+end
+
+-- after returns up to count chapters following current_key in reading
+-- order, one per chapter number: sources like MangaDex list a release per
+-- scanlation group, and stepping through them one by one re-read the same
+-- chapter (or prefetched it twice). Other releases of the current number
+-- are skipped; among a later number's releases it picks, in order: one
+-- is_local(chapter) says is already downloaded (optional), then one by the
+-- current chapter's scanlators, then the first.
+function ChapterOrder.after(chapters, current_key, count, is_local)
     local ordered = ChapterOrder.orderedByReading(chapters)
     local idx
     for i, c in ipairs(ordered) do
@@ -116,9 +139,36 @@ function ChapterOrder.after(chapters, current_key, count)
     if not idx then
         return {}
     end
-    local result = {}
-    for i = idx + 1, math.min(idx + count, #ordered) do
-        table.insert(result, ordered[i])
+    local current_num = ChapterOrder.number(ordered[idx])
+    local prefer = scanlatorsOf(ordered[idx])
+    local function rank(c)
+        local r = 0
+        if is_local and is_local(c) then
+            r = r + 2
+        end
+        if prefer and scanlatorsOf(c) == prefer then
+            r = r + 1
+        end
+        return r
+    end
+    local result, last_num, last_rank = {}, nil, 0
+    for i = idx + 1, #ordered do
+        local c = ordered[i]
+        local n = ChapterOrder.number(c)
+        if n ~= nil and n == current_num then -- luacheck: ignore 542
+            -- another release of the chapter just finished
+        elseif n ~= nil and n == last_num then
+            local r = rank(c)
+            if r > last_rank then
+                result[#result], last_rank = c, r
+            end
+        else
+            if #result >= count then
+                break
+            end
+            table.insert(result, c)
+            last_num, last_rank = n, rank(c)
+        end
     end
     return result
 end

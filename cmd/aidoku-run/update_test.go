@@ -8,10 +8,10 @@ func TestParseVersion(t *testing.T) {
 		want   version
 		wantOK bool
 	}{
-		{"v1.2.3", version{1, 2, 3}, true},
-		{"1.2.3", version{1, 2, 3}, true},
-		{"v0.1.0", version{0, 1, 0}, true},
-		{"1.2.3-beta.1", version{1, 2, 3}, true},
+		{"v1.2.3", version{1, 2, 3, 1}, true},
+		{"1.2.3", version{1, 2, 3, 1}, true},
+		{"v0.1.0", version{0, 1, 0, 1}, true},
+		{"1.2.3-beta.1", version{1, 2, 3, 0}, true},
 		{"dev-abc1234", version{}, false},
 		{"", version{}, false},
 		{"v1.2", version{}, false},
@@ -38,6 +38,8 @@ func TestCompareVersions(t *testing.T) {
 		{version{1, 0, 0}, version{1, 0, 1}, -1},
 		{version{1, 2, 0}, version{1, 1, 9}, 1},
 		{version{0, 9, 9}, version{1, 0, 0}, -1},
+		{version{1, 2, 3, 0}, version{1, 2, 3, 1}, -1}, // 1.2.3-rc1 < 1.2.3
+		{version{1, 2, 3, 1}, version{1, 2, 4, 0}, -1}, // 1.2.3 < 1.2.4-rc1
 	}
 	for _, c := range cases {
 		if got := compareVersions(c.a, c.b); got != c.want {

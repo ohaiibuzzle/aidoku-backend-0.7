@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 // extensionFor sniffs an image's format from its magic bytes and returns
@@ -79,7 +80,7 @@ type Writer struct {
 // affecting correctness, since the padding width isn't otherwise load-bearing.
 func NewWriter(path string, totalPages int) (*Writer, error) {
 	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".cbz-*.tmp")
+	tmp, err := os.CreateTemp(dir, tempPattern)
 	if err != nil {
 		return nil, fmt.Errorf("cbz: creating temp file in %s: %w", dir, err)
 	}
@@ -134,6 +135,17 @@ func (w *Writer) Close() error {
 		os.Remove(w.tmpPath)
 		return fmt.Errorf("cbz: finishing %s: %w", w.tmpPath, err)
 	}
+	// Synced before the rename (and the index row the caller records right
+	// after): e-readers lose power abruptly, and an unsynced new file can
+	// come back empty after a crash while the rename already stuck.
+	if err := w.tmp.Sync(); err != nil {
+		w.tmp.Close()
+		os.Remove(w.tmpPath)
+		return fmt.Errorf("cbz: syncing %s: %w", w.tmpPath, err)
+	}
+	// CreateTemp makes 0600 (same fix as repo.download). Best-effort: vfat
+	// rejects chmod unless mounted "quiet".
+	_ = w.tmp.Chmod(0o644)
 	if err := w.tmp.Close(); err != nil {
 		os.Remove(w.tmpPath)
 		return fmt.Errorf("cbz: closing %s: %w", w.tmpPath, err)
@@ -143,6 +155,22 @@ func (w *Writer) Close() error {
 		return fmt.Errorf("cbz: renaming %s to %s: %w", w.tmpPath, w.path, err)
 	}
 	return nil
+}
+
+const tempPattern = ".cbz-*.tmp"
+
+// RemoveStaleTemps deletes temp files in dir left by Writers that never
+// reached Close or Abort (the process was killed mid-download) and haven't
+// been written to for olderThan. Under the plugin's Ephemeral Mode dir is a
+// RAM disk, where each one otherwise holds memory until reboot. A live
+// Writer touches its file every page, so a generous olderThan spares it.
+func RemoveStaleTemps(dir string, olderThan time.Duration) {
+	matches, _ := filepath.Glob(filepath.Join(dir, tempPattern))
+	for _, m := range matches {
+		if fi, err := os.Stat(m); err == nil && time.Since(fi.ModTime()) > olderThan {
+			os.Remove(m)
+		}
+	}
 }
 
 // Abort discards the in-progress archive and removes its temp file. Call

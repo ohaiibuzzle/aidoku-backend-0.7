@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -20,9 +21,9 @@ import (
 // expiry are dropped; a zero expiry is kept (treated as a non-expiring
 // session cookie for the purposes of this jar).
 //
-// IncludeSubdomains=FALSE produces a host-only cookie (cookiejar semantics:
-// Domain set to the bare host), TRUE produces a domain cookie (Domain prefixed
-// with "."), and Secure is carried over.
+// IncludeSubdomains=FALSE produces a host-only cookie (Domain set to the bare
+// host -- pass through ForJar before SetCookies), TRUE produces a domain
+// cookie (Domain prefixed with "."), and Secure is carried over.
 func ParseNetscapeCookies(data []byte) ([]*http.Cookie, error) {
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -81,4 +82,22 @@ func ParseNetscapeCookies(data []byte) ([]*http.Cookie, error) {
 		out = append(out, c)
 	}
 	return out, sc.Err()
+}
+
+// ForJar returns cs ready for cookiejar.SetCookies(u, ...): a host-only cookie
+// for u's host (Domain equal to it with no leading ".", in both cookies.txt
+// and Chrome/FlareSolverr convention) gets an empty Domain, since per RFC
+// 6265 any non-empty Domain makes the jar send it to subdomains too. cs
+// itself is left untouched.
+func ForJar(u *url.URL, cs []*http.Cookie) []*http.Cookie {
+	out := make([]*http.Cookie, len(cs))
+	for i, c := range cs {
+		if c.Domain != "" && strings.EqualFold(c.Domain, u.Hostname()) {
+			cp := *c
+			cp.Domain = ""
+			c = &cp
+		}
+		out[i] = c
+	}
+	return out
 }

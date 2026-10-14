@@ -57,7 +57,9 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
     if n <= 0 then
         return
     end
-    local upcoming = ChapterOrder.after(chapters, chapter_key, n)
+    local upcoming = ChapterOrder.after(chapters, chapter_key, n, function(c)
+        return ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key) ~= ""
+    end)
     if #upcoming == 0 then
         return
     end
@@ -95,9 +97,16 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
         -- on-device: this prune call has no keep_path of its own, so it
         -- deleted the just-opened chapter's file even though downloadAndOpen's
         -- own prune, moments earlier, had correctly protected it).
+        -- The chapters just prefetched are kept too: pruning them under a
+        -- tight limit would only re-download them when the reader arrives.
         if any_new and not ctx.store:isEphemeralMode() then
-            local keep_path = ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, chapter_key)
-            ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), keep_path)
+            local keep = {}
+            for _, c in ipairs(upcoming) do
+                keep[ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key)] = true
+            end
+            keep[ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, chapter_key)] = true
+            keep[""] = nil
+            ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), keep)
         end
         if on_complete then
             on_complete(any_new)

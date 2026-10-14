@@ -7,7 +7,6 @@ import (
 	"image"
 	_ "image/gif"
 	"image/png"
-	"io"
 	"math"
 	"net/http"
 	"strings"
@@ -66,7 +65,7 @@ func (c *Canvas) client() *http.Client {
 // DecodeImage implements the callback Net expects for its `get_image`
 // binding.
 func (c *Canvas) DecodeImage(data []byte) (int32, bool) {
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, err := decodeImageBounded(data)
 	if err != nil {
 		return 0, false
 	}
@@ -78,7 +77,7 @@ func (c *Canvas) fetchImage(descriptor int32) image.Image {
 	case image.Image:
 		return v
 	case []byte:
-		img, _, err := image.Decode(bytes.NewReader(v))
+		img, err := decodeImageBounded(v)
 		if err != nil {
 			return nil
 		}
@@ -93,6 +92,29 @@ func (c *Canvas) fetchImage(descriptor int32) image.Image {
 // a scanned page never needs anywhere near this; the cap exists to bound
 // gg.NewContext's image.NewRGBA allocation (4 bytes/pixel).
 const maxCanvasDimension = 8192
+
+// maxDecodePixels bounds image.Decode by the image's *declared* size: a
+// tiny PNG/JPEG header can claim e.g. 20000x20000 and make Decode allocate
+// GBs before failing. Same budget as the largest canvas new_context allows,
+// without capping either axis alone (webtoon strips are very tall).
+const maxDecodePixels = maxCanvasDimension * maxCanvasDimension
+
+func decodeImageBounded(data []byte) (image.Image, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > maxDecodePixels {
+		return nil, fmt.Errorf("canvas: image dimensions %dx%d out of range", cfg.Width, cfg.Height)
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	return img, err
+}
+
+// maxFontSize caps draw_text's guest-supplied size: truetype.NewFace
+// allocates its glyph mask cache up front, proportional to size squared
+// (measured ~34MB at 200, ~858MB at 1000).
+const maxFontSize = 128
 
 // validCanvasDimension rejects non-finite and out-of-range new_context
 // dimensions. NaN compares false against every relation, including <= 0
@@ -248,6 +270,9 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			if !ok {
 				return int32(canvasInvalidString)
 			}
+			if !(size > 0 && size <= maxFontSize) { // also rejects NaN
+				return int32(canvasInvalidFont)
+			}
 			face := truetype.NewFace(ttFont, &truetype.Options{Size: float64(size), DPI: 72, Hinting: font.HintingFull})
 			gc.SetFontFace(face)
 			gc.SetRGBA(float64(r), float64(g), float64(b), float64(a))
@@ -305,7 +330,7 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			if !ok {
 				return int32(canvasInvalidData)
 			}
-			img, _, err := image.Decode(bytes.NewReader(data))
+			img, err := decodeImageBounded(data)
 			if err != nil {
 				return int32(canvasInvalidImage)
 			}
@@ -393,7 +418,7 @@ func (c *Canvas) loadBytes(location string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	return ReadAllLimited(resp.Body, 16<<20)
 }
 
 func drawScaled(gc *gg.Context, img image.Image, dstX, dstY, dstWidth, dstHeight float64) {
@@ -450,12 +475,34 @@ func applyStrokeStyle(gc *gg.Context, style *canvasStrokeStyle) {
 		// gg has no true miter join; round is the closest available.
 		gc.SetLineJoinRound()
 	}
-	if len(style.DashArray) > 0 {
-		dashes := make([]float64, len(style.DashArray))
-		for i, d := range style.DashArray {
-			dashes[i] = float64(d)
-		}
+	if dashes, ok := validDashes(style.DashArray); ok {
 		gc.SetDash(dashes...)
-		gc.SetDashOffset(float64(style.DashOffset))
+		offset := float64(style.DashOffset)
+		if math.IsNaN(offset) || math.IsInf(offset, 0) {
+			offset = 0 // gg math.Mod()s this; NaN would poison every segment length
+		}
+		gc.SetDashOffset(offset)
 	}
+}
+
+// validDashes converts a guest dash array, or reports false to stroke solid.
+// Like canvas setLineDash, a negative or non-finite entry voids the whole
+// array. A cycle summing under 1px is also rejected: gg's dashPath emits one
+// segment per cycle (a zero cycle never advances and loops forever,
+// allocating), all while holding the interpreter mutex.
+func validDashes(in []float32) ([]float64, bool) {
+	if len(in) == 0 {
+		return nil, false
+	}
+	out := make([]float64, len(in))
+	sum := 0.0
+	for i, d := range in {
+		v := float64(d)
+		if v < 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+			return nil, false
+		}
+		out[i] = v
+		sum += v
+	}
+	return out, sum >= 1
 }

@@ -169,11 +169,9 @@ func (d *Defaults) set(m api.Module, keyPointer, length, valueKindRaw, valuePoin
 		if err != nil {
 			return int32(defaultsFailedDecoding)
 		}
-		arr := make([]string, n)
-		for i := 0; i < n; i++ {
-			if arr[i], err = r.ReadString(); err != nil {
-				return int32(defaultsFailedDecoding)
-			}
+		arr, err := postcard.Seq(r, n, postcard.ReadStringInto)
+		if err != nil {
+			return int32(defaultsFailedDecoding)
 		}
 		value = arr
 	default:

@@ -255,11 +255,9 @@ func DecodeFilterSlice(r *postcard.Reader) ([]Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Filter, n)
-	for i := 0; i < n; i++ {
-		if err := out[i].DecodePostcard(r); err != nil {
-			return nil, err
-		}
+	out, err := postcard.Seq(r, n, (*Filter).DecodePostcard)
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

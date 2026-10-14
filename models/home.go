@@ -17,11 +17,9 @@ func (h *Home) DecodePostcard(r *postcard.Reader) error {
 	if err != nil {
 		return err
 	}
-	h.Components = make([]HomeComponent, n)
-	for i := 0; i < n; i++ {
-		if err := h.Components[i].DecodePostcard(r); err != nil {
-			return err
-		}
+	h.Components, err = postcard.Seq(r, n, (*HomeComponent).DecodePostcard)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -117,11 +115,9 @@ func (c *HomeComponent) DecodePostcard(r *postcard.Reader) error {
 		if err != nil {
 			return err
 		}
-		c.BigScrollerEntries = make([]Manga, n)
-		for i := 0; i < n; i++ {
-			if err := c.BigScrollerEntries[i].DecodePostcard(r); err != nil {
-				return err
-			}
+		c.BigScrollerEntries, err = postcard.Seq(r, n, (*Manga).DecodePostcard)
+		if err != nil {
+			return err
 		}
 		if c.AutoScrollInterval, err = decodeOptionalF32(r); err != nil {
 			return err
@@ -154,11 +150,9 @@ func (c *HomeComponent) DecodePostcard(r *postcard.Reader) error {
 		if err != nil {
 			return err
 		}
-		c.MangaChapterListEntries = make([]MangaWithChapter, n)
-		for i := 0; i < n; i++ {
-			if err := c.MangaChapterListEntries[i].DecodePostcard(r); err != nil {
-				return err
-			}
+		c.MangaChapterListEntries, err = postcard.Seq(r, n, (*MangaWithChapter).DecodePostcard)
+		if err != nil {
+			return err
 		}
 		if c.MangaChapterListListing, err = decodeOptionalListing(r); err != nil {
 			return err
@@ -168,11 +162,9 @@ func (c *HomeComponent) DecodePostcard(r *postcard.Reader) error {
 		if err != nil {
 			return err
 		}
-		c.FilterItems = make([]HomeFilterItem, n)
-		for i := 0; i < n; i++ {
-			if err := c.FilterItems[i].decodePostcard(r); err != nil {
-				return err
-			}
+		c.FilterItems, err = postcard.Seq(r, n, (*HomeFilterItem).decodePostcard)
+		if err != nil {
+			return err
 		}
 	case HomeComponentKindLinks:
 		if c.Links, err = decodeHomeLinkSlice(r); err != nil {
@@ -300,11 +292,9 @@ func decodeHomeLinkSlice(r *postcard.Reader) ([]HomeLink, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]HomeLink, n)
-	for i := 0; i < n; i++ {
-		if err := out[i].decodePostcard(r); err != nil {
-			return nil, err
-		}
+	out, err := postcard.Seq(r, n, (*HomeLink).decodePostcard)
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

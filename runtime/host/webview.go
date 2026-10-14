@@ -137,7 +137,7 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 				return int32(jsInvalidRequest)
 			}
 			defer resp.Body.Close()
-			body, err := io.ReadAll(resp.Body)
+			body, err := ReadAllLimited(resp.Body, MaxResponseBytes)
 			if err != nil {
 				return int32(jsInvalidRequest)
 			}

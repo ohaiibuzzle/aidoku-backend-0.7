@@ -1,12 +1,11 @@
 --[[--
 End-of-book auto-advance: when the reader fires EndOfBook for a document
-that's one of our downloaded chapters (per downloads_engine:byPath), tries
-the downloads index first for a next chapter already downloaded (fully
-offline, see chapterorder.lua's fromEntries), and only falls back to the
-network's "manga" command -- and only if already connected -- when nothing
-downloaded follows. Per the user's next_chapter_mode setting, either offers
-or silently proceeds to open (or, for the network fallback, download then
-open) the next chapter in reading order.
+that's one of our downloaded chapters (per downloads_engine:byPath), finds
+the next chapter in reading order -- from the full chapter list when it's
+cached or we're already connected, else from the downloads index alone
+(fully offline, see chapterorder.lua's fromEntries) -- and opens it from disk
+if downloaded, or downloads it first if connected. Per the user's
+next_chapter_mode setting, either offers or silently proceeds.
 ]]
 
 local ChapterCache = require("chaptercache")
@@ -48,30 +47,35 @@ function NextChapter.handle(ctx, file_path)
         return false
     end
 
-    Trapper:wrap(function()
-        local entry, lookup_err = ctx.downloads_engine:byPath(file_path)
-        if not entry then
-            if lookup_err then
-                UIManager:show(InfoMessage:new{ text = T(_("Could not check for next chapter:\n%1"), lookup_err) })
-            end
-            return
-        end
+    -- Looked up before claiming the event: a file under downloads_dir that
+    -- the index doesn't know (copied in by hand, or a busy/damaged index.db)
+    -- must fall through to KOReader's own end-of-book popup rather than get
+    -- no end-of-book handling at all. byPath is a synchronous SQLite read.
+    local entry = ctx.downloads_engine:byPath(file_path)
+    if not entry then
+        return false
+    end
 
+    Trapper:wrap(function()
         -- entry.sourcePath is only a stale hint (see the downloads Go
-        -- package doc) -- resolve the source's current installed path from
-        -- its key before using it to load the source. Both this and the
-        -- downloads-index lookups below are purely local (no network), so
-        -- they always run regardless of connectivity.
-        local found = InstalledSources.findByKey(ctx.sources_dir, ctx.engine, entry.sourceKey)
-        if not found then
-            UIManager:show(InfoMessage:new{ text = _("Source no longer installed.") })
-            return
+        -- package doc) -- the source's current installed path is resolved
+        -- from its key, but only once something actually needs it (prefetch
+        -- or the network fallback): findByKey runs one aidoku-run per
+        -- installed source, and opening an already-downloaded next chapter
+        -- needs no source at all -- it must keep working even if the source
+        -- was since uninstalled.
+        local source_path, source_resolved
+        local function resolveSource()
+            if not source_resolved then
+                source_resolved = true
+                local found = InstalledSources.findByKey(ctx.sources_dir, ctx.engine, entry.sourceKey)
+                source_path = found and found.path
+            end
+            return source_path
         end
-        local source_path = found.path
 
         -- manga/prefetch_ctx start out built from just the downloads-index
-        -- entry (no network fetch needed for this much) -- good enough for
-        -- the locally-downloaded-next-chapter path below. The network
+        -- entry (no network fetch needed for this much). The network
         -- fallback further down replaces prefetch_ctx.manga with the fully
         -- fetched manga once/if it fetches one.
         local manga = { Key = entry.mangaKey, Title = entry.mangaTitle }
@@ -80,122 +84,121 @@ function NextChapter.handle(ctx, file_path)
             downloads_engine = ctx.downloads_engine,
             store = ctx.store,
             downloads_dir = ctx.downloads_dir,
-            source_path = source_path,
             source_key = entry.sourceKey,
             manga = manga,
         }
-
-        -- Try a chapter already downloaded ahead of this one first -- fully
-        -- offline, no network round-trip -- so advancing through chapters
-        -- downloaded ahead of time (via mangabrowser.lua's prefetch) works
-        -- even fully offline or on a spotty connection.
-        local all = ctx.downloads_engine:list()
-        local local_chapters = ChapterOrder.fromEntries(all, entry.sourceKey, entry.mangaKey)
-        local local_next = ChapterOrder.after(local_chapters, entry.chapterKey, 1)[1]
-
-        -- local_chapters only contains already-downloaded chapters, so
-        -- Prefetch.ahead against it can never see past the newest local one
-        -- -- a guaranteed no-op that silently killed prefetch on every other
-        -- transition (confirmed on-device). Use ChapterCache's full network
-        -- list for Prefetch.ahead when available; fall back to
-        -- local_chapters only on a cache miss.
-        local cached = ChapterCache.get(entry.sourceKey, entry.mangaKey)
-        local prefetch_chapters = (cached and type(cached.Chapters) == "table") and cached.Chapters or local_chapters
-        if local_next then
-            -- Re-resolve the path rather than trusting the entry we just
-            -- filtered from: covers the (rare) case of a stale index row
-            -- whose file was deleted out from under it -- see the same note
-            -- in mangabrowser.lua's downloadedPath().
-            local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, local_next.Key)
-            if existing ~= "" then
-                local function openLocalNext()
-                    ctx.open_callback(existing)
-                    if ctx.store:isEphemeralMode() then
-                        ctx.downloads_engine:removeAllExcept(existing)
+        local function prefetchAfter(chapters, chapter_key)
+            -- Deferred to the next tick so its subprocess calls don't steal
+            -- the reader's first page-turn taps (same as mangabrowser.lua's
+            -- downloadAndOpen()).
+            -- Wrapped: resolveSource() may run aidoku-run (manifest per
+            -- installed source), which outside a Trapper coroutine falls back
+            -- to a blocking io.popen and freezes the reader.
+            UIManager:nextTick(function()
+                if ctx.store:effectiveBufferChapters() <= 0 then
+                    return
+                end
+                Trapper:wrap(function()
+                    if resolveSource() then
+                        prefetch_ctx.source_path = source_path
+                        Prefetch.ahead(prefetch_ctx, chapters, chapter_key)
                     end
-                    -- Re-primes the prefetch buffer on every auto-advance,
-                    -- not just the first chapter opened. Deferred to the
-                    -- next tick so its subprocess calls don't steal the
-                    -- reader's first page-turn taps (same as
-                    -- mangabrowser.lua's downloadAndOpen()).
-                    UIManager:nextTick(function()
-                        Prefetch.ahead(prefetch_ctx, prefetch_chapters, local_next.Key)
-                    end)
-                end
-                if ctx.store:nextChapterMode() == "auto" then
-                    openLocalNext()
-                else -- "ask"
-                    UIManager:show(ConfirmBox:new{
-                        text = T(_("Continue to '%1'?"), chapterLabel(local_next)),
-                        ok_text = _("Continue"),
-                        ok_callback = openLocalNext,
-                    })
-                end
-                return
+                end)
+            end)
+        end
+        local function openDownloaded(path)
+            ctx.open_callback(path)
+            ctx.store:markLastRead(entry.sourceKey, entry.mangaKey)
+            if ctx.store:isEphemeralMode() then
+                ctx.downloads_engine:removeAllExcept(path)
             end
         end
 
-        -- No downloaded chapter follows this one. Falling back to the
-        -- network to check for something newer only makes sense if we're
-        -- already connected -- popping a "connect to network?" prompt in
-        -- the middle of reading would be disruptive, and the whole point of
-        -- the local-first check above is to let already-downloaded content
-        -- just work without a network fuss.
-        if not NetworkMgr:isConnected() then
-            UIManager:show(InfoMessage:new{ text = _("Offline, and the next chapter isn't downloaded."), timeout = 2 })
-            return
-        end
-
-        -- ChapterCache first -- see chaptercache.lua and the note on
-        -- mangabrowser.lua's reload(), which is usually what populated it
-        -- for this manga already, since opening a chapter list goes through
-        -- there before any chapter can be read at all. On a miss (e.g. this
-        -- manga was only ever advanced through via downloaded chapters
-        -- before now), fall back to the network fetch as before.
+        -- Reading order comes from the full chapter list whenever we have
+        -- it: ChapterCache (usually primed by mangabrowser.lua's reload()),
+        -- else a fetch if already connected. The downloads index only knows
+        -- downloaded chapters, so ordering by it alone silently skipped any
+        -- chapter in between that wasn't downloaded (a failed prefetch, a
+        -- hand-picked download) -- confirmed on-device: with chapters 1 and
+        -- 3 downloaded, finishing 1 offered 3. It's still the fallback when
+        -- offline, which is the whole point of local-first.
         local updated = ChapterCache.get(entry.sourceKey, entry.mangaKey)
-        if not updated then
-            local err
-            updated, err = ctx.engine:mangaUpdate(source_path, entry.mangaKey)
-            if not updated then
-                UIManager:show(InfoMessage:new{ text = T(_("Could not check for next chapter:\n%1"), err) })
-                return
+        local update_err
+        if not updated and NetworkMgr:isConnected() and resolveSource() then
+            updated, update_err = ctx.engine:mangaUpdate(source_path, entry.mangaKey)
+            if updated then
+                ChapterCache.set(entry.sourceKey, entry.mangaKey, updated)
             end
-            ChapterCache.set(entry.sourceKey, entry.mangaKey, updated)
         end
-        local chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
-        local upcoming = ChapterOrder.after(chapters, entry.chapterKey, 1)
-        local next_chapter = upcoming[1]
+        local function is_local(c)
+            return ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, c.Key) ~= ""
+        end
+        local chapters, next_chapter
+        if updated and type(updated.Chapters) == "table" then
+            chapters = updated.Chapters
+            next_chapter = ChapterOrder.after(chapters, entry.chapterKey, 1, is_local)[1]
+        end
+        if not next_chapter then
+            -- Offline/no list, or the list lacks this chapter's key (source
+            -- dropped or re-keyed it): the downloads index can still know
+            -- what follows. It's a subset of the full list, so this can't
+            -- skip ahead of a true last chapter.
+            local local_chapters = ChapterOrder.fromEntries(ctx.downloads_engine:list(), entry.sourceKey, entry.mangaKey)
+            next_chapter = ChapterOrder.after(local_chapters, entry.chapterKey, 1, is_local)[1]
+            if next_chapter or not chapters then
+                chapters = local_chapters
+            end
+        end
         if not next_chapter then
             UIManager:show(InfoMessage:new{ text = _("No next chapter yet."), timeout = 2 })
             return
         end
+
+        -- Re-resolve the path rather than trusting any list: covers a stale
+        -- index row whose file was deleted out from under it -- see the same
+        -- note in mangabrowser.lua's downloadedPath().
+        local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
+        if existing ~= "" then
+            local function openLocalNext()
+                openDownloaded(existing)
+                prefetchAfter(chapters, next_chapter.Key)
+            end
+            if ctx.store:nextChapterMode() == "auto" then
+                openLocalNext()
+            else -- "ask"
+                UIManager:show(ConfirmBox:new{
+                    text = T(_("Continue to '%1'?"), chapterLabel(next_chapter)),
+                    ok_text = _("Continue"),
+                    ok_callback = openLocalNext,
+                })
+            end
+            return
+        end
+
+        -- The next chapter isn't downloaded. Fetching it only makes sense if
+        -- we're already connected -- popping a "connect to network?" prompt
+        -- in the middle of reading would be disruptive.
+        if not NetworkMgr:isConnected() then
+            UIManager:show(InfoMessage:new{ text = _("Offline, and the next chapter isn't downloaded."), timeout = 2 })
+            return
+        end
+        if not resolveSource() then
+            UIManager:show(InfoMessage:new{ text = _("Source no longer installed.") })
+            return
+        end
+        if not updated then
+            -- Only reachable via a stale local row: the fetch above failed.
+            UIManager:show(InfoMessage:new{ text = T(_("Could not check for next chapter:\n%1"), update_err) })
+            return
+        end
         prefetch_ctx.manga = updated
 
-        -- Self-wraps in its own Trapper:wrap: "auto" mode calls this
-        -- synchronously from inside the outer Trapper:wrap above (a nested
-        -- wrap -- already an accepted pattern, see mangabrowser.lua's
-        -- onMenuHold Re-download callback calling downloadAndOpen, which
-        -- wraps again), but "ask" mode's ConfirmBox invokes this later, from
-        -- ok_callback, as a plain UI tap handler with no Trapper context of
-        -- its own by then (the outer wrap already returned once its first
-        -- subprocess call yielded). Without its own wrap here,
-        -- ctx.engine:download's Trapper:dismissablePopen call silently falls
-        -- back to a blocking io.popen with no progress UI, freezing the
-        -- whole UI for the download's duration -- same as
-        -- mangabrowser.lua's downloadAndOpen, which self-wraps for the same
-        -- reason.
         local function fetchAndOpen()
             Trapper:wrap(function()
                 local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
                 if existing ~= "" then
-                    ctx.open_callback(existing)
-                    if ctx.store:isEphemeralMode() then
-                        ctx.downloads_engine:removeAllExcept(existing)
-                    end
-                    -- See the deferral note on openLocalNext() above.
-                    UIManager:nextTick(function()
-                        Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
-                    end)
+                    openDownloaded(existing)
+                    prefetchAfter(chapters, next_chapter.Key)
                     return
                 end
                 local chapter_filename = util.getSafeFilename(
@@ -214,14 +217,8 @@ function NextChapter.handle(ctx, file_path)
                 if not ctx.store:isEphemeralMode() then
                     ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), path)
                 end
-                ctx.open_callback(path)
-                if ctx.store:isEphemeralMode() then
-                    ctx.downloads_engine:removeAllExcept(path)
-                end
-                -- See the deferral note on openLocalNext() above.
-                UIManager:nextTick(function()
-                    Prefetch.ahead(prefetch_ctx, chapters, next_chapter.Key)
-                end)
+                openDownloaded(path)
+                prefetchAfter(chapters, next_chapter.Key)
             end)
         end
 

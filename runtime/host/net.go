@@ -465,7 +465,12 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 		}
 	}
 
-	n.rateLimit.Wait()
+	if err := n.rateLimit.Wait(ctx); err != nil {
+		req.Response = nil
+		req.ResponseData = nil
+		req.ResponseError = err
+		return netRequestError
+	}
 
 	client := n.client()
 	if req.Timeout > 0 {

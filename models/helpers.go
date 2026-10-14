@@ -167,11 +167,9 @@ func decodeStringSlice(r *postcard.Reader) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		if out[i], err = r.ReadString(); err != nil {
-			return nil, err
-		}
+	out, err := postcard.Seq(r, n, postcard.ReadStringInto)
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

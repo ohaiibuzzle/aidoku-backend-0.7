@@ -257,11 +257,9 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		if err != nil {
 			return err
 		}
-		v.Items = make([]Setting, n)
-		for i := 0; i < n; i++ {
-			if err := v.Items[i].DecodePostcard(r); err != nil {
-				return err
-			}
+		v.Items, err = postcard.Seq(r, n, (*Setting).DecodePostcard)
+		if err != nil {
+			return err
 		}
 		s.Group = v
 	case SettingTypeSelect:
@@ -416,11 +414,9 @@ func (s *Setting) DecodePostcard(r *postcard.Reader) error {
 		if err != nil {
 			return err
 		}
-		v.Items = make([]Setting, n)
-		for i := 0; i < n; i++ {
-			if err := v.Items[i].DecodePostcard(r); err != nil {
-				return err
-			}
+		v.Items, err = postcard.Seq(r, n, (*Setting).DecodePostcard)
+		if err != nil {
+			return err
 		}
 		if v.InlineTitle, err = decodeOptionalBool(r); err != nil {
 			return err
@@ -510,11 +506,9 @@ func DecodeSettingSlice(r *postcard.Reader) ([]Setting, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Setting, n)
-	for i := 0; i < n; i++ {
-		if err := out[i].DecodePostcard(r); err != nil {
-			return nil, err
-		}
+	out, err := postcard.Seq(r, n, (*Setting).DecodePostcard)
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

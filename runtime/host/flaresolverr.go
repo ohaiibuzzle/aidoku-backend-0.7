@@ -159,6 +159,21 @@ func (c *FlareSolverrClient) Solve(ctx context.Context, targetURL string) (*Flar
 
 const flareSolverrUAKey = "flaresolverrUserAgent"
 
+// MaxResponseBytes caps any one HTTP body read into memory on a guest's or
+// download's behalf: the server is arbitrary, and the target devices have
+// 256-512MB of RAM in total.
+const MaxResponseBytes = 64 << 20
+
+// ReadAllLimited is io.ReadAll that fails, rather than keeps allocating,
+// once r yields more than max bytes.
+func ReadAllLimited(r io.Reader, max int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, max+1))
+	if err == nil && int64(len(data)) > max {
+		return nil, fmt.Errorf("response larger than %d bytes", max)
+	}
+	return data, err
+}
+
 // doHTTPRequest performs httpReq and fully reads its body, closing it
 // before returning. Shared by net.go's Net.send and webview.go's
 // webviewContext.doRequest, both of which need the same
@@ -169,7 +184,7 @@ func doHTTPRequest(client *http.Client, httpReq *http.Request) (*http.Response, 
 		return nil, nil, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	data, err := ReadAllLimited(resp.Body, MaxResponseBytes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -240,7 +255,7 @@ func (fs *flareSolverrRetryer) maybeRetry(ctx context.Context, client *http.Clie
 		return resp, body
 	}
 	if len(solution.Cookies) > 0 && client.Jar != nil {
-		client.Jar.SetCookies(httpReq.URL, solution.Cookies)
+		client.Jar.SetCookies(httpReq.URL, ForJar(httpReq.URL, solution.Cookies))
 		if fs.OnCookies != nil {
 			fs.OnCookies(httpReq.URL, solution.Cookies)
 		}

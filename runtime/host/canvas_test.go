@@ -2,11 +2,14 @@ package host
 
 import (
 	"bytes"
+	"encoding/binary"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/png"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/fogleman/gg"
@@ -111,5 +114,37 @@ func TestCanvasDrawScaled(t *testing.T) {
 	_, _, b, a := gc.Image().At(4, 4).RGBA()
 	if b>>8 != 255 || a>>8 != 255 {
 		t.Fatalf("expected scaled blue fill at center, got b=%d a=%d", b>>8, a>>8)
+	}
+}
+
+func TestValidDashes(t *testing.T) {
+	for _, in := range [][]float32{nil, {0}, {0, 0}, {0.1, 0.1}, {-1, 5}, {float32(math.NaN()), 5}, {float32(math.Inf(1))}} {
+		if _, ok := validDashes(in); ok {
+			t.Errorf("validDashes(%v) accepted", in)
+		}
+	}
+	if d, ok := validDashes([]float32{4, 2}); !ok || len(d) != 2 {
+		t.Errorf("validDashes([4 2]) = %v, %v", d, ok)
+	}
+}
+
+func TestDecodeImageBoundedRejectsHugeDeclaredSize(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewGray(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+	if _, err := decodeImageBounded(data); err != nil {
+		t.Fatalf("1x1 PNG rejected: %v", err)
+	}
+	// Patch IHDR width/height (bytes 16..23) to 20000x20000 and fix up its
+	// CRC: a tiny file whose header claims 1.6GB of RGBA.
+	huge := bytes.Clone(data)
+	for i, v := range []byte{0, 0, 0x4e, 0x20, 0, 0, 0x4e, 0x20} {
+		huge[16+i] = v
+	}
+	binary.BigEndian.PutUint32(huge[29:], crc32.ChecksumIEEE(huge[12:29]))
+	if _, err := decodeImageBounded(huge); err == nil || !strings.Contains(err.Error(), "out of range") {
+		t.Fatalf("20000x20000 PNG: err = %v, want out-of-range", err)
 	}
 }

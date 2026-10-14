@@ -1,6 +1,7 @@
 package settingsstore
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -72,5 +73,27 @@ func TestSaveKeepsOtherProcessesChanges(t *testing.T) {
 	}
 	if got := c.Object("src.other"); got != true {
 		t.Errorf("other = %v, want true", got)
+	}
+}
+
+// A corrupt settings.json must not fail Open (that broke every aidoku-run
+// command), and the first save keeps the old bytes aside.
+func TestOpenCorrupt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte("{oops"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := s.SetValue("src.k", "v"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path + ".corrupt"); string(b) != "{oops" {
+		t.Fatalf(".corrupt = %q", b)
+	}
+	if r, err := Open(path); err != nil || r.Object("src.k") != "v" {
+		t.Fatalf("reopen: %v %v", err, r)
 	}
 }

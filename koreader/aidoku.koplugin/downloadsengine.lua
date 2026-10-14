@@ -23,6 +23,15 @@ DownloadsEngine.__index = DownloadsEngine
 local ENTRY_COLUMNS = "source_key, source_path, manga_key, chapter_key, path, "
     .. "manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number"
 
+-- float32 reads a chapter/volume number column. Go stores a float32 in a
+-- REAL column, so 10.1 comes back as 10.100000381469727 ("Chapter
+-- 10.100000381469727" in offline labels); 7 significant digits is float32's
+-- precision, which drops that noise.
+local function float32(v)
+    v = tonumber(v)
+    return v and tonumber(string.format("%.7g", v))
+end
+
 -- rowToEntry decodes one ENTRY_COLUMNS-shaped row (as returned by
 -- stmt:step()) into the lowerCamelCase-keyed table every caller expects.
 local function rowToEntry(row)
@@ -36,8 +45,8 @@ local function rowToEntry(row)
         chapterTitle = row[7],
         sizeBytes = tonumber(row[8]) or 0,
         downloadedAt = tonumber(row[9]) or 0,
-        chapterNumber = tonumber(row[10]),
-        volumeNumber = tonumber(row[11]),
+        chapterNumber = float32(row[10]),
+        volumeNumber = float32(row[11]),
     }
 end
 
@@ -235,7 +244,8 @@ end
 -- they're about to open, so a limit smaller than that chapter's own size
 -- can't delete it out from under them (confirmed on-device: prefetch.lua
 -- once called this with no keep_path at all and deleted the chapter the
--- user was actively reading).
+-- user was actively reading). It may also be a set ({ [path] = true }) to
+-- protect several, e.g. a bulk download's whole batch.
 function DownloadsEngine:prune(limit_bytes, keep_path)
     if not limit_bytes or limit_bytes <= 0 then
         return {}
@@ -251,7 +261,13 @@ function DownloadsEngine:prune(limit_bytes, keep_path)
             break
         end
         local e = entries[i]
-        if e.path ~= keep_path then
+        local kept
+        if type(keep_path) == "table" then
+            kept = keep_path[e.path]
+        else
+            kept = e.path == keep_path
+        end
+        if not kept then
             local ok = self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
             if ok then
                 total = total - e.sizeBytes

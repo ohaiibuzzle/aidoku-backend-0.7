@@ -6,6 +6,7 @@ package settingsstore
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,7 +38,14 @@ func Open(path string) (*Store, error) {
 		return s, nil
 	}
 	raw, err := readTagged(path)
-	if err != nil {
+	var syntaxErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &syntaxErr) || errors.As(err, &typeErr) {
+		// Corrupt, not unreadable: start empty (saveLocked keeps a copy
+		// before rewriting it) rather than failing every command forever --
+		// including "update", the way out of a bad install.
+		fmt.Fprintf(os.Stderr, "settingsstore: %s is corrupt, starting empty: %v\n", path, err)
+	} else if err != nil {
 		return nil, err
 	}
 	for k, tv := range raw {
@@ -102,7 +110,9 @@ func (s *Store) saveLocked() error {
 	onDisk, err := readTagged(s.path)
 	if err != nil {
 		// Corrupt file: nothing to merge with, so fall back to rewriting it
-		// from memory rather than failing every save forever.
+		// from memory rather than failing every save forever -- keeping the
+		// old bytes aside, since memory may hold none of them.
+		_ = os.Rename(s.path, s.path+".corrupt")
 		onDisk = map[string]taggedValue{}
 		s.mu.Lock()
 		for k := range s.values {

@@ -124,11 +124,9 @@ func (i *Interpreter) GetPageList(ctx context.Context, manga models.Manga, chapt
 	if err != nil {
 		return nil, err
 	}
-	pages := make([]models.Page, n)
-	for idx := 0; idx < n; idx++ {
-		if err := pages[idx].DecodePostcard(r); err != nil {
-			return nil, err
-		}
+	pages, err := postcard.Seq(r, n, (*models.Page).DecodePostcard)
+	if err != nil {
+		return nil, err
 	}
 	return pages, nil
 }
@@ -307,11 +305,9 @@ func (i *Interpreter) GetListings(ctx context.Context) ([]models.Listing, error)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]models.Listing, n)
-	for idx := 0; idx < n; idx++ {
-		if err := out[idx].DecodePostcard(r); err != nil {
-			return nil, err
-		}
+	out, err := postcard.Seq(r, n, (*models.Listing).DecodePostcard)
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -394,11 +390,9 @@ func (i *Interpreter) GetAlternateCovers(ctx context.Context, manga models.Manga
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, n)
-	for idx := 0; idx < n; idx++ {
-		if out[idx], err = r.ReadString(); err != nil {
-			return nil, err
-		}
+	out, err := postcard.Seq(r, n, postcard.ReadStringInto)
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

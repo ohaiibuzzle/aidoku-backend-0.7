@@ -252,7 +252,9 @@ function MangaBrowser:resumeChapter()
     if not last_key then
         return nil
     end
-    local upcoming = ChapterOrder.after(self.chapters, last_key, 1)
+    local upcoming = ChapterOrder.after(self.chapters, last_key, 1, function(c)
+        return self:downloadedPath(c.Key) ~= ""
+    end)
     return upcoming[1]
 end
 
@@ -343,16 +345,21 @@ function MangaBrowser:downloadNext(n)
     end
 
     local last_key = self:findLastReadChapter(ordered)
+    local function is_local(c)
+        return self:downloadedPath(c.Key) ~= ""
+    end
     local upcoming
     if last_key then
-        upcoming = ChapterOrder.after(self.chapters, last_key, n)
+        upcoming = ChapterOrder.after(self.chapters, last_key, n, is_local)
     else
         -- ChapterOrder.after returns {} for a nil current_key rather than
         -- falling back to the start (it only ever looks for a match) --
-        -- "nothing read yet" has to be handled here instead.
-        upcoming = {}
-        for i = 1, math.min(n, #ordered) do
-            table.insert(upcoming, ordered[i])
+        -- "nothing read yet" has to be handled here instead: the first
+        -- chapter, then after() from it, so this also gets one release per
+        -- chapter number.
+        upcoming = { ordered[1] }
+        for _idx, c in ipairs(ChapterOrder.after(self.chapters, ordered[1].Key, n - 1, is_local)) do
+            table.insert(upcoming, c)
         end
     end
     if #upcoming == 0 then
@@ -378,9 +385,12 @@ function MangaBrowser:downloadNext(n)
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
             local downloaded_any = false
+            local batch = {} -- path set: this batch is what the user reads next
             for i, c in ipairs(upcoming) do
-                if self:downloadedPath(c.Key) ~= "" then
+                local existing = self:downloadedPath(c.Key)
+                if existing ~= "" then
                     downloaded_any = true
+                    batch[existing] = true
                 else
                     local chapter_filename = util.getSafeFilename(chapterLabel(c) .. ".cbz", self.downloads_dir)
                     local out_path = self.downloads_dir .. "/" .. chapter_filename
@@ -403,6 +413,7 @@ function MangaBrowser:downloadNext(n)
                         break
                     end
                     self.downloaded_keys[c.Key] = path
+                    batch[path] = true
                     downloaded_any = true
                 end
             end
@@ -410,9 +421,11 @@ function MangaBrowser:downloadNext(n)
             -- it under Ephemeral Mode, same guard as downloadAndOpen below
             -- (this bulk path has no removeAllExcept() bounding residency,
             -- but an unguarded prune could still delete a chapter this
-            -- same batch just downloaded before the user opens it).
+            -- same batch just downloaded before the user opens it -- so the
+            -- whole batch is passed as keep_path, even if it alone is over
+            -- the limit: the user asked for exactly these chapters).
             if downloaded_any and not self.store:isEphemeralMode() then
-                self.downloads_engine:prune(self.store:downloadLimitBytes())
+                self.downloads_engine:prune(self.store:downloadLimitBytes(), batch)
             end
             self:refresh()
         end)
@@ -468,7 +481,8 @@ function MangaBrowser:openLocal(path)
     end
 end
 
-function MangaBrowser:downloadAndOpen(chapter)
+-- redownload: see Engine:download.
+function MangaBrowser:downloadAndOpen(chapter, redownload)
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
             local chapter_filename = util.getSafeFilename(chapterLabel(chapter) .. ".cbz", self.downloads_dir)
@@ -476,7 +490,7 @@ function MangaBrowser:downloadAndOpen(chapter)
             local manga_dir_name = mangaLabel(self.manga) .. " [" .. self.source_key .. "]"
 
             local path, err = self.engine:download(
-                self.source_path, self.manga.Key, chapter.Key, out_path, self.downloads_dir, nil, nil, manga_dir_name)
+                self.source_path, self.manga.Key, chapter.Key, out_path, self.downloads_dir, nil, nil, manga_dir_name, redownload)
             if not path then
                 UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), err) })
                 return
@@ -557,11 +571,9 @@ function MangaBrowser:onMenuHold(item)
             text = _("Re-download"),
             callback = function()
                 UIManager:close(dialog)
-                Trapper:wrap(function()
-                    self.downloads_engine:remove(self.source_key, self.manga.Key, chapter_key)
-                    self.downloaded_keys[chapter_key] = nil
-                    self:downloadAndOpen(item.chapter)
-                end)
+                -- No remove() first: that lost the only copy whenever the
+                -- re-fetch failed or the user declined the Wi-Fi prompt.
+                self:downloadAndOpen(item.chapter, true)
             end,
         }})
         table.insert(buttons, {{

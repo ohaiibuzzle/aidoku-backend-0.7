@@ -14,11 +14,9 @@ func (m *MangaPageResult) DecodePostcard(r *postcard.Reader) error {
 	if err != nil {
 		return err
 	}
-	m.Entries = make([]Manga, n)
-	for i := 0; i < n; i++ {
-		if err := m.Entries[i].DecodePostcard(r); err != nil {
-			return err
-		}
+	m.Entries, err = postcard.Seq(r, n, (*Manga).DecodePostcard)
+	if err != nil {
+		return err
 	}
 	if m.HasNextPage, err = r.ReadBool(); err != nil {
 		return err

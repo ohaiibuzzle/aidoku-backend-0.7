@@ -114,7 +114,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # A "-suffix" tag (v1.2.0-rc1) is a pre-release, which GitHub's
+          # releases/latest (what self-update checks) never returns.
+          pre=()
+          case "${{ github.ref_name }}" in *-*) pre=(--prerelease) ;; esac
           gh release create "${{ github.ref_name }}" dist/*.zip \
             --repo "${{ github.repository }}" \
             --title "${{ github.ref_name }}" \
-            --generate-notes
+            --generate-notes "${pre[@]}"

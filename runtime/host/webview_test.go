@@ -593,6 +593,28 @@ func TestWebViewSetIntervalThenClear(t *testing.T) {
 	}
 }
 
+// setInterval(fn, 0) repeats like a browser's (it used to fire once).
+func TestWebViewSetIntervalZeroRepeats(t *testing.T) {
+	wv := newTestWebView(t)
+	wv.loadHTML(`<!doctype html><html><body></body></html>`, nil)
+	wv.loop.Run(func(vm *quickjs.VM) {
+		if _, err := vm.Eval(`
+			globalThis.count = 0;
+			const id = setInterval(function(){
+				if (++globalThis.count === 3) clearInterval(id);
+			}, 0);
+		`, quickjs.EvalGlobal); err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+	})
+	wv.loop.RunUntilQuiescent(2 * time.Second)
+	var result string
+	wv.loop.Run(func(vm *quickjs.VM) { result = globalString(t, vm, "count") })
+	if result != "3" {
+		t.Fatalf("expected count to be 3, got %q", result)
+	}
+}
+
 // fetch() with a POST method, custom headers, and a body must reach the
 // server intact.
 func TestWebViewFetchPostHeadersBody(t *testing.T) {

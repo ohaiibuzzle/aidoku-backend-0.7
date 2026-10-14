@@ -3,6 +3,7 @@ package postcard
 import (
 	"bytes"
 	"math"
+	"runtime"
 	"testing"
 )
 
@@ -148,5 +149,30 @@ func TestReadLenAcceptsLengthWithinRemaining(t *testing.T) {
 	n, err := r.ReadLen()
 	if err != nil || n != 3 {
 		t.Fatalf("ReadLen: want n=3 err=nil, got n=%d err=%v", n, err)
+	}
+}
+
+func TestSeqDoesNotPresizeFromLengthPrefix(t *testing.T) {
+	type big struct{ _ [1024]byte }
+	// Claims 1<<20 elements, fully covered by remaining bytes as far as
+	// ReadLen is concerned, but every decode fails on the first element.
+	w := NewWriter()
+	w.WriteU64(1 << 20)
+	r := NewReader(append(w.Bytes(), make([]byte, 1<<20)...))
+	n, err := r.ReadLen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	before := ms.TotalAlloc
+	_, _ = Seq(r, n, func(*big, *Reader) error { return ErrUnexpectedEOF })
+	runtime.ReadMemStats(&ms)
+	if grew := ms.TotalAlloc - before; grew > 1<<20 {
+		t.Fatalf("Seq allocated %d bytes for a failing decode, want it bounded by actual elements", grew)
+	}
+	got, err := Seq(NewReader(nil), 0, ReadStringInto)
+	if err != nil || got == nil {
+		t.Fatalf("empty Seq = %v, %v; want non-nil empty slice", got, err)
 	}
 }

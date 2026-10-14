@@ -336,10 +336,17 @@ function SettingsBrowser:toggleEphemeralMode()
         self.downloads_engine:removeAllExcept(nil)
     end
     self.store:setEphemeralMode(enabling)
+    self:resyncDownloadsDir()
+end
+
+-- resyncDownloadsDir re-points Aidoku's (and, via refresh_callback,
+-- LibraryBrowser's) downloads dir/engine copies after a setting that
+-- decides them changed -- see CLAUDE.md's Ephemeral Mode notes.
+function SettingsBrowser:resyncDownloadsDir()
     self.aidoku:refreshDownloadsDir()
     self.downloads_dir = self.aidoku.downloads_dir
     self.downloads_engine = self.aidoku.downloads_engine
-    self:refresh()
+    self:reloadUsage() -- the "using N MB" figure belonged to the old dir
     if self.refresh_callback then
         self.refresh_callback()
     end
@@ -392,8 +399,18 @@ function SettingsBrowser:promptEphemeralPath()
                         })
                         return
                     end
-                    self.store:setEphemeralPath(path)
-                    self:refresh()
+                    if self.store:isEphemeralMode() and path ~= self.store:ephemeralPath() then
+                        -- Same as turning the mode off: purge the old RAM-disk
+                        -- location while self.downloads_engine still points at
+                        -- it -- nothing would ever clean it up afterwards --
+                        -- then redirect downloads right away, not on next init.
+                        self.downloads_engine:removeAllExcept(nil)
+                        self.store:setEphemeralPath(path)
+                        self:resyncDownloadsDir()
+                    else
+                        self.store:setEphemeralPath(path)
+                        self:refresh()
+                    end
                 end,
             },
         }},

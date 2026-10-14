@@ -99,9 +99,9 @@ func (r *Reader) ReadI64() (int64, error) {
 // buffer's remaining bytes. Every element of a length-n sequence needs at
 // least 1 more byte to encode (even a bool or a 1-byte enum tag), so n
 // bytes remaining is always a necessary condition -- rejecting a length
-// that fails it catches a corrupt or hostile prefix before it reaches a
-// make([]T, n) call site downstream (models/, canvas_types.go,
-// defaults.go, runner.go, ...) and OOMs or panics the process.
+// that fails it catches a corrupt or hostile prefix early. It does NOT make
+// make([]T, n) safe on its own (an element can be far bigger in memory than
+// its 1-byte minimum encoding) -- decode sequences with Seq instead.
 func (r *Reader) ReadLen() (int, error) {
 	v, err := r.readVarintU64(10)
 	if err != nil {
@@ -111,6 +111,31 @@ func (r *Reader) ReadLen() (int, error) {
 		return 0, ErrUnexpectedEOF
 	}
 	return int(v), nil
+}
+
+// Seq decodes n elements (n from a prior ReadLen) with decode, growing the
+// result as elements actually decode instead of pre-sizing it to n:
+// ReadLen only bounds n by bytes remaining, but a decoded element (a Manga,
+// a Setting, ...) can be 100+ bytes in memory for a 1-byte minimum encoding,
+// so make([]T, n) let a few MB of guest buffer allocate hundreds of MB.
+// Never returns a nil slice on success, so an empty sequence still
+// JSON-encodes as [] rather than null.
+func Seq[T any](r *Reader, n int, decode func(*T, *Reader) error) ([]T, error) {
+	out := make([]T, 0, min(n, 64))
+	for i := 0; i < n; i++ {
+		var v T
+		if err := decode(&v, r); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+// ReadStringInto adapts ReadString to Seq's decode signature.
+func ReadStringInto(s *string, r *Reader) (err error) {
+	*s, err = r.ReadString()
+	return err
 }
 
 func (r *Reader) ReadF32() (float32, error) {

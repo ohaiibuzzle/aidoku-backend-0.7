@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -39,20 +40,28 @@ func (r *RateLimit) atLimit(now time.Time) bool {
 	return r.inPeriod(now) && r.requestsInPeriod >= r.permits
 }
 
-// Wait blocks until a permit is available, then consumes one.
-func (r *RateLimit) Wait() {
+// Wait blocks until a permit is available, then consumes one. It returns
+// ctx's error instead if ctx ends first: the period is guest-chosen (up to
+// hours) and guest calls hold the interpreter's single mutex while waiting.
+func (r *RateLimit) Wait(ctx context.Context) error {
 	for {
 		r.mu.Lock()
 		if !r.enabled() {
 			r.mu.Unlock()
-			return
+			return nil
 		}
 		now := time.Now()
 		if r.atLimit(now) {
 			wait := r.currentPeriodStart.Add(r.period).Sub(now)
 			r.mu.Unlock()
 			if wait > 0 {
-				time.Sleep(wait)
+				t := time.NewTimer(wait)
+				select {
+				case <-t.C:
+				case <-ctx.Done():
+					t.Stop()
+					return ctx.Err()
+				}
 			}
 			continue
 		}
@@ -62,6 +71,6 @@ func (r *RateLimit) Wait() {
 		}
 		r.requestsInPeriod++
 		r.mu.Unlock()
-		return
+		return nil
 	}
 }

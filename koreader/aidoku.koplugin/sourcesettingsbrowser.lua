@@ -140,9 +140,10 @@ end
 
 function SourceSettingsBrowser:pickSelect(entry)
     local setting = entry.setting
+    local sel = type(setting.Select) == "table" and setting.Select or {} -- may be JSON null
     local rows = {}
-    for i, option in ipairs(array(setting.Select.Values)) do
-        local display = array(setting.Select.Titles)[i] or option
+    for i, option in ipairs(array(sel.Values)) do
+        local display = array(sel.Titles)[i] or option
         table.insert(rows, { text = display, value = option })
     end
     local picker
@@ -176,10 +177,11 @@ function SourceSettingsBrowser:pickMultiselect(entry)
         return false
     end
 
+    local multi = type(setting.Multiselect) == "table" and setting.Multiselect or {} -- may be JSON null
     local function buildRows(selected)
         local rows = {}
-        for i, option in ipairs(array(setting.Multiselect.Values)) do
-            local display = array(setting.Multiselect.Titles)[i] or option
+        for i, option in ipairs(array(multi.Values)) do
+            local display = array(multi.Titles)[i] or option
             local marker = isSelected(selected, option) and "✓ " or ""
             table.insert(rows, { text = marker .. display, value = option })
         end

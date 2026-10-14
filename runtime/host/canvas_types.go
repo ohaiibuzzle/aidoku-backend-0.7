@@ -97,13 +97,11 @@ func decodeCanvasPath(data []byte) (*canvasPath, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &canvasPath{Ops: make([]canvasPathOp, n)}
-	for i := 0; i < n; i++ {
-		if err := p.Ops[i].decode(r); err != nil {
-			return nil, err
-		}
+	ops, err := postcard.Seq(r, n, (*canvasPathOp).decode)
+	if err != nil {
+		return nil, err
 	}
-	return p, nil
+	return &canvasPath{Ops: ops}, nil
 }
 
 type canvasColor struct {

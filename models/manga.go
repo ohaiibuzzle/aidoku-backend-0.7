@@ -122,11 +122,9 @@ func (m *Manga) DecodePostcard(r *postcard.Reader) error {
 		if err != nil {
 			return err
 		}
-		m.Chapters = make([]Chapter, n)
-		for i := 0; i < n; i++ {
-			if err := m.Chapters[i].DecodePostcard(r); err != nil {
-				return err
-			}
+		m.Chapters, err = postcard.Seq(r, n, (*Chapter).DecodePostcard)
+		if err != nil {
+			return err
 		}
 	} else {
 		m.Chapters = nil

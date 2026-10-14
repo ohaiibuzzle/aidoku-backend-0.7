@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +38,7 @@ func TestWriteCookieFileRoundTrip(t *testing.T) {
 	if err := writeCookieFile(path, f); err != nil {
 		t.Fatalf("writeCookieFile: %v", err)
 	}
-	got := readCookieFile(path)
+	got, _ := readCookieFile(path)
 	if len(got) != 1 || len(got["example.com"]) != 1 || got["example.com"][0].Name != "a" {
 		t.Fatalf("round trip mismatch: %+v", got)
 	}
@@ -75,8 +76,24 @@ func TestReadCookieFileCorruptDoesNotPanic(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
 		t.Fatalf("seeding corrupt file: %v", err)
 	}
-	got := readCookieFile(path)
-	if len(got) != 0 {
-		t.Fatalf("expected empty cookieFile for corrupt input, got %+v", got)
+	got, corrupt := readCookieFile(path)
+	if len(got) != 0 || !corrupt {
+		t.Fatalf("expected empty, corrupt cookieFile for corrupt input, got %+v %v", got, corrupt)
+	}
+}
+
+// A merge into a corrupt cookies.json must keep the old bytes aside rather
+// than overwrite them with only the new cookies.
+func TestMergeCookiesKeepsCorruptFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cookies.json")
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mergeCookies(path, []*http.Cookie{{Name: "a", Value: "b", Domain: "example.com"}})
+	if b, err := os.ReadFile(path + ".corrupt"); err != nil || string(b) != "{not valid json" {
+		t.Fatalf("corrupt file not preserved: %q %v", b, err)
+	}
+	if got, corrupt := readCookieFile(path); corrupt || len(got["example.com"]) != 1 {
+		t.Fatalf("merge result: %+v %v", got, corrupt)
 	}
 }

@@ -13,6 +13,7 @@ on it.
 local Menu = require("ui/widget/menu")
 local OpenWidgets = require("openwidgets")
 local UIManager = require("ui/uimanager")
+local util = require("util")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
@@ -50,7 +51,9 @@ function FilterBrowser:init()
             table.insert(self.filters, f)
         end
     end
-    self.values = self.initial_values or {}
+    -- A copy: edits (multi-select ones mutate value tables in place) must
+    -- not leak into the caller's saved filters unless Apply hands them back.
+    self.values = util.tableDeepCopy(self.initial_values or {})
     self.item_table = {}
     Menu.init(self)
     OpenWidgets.push(self)

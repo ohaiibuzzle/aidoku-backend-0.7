@@ -52,6 +52,13 @@ type Config struct {
 	// call runs at once (see host.Net.MaxConcurrency). <= 0 (the default)
 	// falls back to the host package's own default.
 	NetworkConcurrency int
+
+	// CompilationCache, if set, lets wazero reuse compiled machine code
+	// across Runtimes -- with an on-disk cache (wazero.
+	// NewCompilationCacheWithDir), across processes, so a fresh aidoku-run
+	// per command doesn't recompile main.wasm every time. New never closes
+	// it; whoever constructed it owns its lifetime.
+	CompilationCache wazero.CompilationCache
 }
 
 // Interpreter loads and runs a single compiled Aidoku source .wasm module.
@@ -90,7 +97,11 @@ func (noopSettingsStore) SetValue(string, any) error { return nil }
 // implemented host namespaces (env, std; more are added as later phases
 // land) onto it.
 func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config) (*Interpreter, error) {
-	rt := wazero.NewRuntime(ctx)
+	rtConfig := wazero.NewRuntimeConfig()
+	if config.CompilationCache != nil {
+		rtConfig = rtConfig.WithCompilationCache(config.CompilationCache)
+	}
+	rt := wazero.NewRuntimeWithConfig(ctx, rtConfig)
 
 	printHandler := config.PrintHandler
 	if printHandler == nil {
@@ -376,7 +387,7 @@ func (i *Interpreter) LoadNetscapeCookies(data []byte) (int, error) {
 			continue
 		}
 		u := &url.URL{Scheme: "https", Host: hostName, Path: "/"}
-		i.cookieJar.SetCookies(u, []*http.Cookie{c})
+		i.cookieJar.SetCookies(u, host.ForJar(u, []*http.Cookie{c}))
 	}
 	return len(cookies), nil
 }

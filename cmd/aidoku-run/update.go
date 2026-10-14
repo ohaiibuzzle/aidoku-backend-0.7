@@ -170,22 +170,27 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 	return &release, nil
 }
 
-type version [3]int
+// version is major, minor, patch, then 1 for a release or 0 for a
+// pre-release, so 1.2.3-rc1 sorts below 1.2.3.
+type version [4]int
 
 // parseVersion accepts "v1.2.3", "1.2.3", or "1.2.3-suffix" (a trailing
 // "-something" on the patch component, as a real git describe/prerelease
-// tag might carry, is ignored for comparison purposes). Anything else
-// (a raw commit hash, "dev-<sha>", an empty string) reports ok=false.
+// tag might carry, ranks below the bare version; the suffix itself isn't
+// compared). Anything else (a raw commit hash, "dev-<sha>", an empty
+// string) reports ok=false.
 func parseVersion(s string) (v version, ok bool) {
 	s = strings.TrimPrefix(s, "v")
 	parts := strings.SplitN(s, ".", 3)
 	if len(parts) != 3 {
 		return v, false
 	}
+	v[3] = 1
 	for i, p := range parts {
 		if i == 2 {
 			if dash := strings.IndexByte(p, '-'); dash >= 0 {
 				p = p[:dash]
+				v[3] = 0
 			}
 		}
 		n, err := strconv.Atoi(p)
