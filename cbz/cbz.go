@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ohaiibuzzle/aidokurunner-go/internal/fsutil"
 )
 
 // extensionFor sniffs an image's format from its magic bytes and returns
@@ -155,6 +157,9 @@ func (w *Writer) Close() error {
 		os.Remove(w.tmpPath)
 		return fmt.Errorf("cbz: renaming %s to %s: %w", w.tmpPath, w.path, err)
 	}
+	// Best-effort: the rename already happened, so failing now would only
+	// misreport a written file.
+	_ = fsutil.SyncDir(filepath.Dir(w.path))
 	return nil
 }
 

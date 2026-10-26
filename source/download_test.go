@@ -142,3 +142,31 @@ func TestSanitizeFilenameTruncatesLongNames(t *testing.T) {
 		t.Errorf("short name changed: %q", sanitizeFilename(short))
 	}
 }
+
+// The extension is part of the sanitized, capped name: an illegal char in it
+// is replaced, and a long title still ends in ".cbz" within the cap.
+func TestResolveOutputPath_SanitizesAndCapsExtension(t *testing.T) {
+	dir := t.TempDir()
+	manga := models.Manga{Title: "Test Manga"}
+	title := "Chapter 1"
+	chapter := models.Chapter{Title: &title}
+
+	got, err := ResolveOutputPath(filepath.Join(dir, "Chapter 1.cb:z\x01"), "", manga, chapter)
+	if err != nil {
+		t.Fatalf("ResolveOutputPath: %v", err)
+	}
+	if want := filepath.Join(dir, "Chapter 1.cb-z"); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	got, err = ResolveOutputPath(filepath.Join(dir, strings.Repeat("a", 300)+".cbz"), "", manga, chapter)
+	if err != nil {
+		t.Fatalf("ResolveOutputPath: %v", err)
+	}
+	if base := filepath.Base(got); len(base) > maxFilenameBytes || !strings.HasSuffix(base, ".cbz") {
+		t.Errorf("long name not capped with .cbz kept: %d bytes, %q", len(base), base)
+	}
+	if again, _ := ResolveOutputPath(got, "", manga, chapter); again != got {
+		t.Errorf("not idempotent: %q -> %q", got, again)
+	}
+}

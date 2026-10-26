@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+
+	"github.com/ohaiibuzzle/aidokurunner-go/internal/fsutil"
 )
 
 type Store struct {
@@ -202,6 +204,7 @@ func (s *Store) write(tagged map[string]taggedValue) error {
 		os.Remove(tmpPath)
 		return err
 	}
+	_ = fsutil.SyncDir(filepath.Dir(s.path)) // best-effort, see cbz.Writer.Close
 	return nil
 }
 

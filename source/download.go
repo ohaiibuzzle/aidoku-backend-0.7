@@ -304,8 +304,10 @@ func ResolveOutputPath(outputPath, mangaDirName string, manga models.Manga, chap
 		if mangaDirName != "" {
 			dir = filepath.Join(dir, sanitizeFilename(mangaDirName))
 		}
-		ext := filepath.Ext(base)
-		outputPath = filepath.Join(dir, sanitizeFilename(strings.TrimSuffix(base, ext))+ext)
+		// The whole name, extension included: an unsanitized extension could
+		// carry FAT-illegal chars and slip past the byte cap. truncateFilename
+		// keeps the tail, so a normal ".cbz" survives truncation.
+		outputPath = filepath.Join(dir, sanitizeFilename(base))
 	}
 	if dir := filepath.Dir(outputPath); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

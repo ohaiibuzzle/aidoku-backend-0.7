@@ -89,7 +89,9 @@ func TestMergeCookiesKeepsCorruptFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	mergeCookies(path, []*http.Cookie{{Name: "a", Value: "b", Domain: "example.com"}})
+	if err := mergeCookies(path, []*http.Cookie{{Name: "a", Value: "b", Domain: "example.com"}}); err != nil {
+		t.Fatalf("mergeCookies: %v", err)
+	}
 	if b, err := os.ReadFile(path + ".corrupt"); err != nil || string(b) != "{not valid json" {
 		t.Fatalf("corrupt file not preserved: %q %v", b, err)
 	}

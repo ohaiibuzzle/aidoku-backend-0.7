@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -131,17 +132,23 @@ func checkUpdate(ctx context.Context, binArch, currentVersion string) (*updateCh
 		AssetURL:   asset.BrowserDownloadURL,
 	}
 
+	result.Status = updateStatus(currentVersion, release.TagName)
+	return result, nil
+}
+
+// updateStatus returns updateCheckResult.Status for currentVersion vs the
+// latest release tag.
+func updateStatus(currentVersion, latestTag string) string {
 	cur, curOK := parseVersion(currentVersion)
-	latest, latestOK := parseVersion(release.TagName)
+	latest, latestOK := parseVersion(latestTag)
 	switch {
 	case !curOK || !latestOK:
-		result.Status = "unknown_current"
+		return "unknown_current"
 	case compareVersions(cur, latest) < 0:
-		result.Status = "update_available"
+		return "update_available"
 	default:
-		result.Status = "up_to_date"
+		return "up_to_date"
 	}
-	return result, nil
 }
 
 func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
@@ -248,15 +255,19 @@ func applyUpdate(ctx context.Context, pluginDir, assetURL string) (*updateApplyR
 	}
 	defer os.Remove(zipPath)
 
-	newDir := filepath.Join(parent, ".aidoku-update-new")
-	if err := os.RemoveAll(newDir); err != nil {
-		return nil, fmt.Errorf("update: clearing stale %s: %w", newDir, err)
+	// A unique name, so a concurrent apply can't RemoveAll this one's
+	// half-extracted staging dir out from under it.
+	newDir, err := os.MkdirTemp(parent, ".aidoku-update-new-*")
+	if err != nil {
+		return nil, fmt.Errorf("update: creating staging dir: %w", err)
 	}
 	defer os.RemoveAll(newDir) // no-op once the swap below renames it away
 
 	if err := extractPluginZip(zipPath, newDir); err != nil {
 		return nil, err
 	}
+	// Flush the extracted files before the swap makes them the only copy.
+	syscall.Sync()
 	if _, err := os.Stat(filepath.Join(newDir, "main.lua")); err != nil {
 		return nil, fmt.Errorf("update: downloaded bundle is missing main.lua, refusing to install: %w", err)
 	}
@@ -279,6 +290,9 @@ func applyUpdate(ctx context.Context, pluginDir, assetURL string) (*updateApplyR
 		_ = os.Rename(backupDir, pluginDir)
 		return nil, fmt.Errorf("update: installing new version: %w", err)
 	}
+	// The binary doing this lives inside pluginDir, so nothing could recover
+	// a swap lost to power loss on next start -- just flush it.
+	syscall.Sync()
 	_ = os.RemoveAll(backupDir) // best-effort; a leftover backup is harmless clutter, not a correctness problem
 
 	return &updateApplyResult{Version: version, Path: pluginDir}, nil

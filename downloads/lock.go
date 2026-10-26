@@ -1,11 +1,16 @@
 package downloads
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"time"
 )
 
 // Lock provides cross-process mutual exclusion for downloading one
@@ -39,30 +44,55 @@ func lockDir() (string, error) {
 	return dir, nil
 }
 
-// lockPath returns the flock marker file for one chapter. sourceKey/
-// mangaKey/chapterKey can be arbitrary source-provided strings (URLs,
+// lockPath returns the flock marker file for one lock key. The key's parts
+// (sourceKey/mangaKey/chapterKey, or a path) can be arbitrary source-provided strings (URLs,
 // slugs, ...) unsafe to use as a filename directly, so this hashes them
 // into a fixed-width hex name -- same reasoning as sanitizeFilename in
 // source/download.go, but simpler since a lock file's name is never shown
 // to a user.
-func lockPath(sourceKey, mangaKey, chapterKey string) (string, error) {
+func lockPath(key string) (string, error) {
 	dir, err := lockDir()
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256([]byte(sourceKey + "\x00" + mangaKey + "\x00" + chapterKey))
+	sum := sha256.Sum256([]byte(key))
 	return filepath.Join(dir, hex.EncodeToString(sum[:])+".lock"), nil
 }
 
-// AcquireLock blocks until the caller exclusively owns the download of
-// (sourceKey, mangaKey, chapterKey), then returns a Lock whose Release must
-// be called exactly once (typically via defer) regardless of how the
-// download that follows turns out. A caller that acquires the lock should
-// re-check the downloads index before doing any real work: whoever held the
-// lock before it may have just finished downloading the exact same chapter
-// while this call was blocked waiting.
-func AcquireLock(sourceKey, mangaKey, chapterKey string) (*Lock, error) {
-	path, err := lockPath(sourceKey, mangaKey, chapterKey)
+// ErrLockBusy is returned (wrapping ctx's error) when ctx ends while another
+// process still holds the lock being waited on.
+var ErrLockBusy = errors.New("another download is already running for this chapter")
+
+// lockPollInterval is how often a waiter retries a held lock; flock itself
+// can't be interrupted by ctx.
+const lockPollInterval = 250 * time.Millisecond
+
+// AcquireLock waits until the caller exclusively owns the download of
+// (sourceKey, mangaKey, chapterKey), or until ctx ends (ErrLockBusy), then
+// returns a Lock whose Release must be called exactly once (typically via
+// defer) regardless of how the download that follows turns out. A caller
+// that acquires the lock should re-check the downloads index before doing
+// any real work: whoever held the lock before it may have just finished
+// downloading the exact same chapter while this call was waiting.
+func AcquireLock(ctx context.Context, sourceKey, mangaKey, chapterKey string) (*Lock, error) {
+	return acquire(ctx, sourceKey+"\x00"+mangaKey+"\x00"+chapterKey)
+}
+
+// AcquirePathLock is AcquireLock keyed on an output file path instead, so
+// two different chapters whose titles sanitize to the same filename can't
+// write it at once. Take it after the chapter's own AcquireLock (fixed
+// order, so two callers can't deadlock). The key is lowercased: FAT32/exFAT
+// treat paths differing only in case as the same file.
+func AcquirePathLock(ctx context.Context, path string) (*Lock, error) {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	// One NUL, vs AcquireLock's two -- the key spaces can't collide.
+	return acquire(ctx, "path\x00"+strings.ToLower(path))
+}
+
+func acquire(ctx context.Context, key string) (*Lock, error) {
+	path, err := lockPath(key)
 	if err != nil {
 		return nil, err
 	}
@@ -70,11 +100,22 @@ func AcquireLock(sourceKey, mangaKey, chapterKey string) (*Lock, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, err
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return &Lock{f: f}, nil
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EINTR {
+			f.Close()
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			f.Close()
+			return nil, fmt.Errorf("%w: %w", ErrLockBusy, ctx.Err())
+		case <-time.After(lockPollInterval):
+		}
 	}
-	return &Lock{f: f}, nil
 }
 
 // Release unlocks and closes the lock file. Safe to call on a nil *Lock (a

@@ -48,35 +48,24 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-// TestCheckUpdateUnknownCurrentDoesNotCrash guards the "no VERSION file
-// yet" / dev-build path: parseVersion failing for the current side must
-// fall back to status "unknown_current" rather than a comparison against a
-// zero-value version (which would otherwise read as "up to date" for
-// literally any real release, since version{} compares equal-or-greater
-// than nothing).
-func TestCheckUpdateStatusLogic(t *testing.T) {
-	cur, curOK := parseVersion("")
-	latest, latestOK := parseVersion("v1.0.0")
-	if curOK {
-		t.Fatalf("parseVersion(\"\") unexpectedly ok")
+// TestUpdateStatus guards the "no VERSION file yet" / dev-build path:
+// parseVersion failing for either side must give "unknown_current" rather
+// than a comparison against a zero-value version (which would otherwise
+// read as "up to date" for literally any real release).
+func TestUpdateStatus(t *testing.T) {
+	cases := []struct{ cur, latest, want string }{
+		{"", "v1.0.0", "unknown_current"},
+		{"dev-abc1234", "v1.0.0", "unknown_current"},
+		{"v1.0.0", "garbage", "unknown_current"},
+		{"v0.9.0", "v1.0.0", "update_available"},
+		{"v1.0.0-rc1", "v1.0.0", "update_available"},
+		{"v1.0.0", "v1.0.0", "up_to_date"},
+		{"v1.1.0", "v1.0.0", "up_to_date"},
 	}
-	if !latestOK {
-		t.Fatalf("parseVersion(\"v1.0.0\") unexpectedly not ok")
-	}
-	_ = cur
-	_ = latest
-	// The actual branch (mirroring checkUpdate's switch) must land on
-	// unknown_current, not up_to_date/update_available, whenever either
-	// side fails to parse.
-	status := "up_to_date"
-	switch {
-	case !curOK || !latestOK:
-		status = "unknown_current"
-	case compareVersions(cur, latest) < 0:
-		status = "update_available"
-	}
-	if status != "unknown_current" {
-		t.Errorf("status = %q, want unknown_current", status)
+	for _, c := range cases {
+		if got := updateStatus(c.cur, c.latest); got != c.want {
+			t.Errorf("updateStatus(%q, %q) = %q, want %q", c.cur, c.latest, got, c.want)
+		}
 	}
 }
 

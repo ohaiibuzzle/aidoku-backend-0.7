@@ -7,6 +7,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -71,7 +72,7 @@ type Interpreter struct {
 	sourceKey string
 	rt        wazero.Runtime
 	module    api.Module
-	wasmBytes []byte
+	compiled  wazero.CompiledModule
 	store     *host.Store
 	env       *host.Env
 	net       *host.Net
@@ -93,11 +94,18 @@ type noopSettingsStore struct{}
 func (noopSettingsStore) Object(string) any          { return nil }
 func (noopSettingsStore) SetValue(string, any) error { return nil }
 
+// ErrCompile wraps a failure to compile the guest wasm (including a corrupt
+// compilation-cache entry), as opposed to linking or instantiating it.
+// aidoku-run wipes its on-disk cache only on this, not on every load error.
+var ErrCompile = errors.New("runtime: compiling guest module")
+
 // New loads bytes as a compiled Aidoku source and links the currently
 // implemented host namespaces (env, std; more are added as later phases
 // land) onto it.
 func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config) (*Interpreter, error) {
-	rtConfig := wazero.NewRuntimeConfig()
+	// Lets a ctx deadline/cancel interrupt a guest stuck in a loop, not just
+	// host calls that check ctx themselves.
+	rtConfig := wazero.NewRuntimeConfig().WithCloseOnContextDone(true)
 	if config.CompilationCache != nil {
 		rtConfig = rtConfig.WithCompilationCache(config.CompilationCache)
 	}
@@ -111,7 +119,6 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 	i := &Interpreter{
 		sourceKey: sourceKey,
 		rt:        rt,
-		wasmBytes: wasmBytes,
 		store:     host.NewStore(),
 	}
 
@@ -189,6 +196,7 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 		SourceKey:             sourceKey,
 		FlareSolverr:          flareSolverr,
 		OnFlareSolverrCookies: config.OnFlareSolverrCookies,
+		RateLimit:             i.net.RateLimit(),
 	}
 	jsBuilder := host.LinkJS(rt.NewHostModuleBuilder("js"), js)
 	jsBuilder = host.LinkWebView(jsBuilder, webview)
@@ -202,7 +210,13 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 		return nil, fmt.Errorf("runtime: linking canvas namespace: %w", err)
 	}
 
-	module, err := rt.InstantiateWithConfig(ctx, wasmBytes, wazero.NewModuleConfig().WithName(sourceKey))
+	compiled, err := rt.CompileModule(ctx, wasmBytes)
+	if err != nil {
+		rt.Close(ctx)
+		return nil, fmt.Errorf("%w: %w", ErrCompile, err)
+	}
+	i.compiled = compiled
+	module, err := rt.InstantiateModule(ctx, compiled, wazero.NewModuleConfig().WithName(sourceKey))
 	if err != nil {
 		rt.Close(ctx)
 		return nil, fmt.Errorf("runtime: instantiating guest module: %w", err)
@@ -271,7 +285,7 @@ func (i *Interpreter) Restart(ctx context.Context) error {
 	}
 	_ = i.store.Close()
 
-	module, err := i.rt.InstantiateWithConfig(ctx, i.wasmBytes, wazero.NewModuleConfig().WithName(i.sourceKey))
+	module, err := i.rt.InstantiateModule(ctx, i.compiled, wazero.NewModuleConfig().WithName(i.sourceKey))
 	if err != nil {
 		return fmt.Errorf("runtime: restarting guest module: %w", err)
 	}

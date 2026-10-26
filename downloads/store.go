@@ -299,9 +299,9 @@ func (s *Store) UnusedPath(sourceKey, mangaKey, chapterKey, path string) (string
 }
 
 // disambiguatePath is Record's backstop for a collision UnusedPath couldn't
-// prevent: two different same-named chapters downloading at once (their
-// per-chapter locks don't exclude each other), so neither was recorded yet
-// when the other checked. The first chapter's bytes are already overwritten
+// prevent: two different same-named chapters downloading at once without
+// aidoku-run's AcquirePathLock (e.g. names differing only in a way the lock
+// key doesn't normalize), so neither was recorded yet when the other checked. The first chapter's bytes are already overwritten
 // by then; this only renames the surviving file to the second chapter's
 // unique name, leaving the first's row pointing at nothing -- which readers
 // of the index treat as "not downloaded", not as the wrong content.

@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/ohaiibuzzle/aidokurunner-go/cbz"
 	"github.com/ohaiibuzzle/aidokurunner-go/downloads"
+	"github.com/ohaiibuzzle/aidokurunner-go/internal/fsutil"
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 	"github.com/ohaiibuzzle/aidokurunner-go/repo"
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime"
@@ -116,8 +118,28 @@ The <source-dir> argument is required but ignored by the `+"`cookie`"+`, `+"`rep
 it, but reads source.json directly rather than loading the source.`)
 }
 
-func run(dir, command string, args []string) error {
-	ctx := context.Background()
+// Overall per-invocation deadlines, so a hung source/server can't keep a
+// process (and any download lock it holds) alive forever.
+const (
+	longCommandTimeout    = 60 * time.Minute // download/redownload/update
+	defaultCommandTimeout = 5 * time.Minute
+)
+
+func run(dir, command string, args []string) (err error) {
+	timeout := defaultCommandTimeout
+	switch command {
+	case "download", "redownload", "update":
+		timeout = longCommandTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	defer func() {
+		// A guest killed by WithCloseOnContextDone reports an exit code, not
+		// a ctx error, so check ctx itself.
+		if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			err = fmt.Errorf("timed out after %v: %w", timeout, err)
+		}
+	}()
 
 	settingsPath := filepath.Join(os.TempDir(), "aidoku-run-settings.json")
 	if dir := os.Getenv("AIDOKU_SETTINGS_DIR"); dir != "" {
@@ -175,17 +197,19 @@ func run(dir, command string, args []string) error {
 		// Cloudflare challenge, the resulting cookies get persisted here
 		// too (in addition to the in-memory jar), same as `cookie load`.
 		OnFlareSolverrCookies: func(u *url.URL, cookies []*http.Cookie) {
-			persistCookies(cookiePath, cookies)
+			_ = persistCookies(cookiePath, cookies) // best-effort: the in-memory jar already has them
 		},
 		NetworkConcurrency: host.NetworkConcurrencyFromEnv(),
 	}
 	src, err := source.LoadPath(ctx, dir, interpConfig, settings)
-	if err != nil && compilationCache != nil {
+	if errors.Is(err, runtime.ErrCompile) && compilationCache != nil {
 		// wazero fails compilation on a corrupt cache entry (checksum
 		// mismatch) instead of recompiling, and never deletes it -- so one
 		// bad file would fail every command for that source, every run
 		// (confirmed on-device). Drop the cache and retry once uncached;
-		// the next run repopulates it.
+		// the next run repopulates it. Only on a compile failure: wiping
+		// on every load error (missing main.wasm, a start() trap) would
+		// rewrite the whole cache to flash each run for nothing.
 		fmt.Fprintf(os.Stderr, "warning: retrying without wazero compilation cache: %v\n", err)
 		_ = os.RemoveAll(cacheDir)
 		interpConfig.CompilationCache = nil
@@ -292,7 +316,11 @@ func run(dir, command string, args []string) error {
 				if len(rest) < 1 {
 					return fmt.Errorf("usage: settings set <key> toggle <true|false>")
 				}
-				value = rest[0] == "true"
+				b, err := strconv.ParseBool(rest[0])
+				if err != nil {
+					return fmt.Errorf("invalid toggle value %q (want true/false): %w", rest[0], err)
+				}
+				value = b
 			case "select", "text":
 				value = strings.Join(rest, " ")
 			case "multiselect":
@@ -397,7 +425,7 @@ func run(dir, command string, args []string) error {
 		// The cross-process lock exists purely to stop two invocations
 		// downloading the same indexed chapter at once -- see
 		// downloads.AcquireLock's doc.
-		lock, err := downloads.AcquireLock(src.Key, updated.Key, chapter.Key)
+		lock, err := downloads.AcquireLock(ctx, src.Key, updated.Key, chapter.Key)
 		if err != nil {
 			return fmt.Errorf("acquiring download lock: %w", err)
 		}
@@ -418,7 +446,10 @@ func run(dir, command string, args []string) error {
 		// once the new one is fully written (cbz.Writer's atomic rename) --
 		// the plugin used to delete first, losing the only copy whenever
 		// the re-fetch failed or the user was offline.
-		existing, _ := store.Path(src.Key, updated.Key, chapter.Key)
+		existing, err := store.Path(src.Key, updated.Key, chapter.Key)
+		if err != nil {
+			return err
+		}
 		if existing != "" && !redownload {
 			if _, statErr := os.Stat(existing); statErr == nil {
 				fmt.Println(existing)
@@ -433,6 +464,14 @@ func run(dir, command string, args []string) error {
 		if err != nil {
 			return err
 		}
+		// The chapter lock above doesn't exclude a *different* chapter whose
+		// title sanitizes to the same path; this does, so UnusedPath below
+		// sees the other's row once it's recorded. Always chapter -> path.
+		pathLock, err := downloads.AcquirePathLock(ctx, path)
+		if err != nil {
+			return fmt.Errorf("acquiring output path lock: %w", err)
+		}
+		defer pathLock.Release()
 		if path, err = store.UnusedPath(src.Key, updated.Key, chapter.Key, path); err != nil {
 			return err
 		}
@@ -544,6 +583,7 @@ func writeCookieFile(path string, f cookieFile) error {
 		os.Remove(tmpPath)
 		return err
 	}
+	_ = fsutil.SyncDir(dir) // best-effort, see cbz.Writer.Close
 	return nil
 }
 
@@ -593,25 +633,26 @@ func entriesFromNetscape(cs []*http.Cookie) []cookieEntry {
 // the next invocation. Per domain, incoming cookies replace any existing
 // entry of the same name (a fresh solve supersedes a stale one) while
 // leaving other cookies for that domain untouched.
-func persistCookies(path string, cookies []*http.Cookie) {
+func persistCookies(path string, cookies []*http.Cookie) error {
 	if len(cookies) == 0 {
-		return
+		return nil
 	}
 	// Under a cross-process lock: a background prefetch's FlareSolverr solve
 	// and a foreground command's can otherwise both read, merge, and write,
 	// with the second write dropping the first's cookies.
-	_ = settingsstore.Locked(path, func() error {
-		mergeCookies(path, cookies)
-		return nil
+	return settingsstore.Locked(path, func() error {
+		return mergeCookies(path, cookies)
 	})
 }
 
-func mergeCookies(path string, cookies []*http.Cookie) {
+func mergeCookies(path string, cookies []*http.Cookie) error {
 	f, corrupt := readCookieFile(path)
 	if corrupt {
 		// Writing below would otherwise permanently replace whatever was
 		// in it with only these cookies.
-		_ = os.Rename(path, path+".corrupt")
+		if err := os.Rename(path, path+".corrupt"); err != nil {
+			return fmt.Errorf("keeping a copy of corrupt cookie file: %w", err)
+		}
 	}
 	byDomain := map[string][]cookieEntry{}
 	for _, e := range entriesFromNetscape(cookies) {
@@ -629,7 +670,7 @@ func mergeCookies(path string, cookies []*http.Cookie) {
 		}
 		f[domain] = append(merged, incoming...)
 	}
-	_ = writeCookieFile(path, f)
+	return writeCookieFile(path, f)
 }
 
 func cookieEntriesContainName(entries []cookieEntry, name string) bool {
@@ -713,7 +754,9 @@ func handleCookie(path string, args []string) error {
 		// persistCookies merges by domain+name, so an import only ever
 		// replaces same-named cookies -- it never wipes other cookies
 		// already stored for that domain (or any other domain).
-		persistCookies(path, cookies)
+		if err := persistCookies(path, cookies); err != nil {
+			return fmt.Errorf("saving cookies: %w", err)
+		}
 		fmt.Printf("loaded %d cookie(s) from %s\n", len(cookies), args[1])
 		return nil
 

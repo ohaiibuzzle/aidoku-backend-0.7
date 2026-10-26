@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ohaiibuzzle/aidokurunner-go/internal/fsutil"
 )
 
 // httpClient bounds how long a stalled server can hold a request before it
@@ -274,5 +276,6 @@ func download(ctx context.Context, url, destDir, name string) (string, error) {
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("repo: renaming into %s: %w", dest, err)
 	}
+	_ = fsutil.SyncDir(filepath.Dir(dest)) // best-effort, see cbz.Writer.Close
 	return dest, nil
 }
