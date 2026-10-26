@@ -19,6 +19,11 @@ import (
 // elsewhere in this package.
 const scriptEvalTimeout = 30 * time.Second
 
+// jsMemoryLimit caps each QuickJS runtime's heap so a runaway script (an
+// array grown in a loop, a huge string) fails with an exception instead of
+// OOM-killing the process on a 256MB device.
+const jsMemoryLimit = 64 << 20
+
 type jsResult int32
 
 const (
@@ -49,6 +54,7 @@ func LinkJS(builder wazero.HostModuleBuilder, j *JS) wazero.HostModuleBuilder {
 			if err != nil {
 				return int32(jsInvalidContext)
 			}
+			vm.SetMemoryLimit(jsMemoryLimit)
 			if err := vm.SetEvalTimeout(scriptEvalTimeout); err != nil {
 				return int32(jsInvalidContext)
 			}

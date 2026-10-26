@@ -2,6 +2,7 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"hash/crc32"
 	"image"
@@ -54,25 +55,28 @@ func TestCanvasGetImageDataProducesValidPNG(t *testing.T) {
 	}
 }
 
-func TestValidCanvasDimension(t *testing.T) {
+func TestValidCanvasSize(t *testing.T) {
+	nan := float32(math.NaN())
 	cases := []struct {
 		name string
-		v    float32
+		w, h float32
 		want bool
 	}{
-		{"typical page width", 1200, true},
-		{"zero", 0, false},
-		{"negative", -1, false},
-		{"at cap", maxCanvasDimension, true},
-		{"over cap", maxCanvasDimension + 1, false},
-		{"NaN", float32(math.NaN()), false},
-		{"positive infinity", float32(math.Inf(1)), false},
-		{"negative infinity", float32(math.Inf(-1)), false},
+		{"typical page", 1200, 1800, true},
+		{"tall webtoon strip", 800, 20000, true},
+		{"at pixel cap", 4096, 4096, true},
+		{"over pixel cap", 4097, 4096, false},
+		{"8192 square rejected", 8192, 8192, false},
+		{"zero", 0, 10, false},
+		{"negative", -1, 10, false},
+		{"NaN", nan, 10, false},
+		{"positive infinity", float32(math.Inf(1)), 1, false},
+		{"negative infinity", 1, float32(math.Inf(-1)), false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := validCanvasDimension(c.v); got != c.want {
-				t.Errorf("validCanvasDimension(%v) = %v, want %v", c.v, got, c.want)
+			if got := validCanvasSize(c.w, c.h); got != c.want {
+				t.Errorf("validCanvasSize(%v, %v) = %v, want %v", c.w, c.h, got, c.want)
 			}
 		})
 	}
@@ -95,7 +99,7 @@ func TestLoadBytesRejectsLocalPaths(t *testing.T) {
 
 	c := &Canvas{Store: NewStore()}
 	for _, loc := range []string{f.Name(), "file://" + f.Name(), "/etc/passwd"} {
-		if _, err := c.loadBytes(loc); err == nil {
+		if _, err := c.loadBytes(context.Background(), loc); err == nil {
 			t.Errorf("loadBytes(%q): expected an error, got nil", loc)
 		}
 	}

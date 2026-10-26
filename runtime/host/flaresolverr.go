@@ -223,7 +223,7 @@ func (fs *flareSolverrRetryer) persistUserAgent(ua string) {
 	if fs == nil || fs.Settings == nil || fs.SourceKey == "" || ua == "" {
 		return
 	}
-	_ = fs.Settings.SetValue(fs.SourceKey+"."+flareSolverrUAKey, ua)
+	_ = setValueIfChanged(fs.Settings, fs.SourceKey+"."+flareSolverrUAKey, ua)
 }
 
 // maybeRetry checks whether resp/body look like a Cloudflare challenge and,
@@ -308,8 +308,7 @@ func isCloudflareChallenge(resp *http.Response, body []byte) bool {
 	if !strings.Contains(strings.ToLower(resp.Header.Get("Server")), "cloudflare") {
 		return false
 	}
-	b := string(body)
-	return strings.Contains(b, "Just a moment") ||
-		strings.Contains(b, "challenge-platform") ||
-		strings.Contains(b, "cf-chl")
+	return bytes.Contains(body, []byte("Just a moment")) ||
+		bytes.Contains(body, []byte("challenge-platform")) ||
+		bytes.Contains(body, []byte("cf-chl"))
 }

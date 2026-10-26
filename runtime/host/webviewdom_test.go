@@ -131,3 +131,60 @@ func firstLines(s string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// ids and class names may contain CSS selector syntax (React's useId
+// yields ":r1:"); they must be matched literally, not parsed as selectors.
+func TestWebViewGetElementByIdAndClassNameLiteral(t *testing.T) {
+	wv := newTestWebView(t)
+	wv.loadHTML(`<!doctype html><html><body>
+		<div id=":r1:">react</div>
+		<div id="a.b">dotted</div>
+		<div id='q"\'>quoted</div>
+		<p class="a b x">both</p>
+		<p class="a">only-a</p>
+		<p class="md:flex">tailwind</p>
+	</body></html>`, nil)
+
+	var got string
+	wv.loop.Run(func(vm *quickjs.VM) {
+		v, err := vm.Eval(`
+			(() => {
+				const t = (e) => e ? e.textContent : "null";
+				return [
+					t(document.getElementById(":r1:")),
+					t(document.getElementById("a.b")),
+					t(document.getElementById('q"\\')),
+					t(document.getElementById("")),
+					t(document.getElementById("missing")),
+					document.getElementsByClassName("a b").map(t).join(","),
+					document.getElementsByClassName("  b   a ").length,
+					document.getElementsByClassName("md:flex").map(t).join(","),
+					document.getElementsByClassName("").length,
+					document.getElementsByClassName("   ").length,
+				].join("|");
+			})()
+		`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatalf("Eval: %v", err)
+		}
+		got = stringify(v)
+	})
+	want := "react|dotted|quoted|null|null|both|1|tailwind|0|0"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// Handles must not be reused across documents: a script holding an old
+// handle must not silently get a node from the new document.
+func TestNodeRegistryResetKeepsHandlesUnique(t *testing.T) {
+	r := newNodeRegistry()
+	old := r.handle(newBareElement("div"))
+	r.Reset()
+	if h := r.handle(newBareElement("span")); h == old {
+		t.Fatalf("handle %d reused after Reset", h)
+	}
+	if _, ok := r.node(old); ok {
+		t.Fatalf("old handle %d still resolves after Reset", old)
+	}
+}

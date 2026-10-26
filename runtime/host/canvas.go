@@ -87,17 +87,13 @@ func (c *Canvas) fetchImage(descriptor int32) image.Image {
 	}
 }
 
-// maxCanvasDimension caps a single new_context axis against a guest
-// passing a deliberately huge or garbage dimension. A source descrambling
-// a scanned page never needs anywhere near this; the cap exists to bound
-// gg.NewContext's image.NewRGBA allocation (4 bytes/pixel).
-const maxCanvasDimension = 8192
-
-// maxDecodePixels bounds image.Decode by the image's *declared* size: a
-// tiny PNG/JPEG header can claim e.g. 20000x20000 and make Decode allocate
-// GBs before failing. Same budget as the largest canvas new_context allows,
-// without capping either axis alone (webtoon strips are very tall).
-const maxDecodePixels = maxCanvasDimension * maxCanvasDimension
+// maxDecodePixels bounds every image allocation a guest can trigger --
+// image.Decode by the image's *declared* size (a tiny PNG/JPEG header can
+// claim e.g. 20000x20000 and make Decode allocate GBs before failing),
+// new_context and copy_image's crop buffer. 16 Mpx is 64MB of RGBA, which
+// a 256MB device can survive once. A pixel count, not a per-axis cap,
+// because webtoon strips are very tall.
+const maxDecodePixels = 16 << 20
 
 func decodeImageBounded(data []byte) (image.Image, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
@@ -116,15 +112,24 @@ func decodeImageBounded(data []byte) (image.Image, error) {
 // (measured ~34MB at 200, ~858MB at 1000).
 const maxFontSize = 128
 
-// validCanvasDimension rejects non-finite and out-of-range new_context
-// dimensions. NaN compares false against every relation, including <= 0
-// and > maxCanvasDimension, so it has to be checked explicitly -- it would
-// otherwise slip through both of those and reach int(v) downstream.
-func validCanvasDimension(v float32) bool {
-	if math.IsNaN(float64(v)) {
+// validCanvasSize rejects non-finite and out-of-range new_context
+// dimensions. NaN compares false against every relation, so it has to be
+// checked explicitly -- it would otherwise slip through and reach int(v).
+func validCanvasSize(width, height float32) bool {
+	if !finite(width, height) || width <= 0 || height <= 0 {
 		return false
 	}
-	return v > 0 && v <= maxCanvasDimension
+	return float64(width)*float64(height) <= maxDecodePixels
+}
+
+// finite reports whether every guest float is neither NaN nor ±Inf.
+func finite(vs ...float32) bool {
+	for _, v := range vs {
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+			return false
+		}
+	}
+	return true
 }
 
 // LinkCanvas registers the `canvas` namespace onto the given host module
@@ -132,7 +137,7 @@ func validCanvasDimension(v float32) bool {
 func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBuilder {
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, width, height float32) int32 {
-			if !validCanvasDimension(width) || !validCanvasDimension(height) {
+			if !validCanvasSize(width, height) {
 				return int32(canvasInvalidBounds)
 			}
 			gc := gg.NewContext(int(width), int(height))
@@ -145,6 +150,9 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			gc, ok := c.Store.Fetch(contextPtr).(*gg.Context)
 			if !ok {
 				return int32(canvasInvalidContext)
+			}
+			if !finite(translateX, translateY, scaleX, scaleY, rotateAngle) {
+				return int32(canvasInvalidBounds)
 			}
 			gc.Identity()
 			gc.Translate(float64(translateX), float64(translateY))
@@ -163,6 +171,9 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			img := c.fetchImage(imagePtr)
 			if img == nil {
 				return int32(canvasInvalidImagePtr)
+			}
+			if !finite(dstX, dstY, dstWidth, dstHeight) {
+				return int32(canvasInvalidBounds)
 			}
 			drawScaled(gc, img, float64(dstX), float64(dstY), float64(dstWidth), float64(dstHeight))
 			return int32(canvasSuccess)
@@ -184,8 +195,11 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 				return int32(canvasInvalidImagePtr)
 			}
 			srcRect := image.Rect(int(srcX), int(srcY), int(srcX+srcWidth), int(srcY+srcHeight))
-			if !srcRect.In(img.Bounds()) {
+			if !finite(srcX, srcY, srcWidth, srcHeight, dstX, dstY, dstWidth, dstHeight) || !srcRect.In(img.Bounds()) {
 				return int32(canvasInvalidSrcRect)
+			}
+			if int64(srcRect.Dx())*int64(srcRect.Dy()) > maxDecodePixels {
+				return int32(canvasInvalidBounds)
 			}
 			cropped := image.NewRGBA(image.Rect(0, 0, srcRect.Dx(), srcRect.Dy()))
 			for y := 0; y < srcRect.Dy(); y++ {
@@ -273,6 +287,9 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			if !(size > 0 && size <= maxFontSize) { // also rejects NaN
 				return int32(canvasInvalidFont)
 			}
+			if !finite(x, y, r, g, b, a) {
+				return int32(canvasInvalidBounds)
+			}
 			face := truetype.NewFace(ttFont, &truetype.Options{Size: float64(size), DPI: 72, Hinting: font.HintingFull})
 			gc.SetFontFace(face)
 			gc.SetRGBA(float64(r), float64(g), float64(b), float64(a))
@@ -312,7 +329,7 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			if !ok {
 				return int32(canvasInvalidString)
 			}
-			data, err := c.loadBytes(urlStr)
+			data, err := c.loadBytes(ctx, urlStr)
 			if err != nil {
 				return int32(canvasFontLoadFailed)
 			}
@@ -400,12 +417,12 @@ func (c *Canvas) storeEmbeddedFont(bold bool) int32 {
 // app data, ...) by passing a bare path or "file://" URL. There's no
 // legitimate reason a source needs that: every real-world source
 // references a remote CDN font URL.
-func (c *Canvas) loadBytes(location string) ([]byte, error) {
+func (c *Canvas) loadBytes(ctx context.Context, location string) ([]byte, error) {
 	if !strings.HasPrefix(location, "http://") && !strings.HasPrefix(location, "https://") {
 		return nil, fmt.Errorf("canvas: unsupported font location %q (only http/https are allowed)", location)
 	}
 	client := c.client()
-	req, err := http.NewRequest(http.MethodGet, location, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, location, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +440,8 @@ func (c *Canvas) loadBytes(location string) ([]byte, error) {
 
 func drawScaled(gc *gg.Context, img image.Image, dstX, dstY, dstWidth, dstHeight float64) {
 	bounds := img.Bounds()
-	if bounds.Dx() == 0 || bounds.Dy() == 0 || dstWidth <= 0 || dstHeight <= 0 {
+	// !(> 0) rather than <= 0 so NaN is rejected too.
+	if bounds.Dx() == 0 || bounds.Dy() == 0 || !(dstWidth > 0) || !(dstHeight > 0) {
 		return
 	}
 	gc.Push()

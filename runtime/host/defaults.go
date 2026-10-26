@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -121,8 +122,8 @@ func (d *Defaults) set(m api.Module, keyPointer, length, valueKindRaw, valuePoin
 	kind := defaultKind(uint8(valueKindRaw))
 
 	if kind == defaultKindNull {
-		if err := d.Settings.SetValue(key, nil); err != nil {
-			return int32(defaultsFailedDecoding)
+		if err := setValueIfChanged(d.Settings, key, nil); err != nil {
+			return int32(defaultsFailedEncoding)
 		}
 		return int32(defaultsSuccess)
 	}
@@ -178,10 +179,20 @@ func (d *Defaults) set(m api.Module, keyPointer, length, valueKindRaw, valuePoin
 		return int32(defaultsInvalidValue)
 	}
 
-	if err := d.Settings.SetValue(key, value); err != nil {
-		return int32(defaultsFailedDecoding)
+	if err := setValueIfChanged(d.Settings, key, value); err != nil {
+		return int32(defaultsFailedEncoding)
 	}
 	return int32(defaultsSuccess)
+}
+
+// setValueIfChanged skips SetValue (a locked, fsynced rewrite of
+// settings.json) when key already holds value: sources re-set the same
+// cursors/flags on every page, and each rewrite wears the device's flash.
+func setValueIfChanged(s SettingsStore, key string, value any) error {
+	if reflect.DeepEqual(s.Object(key), value) {
+		return nil
+	}
+	return s.SetValue(key, value)
 }
 
 // readGuestBuffer reads a [length:u32][pad:u32][data] buffer directly from

@@ -138,7 +138,9 @@ func parseDate(
 		return float64(stdInvalidString)
 	}
 
-	loc := time.UTC
+	// Upstream leaves DateFormatter's default (TimeZone.current) for an
+	// absent, "current" or unknown time zone.
+	loc := time.Local
 	if timeZoneLength > 0 && timeZonePtr >= 0 {
 		tzBytes, ok := m.Memory().Read(uint32(timeZonePtr), uint32(timeZoneLength))
 		if ok {

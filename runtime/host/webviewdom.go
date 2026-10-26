@@ -82,12 +82,12 @@ func newNodeRegistry() *nodeRegistry {
 	}
 }
 
-// Reset drops all known nodes/next-id. Called when a webview loads a fresh
-// document, whose nodes are all new identities.
+// Reset drops all known nodes. Called when a webview loads a fresh
+// document, whose nodes are all new identities. next is kept so a handle
+// a script held from the old document can never alias a new node.
 func (r *nodeRegistry) Reset() {
 	r.nodes = make(map[int]*nethtml.Node)
 	r.byNode = make(map[*nethtml.Node]int)
-	r.next = 0
 }
 
 // handle returns 0 (JS null on the other side of __elGetProp et al.) for a
@@ -131,6 +131,10 @@ const domPrelude = `
   // the host on every load, in lockstep with the Go-side registry reset.
   let __nodeCache = new Map();
   globalThis.__resetNodeCache = () => { __nodeCache = new Map(); };
+
+  // A CSS string literal for an attribute selector: ids/classes may hold
+  // . : [ and other selector syntax ("#" + id breaks on React's ":r1:").
+  const __cssStr = (s) => '"' + String(s).replace(/[\\"]/g, "\\$&") + '"';
 
   class ClassList {
     #h;
@@ -232,8 +236,15 @@ const domPrelude = `
     get head() { return Element.wrap(__elQuery(this.#root, "head")); }
     querySelector(sel) { return Element.wrap(__elQuery(this.#root, sel)); }
     querySelectorAll(sel) { return Element.wrapAll(__elQueryAll(this.#root, sel)); }
-    getElementById(id) { return Element.wrap(__elQuery(this.#root, "#" + id)); }
-    getElementsByClassName(c) { return Element.wrapAll(__elQueryAll(this.#root, "." + c)); }
+    getElementById(id) {
+      id = String(id);
+      return id === "" ? null : Element.wrap(__elQuery(this.#root, "[id=" + __cssStr(id) + "]"));
+    }
+    getElementsByClassName(c) {
+      const names = String(c).split(/\s+/).filter((n) => n !== "");
+      if (names.length === 0) return [];
+      return Element.wrapAll(__elQueryAll(this.#root, names.map((n) => "[class~=" + __cssStr(n) + "]").join("")));
+    }
     getElementsByTagName(t) { return Element.wrapAll(__elQueryAll(this.#root, t)); }
     createElement(tag) { return Element.wrap(__newElement(tag)); }
   }

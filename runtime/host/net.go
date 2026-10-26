@@ -175,7 +175,7 @@ type Net struct {
 // Each goroutine's underlying HTTP round trip can pin an OS thread on a
 // device with as little as 256MB RAM -- an unbounded fan-out over a large
 // descriptor batch would spin up one thread per descriptor with no cap.
-const defaultSendAllMaxConcurrency = 8
+const defaultSendAllMaxConcurrency = 3
 
 // maxRequestTimeout caps net.set_timeout -- see its handler.
 const maxRequestTimeout = 5 * time.Minute
@@ -468,28 +468,7 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 	if err != nil || httpReq == nil {
 		return netMissingURL
 	}
-	fs := n.flareSolverr()
-	if httpReq.Header.Get("User-Agent") == "" {
-		if ua := fs.persistedUserAgent(); ua != "" {
-			httpReq.Header.Set("User-Agent", ua)
-		}
-	}
-
-	if err := n.rateLimit.Wait(ctx); err != nil {
-		req.Response = nil
-		req.ResponseData = nil
-		req.ResponseError = err
-		return netRequestError
-	}
-
-	client := n.client()
-	if req.Timeout > 0 {
-		c := *client
-		c.Timeout = req.Timeout
-		client = &c
-	}
-
-	resp, data, err := doHTTPRequest(client, httpReq)
+	resp, data, err := sendHTTP(ctx, n.client(), &n.rateLimit, n.flareSolverr(), httpReq, req.Timeout)
 	if err != nil {
 		// A guest can reuse the same descriptor across multiple send()
 		// calls (e.g. set_url then send() again). Without clearing these,
@@ -502,11 +481,44 @@ func (n *Net) send(ctx context.Context, descriptor int32) netResult {
 		req.ResponseError = err
 		return netRequestError
 	}
-	resp, data = fs.maybeRetry(ctx, client, httpReq, resp, data)
 
 	req.Response = resp
 	req.ResponseData = data
 	return netSuccess
+}
+
+// sendHTTP is the request path shared by net.send and webview_load: the
+// persisted FlareSolverr User-Agent, the source's rate limit (rl may be
+// nil), a per-request timeout (0 keeps client's), and the FlareSolverr
+// challenge retry.
+func sendHTTP(ctx context.Context, client *http.Client, rl *RateLimit, fs *flareSolverrRetryer, httpReq *http.Request, timeout time.Duration) (*http.Response, []byte, error) {
+	if httpReq.Header.Get("User-Agent") == "" {
+		if ua := fs.persistedUserAgent(); ua != "" {
+			httpReq.Header.Set("User-Agent", ua)
+		}
+	}
+	if rl != nil {
+		if err := rl.Wait(ctx); err != nil {
+			return nil, nil, err
+		}
+	}
+	if timeout > 0 {
+		c := *client
+		c.Timeout = timeout
+		client = &c
+	}
+	resp, data, err := doHTTPRequest(client, httpReq)
+	if err != nil {
+		return nil, nil, err
+	}
+	resp, data = fs.maybeRetry(ctx, client, httpReq, resp, data)
+	return resp, data, nil
+}
+
+// RateLimit returns the source's net.set_rate_limit limiter, so the
+// webview's top-level loads (WebView.RateLimit) can share it.
+func (n *Net) RateLimit() *RateLimit {
+	return &n.rateLimit
 }
 
 // descriptorsFitInMemory reports whether length descriptors (4 bytes each)

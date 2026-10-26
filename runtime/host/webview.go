@@ -43,6 +43,10 @@ type WebView struct {
 	Settings              SettingsStore
 	SourceKey             string
 	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
+
+	// RateLimit, when set (Net.RateLimit), throttles webview_load's
+	// top-level document fetch together with net.* requests.
+	RateLimit *RateLimit
 }
 
 func (w *WebView) flareSolverr() *flareSolverrRetryer {
@@ -77,6 +81,11 @@ type webviewContext struct {
 	client       *http.Client
 	printHandler func(string)
 	flareSolverr *flareSolverrRetryer
+
+	// ctx is the host call currently driving the event loop, so the DOM's
+	// fetch()/XHR/script loads (which have no ctx of their own) are
+	// cancelled with it. Every host function that runs the loop sets it.
+	ctx context.Context
 }
 
 // LinkWebView registers webview_* onto the same host module builder as
@@ -132,15 +141,11 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 			if err != nil || httpReq == nil {
 				return int32(jsInvalidRequest)
 			}
-			resp, err := wv.client.Do(httpReq)
+			resp, body, err := sendHTTP(ctx, wv.client, w.RateLimit, wv.flareSolverr, httpReq, req.Timeout)
 			if err != nil {
 				return int32(jsInvalidRequest)
 			}
-			defer resp.Body.Close()
-			body, err := ReadAllLimited(resp.Body, MaxResponseBytes)
-			if err != nil {
-				return int32(jsInvalidRequest)
-			}
+			wv.ctx = ctx
 			wv.loadHTML(string(body), resp.Request.URL)
 			return int32(jsSuccess)
 		}).
@@ -162,6 +167,7 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 					pageURL, _ = url.Parse(s)
 				}
 			}
+			wv.ctx = ctx
 			wv.loadHTML(htmlStr, pageURL)
 			return int32(jsSuccess)
 		}).
@@ -180,6 +186,7 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 			// blocks (up to loadQuiesceTimeout) until those drain — that's
 			// what lets a timed challenge script finish before a later
 			// webview_eval reads its result.
+			wv.ctx = ctx
 			wv.loop.RunUntilQuiescent(loadQuiesceTimeout)
 			return int32(jsSuccess)
 		}).
@@ -197,6 +204,7 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 			}
 			var result string
 			var evalErr error
+			wv.ctx = ctx
 			wv.loop.Run(func(vm *quickjs.VM) {
 				wv.ensureGlobals(vm)
 				// EvalValue, not Eval — see context_eval's comment in
@@ -234,6 +242,7 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 			}
 			var result string
 			var evalErr error
+			wv.ctx = ctx
 			wv.loop.Run(func(vm *quickjs.VM) {
 				wv.ensureGlobals(vm)
 				result, evalErr = evalAsync(vm, script)
@@ -457,7 +466,6 @@ func (wv *webviewContext) ensureGlobals(vm *quickjs.VM) {
 	if wv.globalsReady {
 		return
 	}
-	wv.globalsReady = true
 
 	// Set directly via the property API rather than eval'ing
 	// `globalThis.window = globalThis`: that assignment's completion value
@@ -475,6 +483,7 @@ func (wv *webviewContext) ensureGlobals(vm *quickjs.VM) {
 	if err := binder.registerDOM(vm); err != nil {
 		return
 	}
+	wv.globalsReady = true
 
 	wv.registerModuleLoader(vm)
 
@@ -627,7 +636,11 @@ func (wv *webviewContext) doRequest(r webviewRequest) (int, []byte, error) {
 	if r.Body != nil {
 		body = bytes.NewReader(r.Body)
 	}
-	req, err := http.NewRequest(method, r.URL, body)
+	ctx := wv.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, method, r.URL, body)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -689,6 +702,7 @@ func newEventLoop() (*eventLoop, error) {
 	if err != nil {
 		return nil, err
 	}
+	vm.SetMemoryLimit(jsMemoryLimit)
 	if err := vm.SetEvalTimeout(scriptEvalTimeout); err != nil {
 		return nil, err
 	}
