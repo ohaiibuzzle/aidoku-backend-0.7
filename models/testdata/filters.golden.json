@@ -1,0 +1,154 @@
+[
+  {
+    "ID": "sort",
+    "Title": "Sort",
+    "HideFromHeader": null,
+    "Kind": "sort",
+    "Placeholder": null,
+    "CanAscend": true,
+    "SortOptions": [
+      "Latest",
+      "Popular"
+    ],
+    "SortDefault": {
+      "Index": 1,
+      "Ascending": true
+    },
+    "CheckName": null,
+    "CheckCanExclude": false,
+    "CheckDefaultValue": null,
+    "Select": {
+      "IsGenre": false,
+      "UsesTagStyle": false,
+      "Options": null,
+      "IDs": null,
+      "DefaultValue": null
+    },
+    "MultiSelect": {
+      "IsGenre": false,
+      "CanExclude": false,
+      "UsesTagStyle": false,
+      "Options": null,
+      "IDs": null,
+      "DefaultIncluded": null,
+      "DefaultExcluded": null
+    },
+    "Note": "",
+    "RangeMin": null,
+    "RangeMax": null,
+    "RangeDecimal": false
+  },
+  {
+    "ID": "status",
+    "Title": "Status",
+    "HideFromHeader": null,
+    "Kind": "select",
+    "Placeholder": null,
+    "CanAscend": false,
+    "SortOptions": null,
+    "SortDefault": null,
+    "CheckName": null,
+    "CheckCanExclude": false,
+    "CheckDefaultValue": null,
+    "Select": {
+      "IsGenre": false,
+      "UsesTagStyle": false,
+      "Options": [
+        "Any",
+        "Ongoing"
+      ],
+      "IDs": [
+        "",
+        "ongoing"
+      ],
+      "DefaultValue": ""
+    },
+    "MultiSelect": {
+      "IsGenre": false,
+      "CanExclude": false,
+      "UsesTagStyle": false,
+      "Options": null,
+      "IDs": null,
+      "DefaultIncluded": null,
+      "DefaultExcluded": null
+    },
+    "Note": "",
+    "RangeMin": null,
+    "RangeMax": null,
+    "RangeDecimal": false
+  },
+  {
+    "ID": "genre",
+    "Title": "Genre",
+    "HideFromHeader": null,
+    "Kind": "multi-select",
+    "Placeholder": null,
+    "CanAscend": false,
+    "SortOptions": null,
+    "SortDefault": null,
+    "CheckName": null,
+    "CheckCanExclude": false,
+    "CheckDefaultValue": null,
+    "Select": {
+      "IsGenre": false,
+      "UsesTagStyle": false,
+      "Options": null,
+      "IDs": null,
+      "DefaultValue": null
+    },
+    "MultiSelect": {
+      "IsGenre": true,
+      "CanExclude": true,
+      "UsesTagStyle": false,
+      "Options": [
+        "Action",
+        "Comedy"
+      ],
+      "IDs": [
+        "action",
+        "comedy"
+      ],
+      "DefaultIncluded": [
+        "action"
+      ],
+      "DefaultExcluded": null
+    },
+    "Note": "",
+    "RangeMin": null,
+    "RangeMax": null,
+    "RangeDecimal": false
+  },
+  {
+    "ID": "completed",
+    "Title": null,
+    "HideFromHeader": null,
+    "Kind": "check",
+    "Placeholder": null,
+    "CanAscend": false,
+    "SortOptions": null,
+    "SortDefault": null,
+    "CheckName": "Completed only",
+    "CheckCanExclude": true,
+    "CheckDefaultValue": false,
+    "Select": {
+      "IsGenre": false,
+      "UsesTagStyle": false,
+      "Options": null,
+      "IDs": null,
+      "DefaultValue": null
+    },
+    "MultiSelect": {
+      "IsGenre": false,
+      "CanExclude": false,
+      "UsesTagStyle": false,
+      "Options": null,
+      "IDs": null,
+      "DefaultIncluded": null,
+      "DefaultExcluded": null
+    },
+    "Note": "",
+    "RangeMin": null,
+    "RangeMax": null,
+    "RangeDecimal": false
+  }
+]

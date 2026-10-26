@@ -10,7 +10,8 @@ var (
 	// mid-value.
 	ErrUnexpectedEOF = errors.New("postcard: unexpected end of buffer")
 	// ErrVarintOverflow is returned when a varint doesn't terminate within
-	// the maximum number of bytes for its target width.
+	// the maximum number of bytes for its target width, or its value exceeds
+	// that width.
 	ErrVarintOverflow = errors.New("postcard: varint overflow")
 	// ErrInvalidBool is returned when a bool byte is neither 0 nor 1.
 	ErrInvalidBool = errors.New("postcard: invalid bool byte")
@@ -67,23 +68,33 @@ func (r *Reader) ReadI8() (int8, error) {
 }
 
 func (r *Reader) ReadU16() (uint16, error) {
-	v, err := r.readVarintU64(3)
+	v, err := r.readVarintMax(3, math.MaxUint16)
 	return uint16(v), err
 }
 
 func (r *Reader) ReadI16() (int16, error) {
-	v, err := r.readVarintU64(3)
+	v, err := r.readVarintMax(3, math.MaxUint16)
 	return unzigzag16(uint16(v)), err
 }
 
 func (r *Reader) ReadU32() (uint32, error) {
-	v, err := r.readVarintU64(5)
+	v, err := r.readVarintMax(5, math.MaxUint32)
 	return uint32(v), err
 }
 
 func (r *Reader) ReadI32() (int32, error) {
-	v, err := r.readVarintU64(5)
+	v, err := r.readVarintMax(5, math.MaxUint32)
 	return unzigzag32(uint32(v)), err
+}
+
+// readVarintMax rejects values past the target width instead of silently
+// truncating them (3 varint bytes hold 21 bits, 5 hold 35).
+func (r *Reader) readVarintMax(maxBytes int, max uint64) (uint64, error) {
+	v, err := r.readVarintU64(maxBytes)
+	if err == nil && v > max {
+		return 0, ErrVarintOverflow
+	}
+	return v, err
 }
 
 func (r *Reader) ReadU64() (uint64, error) {
@@ -210,6 +221,10 @@ func (r *Reader) readVarintU64(maxBytes int) (uint64, error) {
 		b, err := r.readByte()
 		if err != nil {
 			return 0, err
+		}
+		if shift == 63 && b > 1 {
+			// 10th byte of a u64 carries only bit 63; more would be truncated.
+			return 0, ErrVarintOverflow
 		}
 		result |= uint64(b&0x7f) << shift
 		if b&0x80 == 0 {

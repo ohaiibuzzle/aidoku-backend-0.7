@@ -46,16 +46,16 @@ func (c *PageContent) DecodePostcard(r *postcard.Reader) error {
 		if c.URL, err = r.ReadString(); err != nil {
 			return err
 		}
-		hasContext, err := r.ReadU8()
+		hasContext, err := r.ReadOptionTag()
 		if err != nil {
 			return err
 		}
-		if hasContext == 1 {
+		if hasContext {
 			n, err := r.ReadLen()
 			if err != nil {
 				return err
 			}
-			c.Context = make(PageContext, n)
+			c.Context = make(PageContext, min(n, 64))
 			for i := 0; i < n; i++ {
 				k, err := r.ReadString()
 				if err != nil {

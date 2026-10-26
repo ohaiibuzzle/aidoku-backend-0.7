@@ -176,3 +176,33 @@ func TestSeqDoesNotPresizeFromLengthPrefix(t *testing.T) {
 		t.Fatalf("empty Seq = %v, %v; want non-nil empty slice", got, err)
 	}
 }
+
+// Narrowing readers must reject varints past their width instead of
+// truncating them (e.g. 65536 read as u16 0).
+func TestNarrowVarintRejectsOutOfRange(t *testing.T) {
+	enc := func(v uint64) []byte { w := NewWriter(); w.WriteU64(v); return w.Bytes() }
+	cases := []struct {
+		name string
+		read func(*Reader) error
+		ok   uint64
+		bad  uint64
+	}{
+		{"u16", func(r *Reader) error { _, err := r.ReadU16(); return err }, math.MaxUint16, math.MaxUint16 + 1},
+		{"i16", func(r *Reader) error { _, err := r.ReadI16(); return err }, math.MaxUint16, math.MaxUint16 + 1},
+		{"u32", func(r *Reader) error { _, err := r.ReadU32(); return err }, math.MaxUint32, math.MaxUint32 + 1},
+		{"i32", func(r *Reader) error { _, err := r.ReadI32(); return err }, math.MaxUint32, math.MaxUint32 + 1},
+	}
+	for _, c := range cases {
+		if err := c.read(NewReader(enc(c.ok))); err != nil {
+			t.Errorf("%s(%d): %v", c.name, c.ok, err)
+		}
+		if err := c.read(NewReader(enc(c.bad))); err != ErrVarintOverflow {
+			t.Errorf("%s(%d): want ErrVarintOverflow, got %v", c.name, c.bad, err)
+		}
+	}
+	// 10-byte varint whose last byte carries bits past 63.
+	tooBig := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02}
+	if _, err := NewReader(tooBig).ReadU64(); err != ErrVarintOverflow {
+		t.Errorf("u64 >64 bits: want ErrVarintOverflow, got %v", err)
+	}
+}

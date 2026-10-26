@@ -198,43 +198,6 @@ func encodeOptionalStringSlice(w *postcard.Writer, s []string) {
 	encodeStringSlice(w, s)
 }
 
-func decodeOptionalStringMap(r *postcard.Reader) (map[string]string, error) {
-	present, err := r.ReadOptionTag()
-	if err != nil || !present {
-		return nil, err
-	}
-	return decodeStringMap(r)
-}
-
-func encodeOptionalStringMap(w *postcard.Writer, m map[string]string) {
-	if m == nil {
-		w.WriteNone()
-		return
-	}
-	w.WriteSome()
-	encodeStringMap(w, m)
-}
-
-func decodeStringMap(r *postcard.Reader) (map[string]string, error) {
-	n, err := r.ReadLen()
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]string, n)
-	for i := 0; i < n; i++ {
-		k, err := r.ReadString()
-		if err != nil {
-			return nil, err
-		}
-		v, err := r.ReadString()
-		if err != nil {
-			return nil, err
-		}
-		out[k] = v
-	}
-	return out, nil
-}
-
 func encodeStringMap(w *postcard.Writer, m map[string]string) {
 	w.WriteLen(len(m))
 	for k, v := range m {

@@ -1,0 +1,181 @@
+[
+  {
+    "Key": "general",
+    "Title": "General",
+    "Notification": null,
+    "Requires": null,
+    "RequiresFalse": null,
+    "Refreshes": null,
+    "Type": "group",
+    "Group": {
+      "Footer": "Footer",
+      "Items": [
+        {
+          "Key": "lang",
+          "Title": "Language",
+          "Notification": null,
+          "Requires": null,
+          "RequiresFalse": null,
+          "Refreshes": null,
+          "Type": "select",
+          "Group": null,
+          "Select": {
+            "Values": [
+              "en",
+              "ja"
+            ],
+            "Titles": [
+              "English",
+              "Japanese"
+            ],
+            "AuthToOpen": null,
+            "DefaultValue": "en"
+          },
+          "Multiselect": null,
+          "Toggle": null,
+          "Stepper": null,
+          "Segment": null,
+          "Text": null,
+          "Button": null,
+          "Link": null,
+          "Login": null,
+          "Page": null,
+          "EditableList": null,
+          "Picker": null
+        },
+        {
+          "Key": "genres",
+          "Title": "Genres",
+          "Notification": null,
+          "Requires": null,
+          "RequiresFalse": null,
+          "Refreshes": null,
+          "Type": "multi-select",
+          "Group": null,
+          "Select": null,
+          "Multiselect": {
+            "Values": [
+              "a",
+              "b"
+            ],
+            "Titles": [
+              "A",
+              "B"
+            ],
+            "AuthToOpen": null,
+            "DefaultValue": [
+              "a"
+            ]
+          },
+          "Toggle": null,
+          "Stepper": null,
+          "Segment": null,
+          "Text": null,
+          "Button": null,
+          "Link": null,
+          "Login": null,
+          "Page": null,
+          "EditableList": null,
+          "Picker": null
+        }
+      ]
+    },
+    "Select": null,
+    "Multiselect": null,
+    "Toggle": null,
+    "Stepper": null,
+    "Segment": null,
+    "Text": null,
+    "Button": null,
+    "Link": null,
+    "Login": null,
+    "Page": null,
+    "EditableList": null,
+    "Picker": null
+  },
+  {
+    "Key": "advanced",
+    "Title": "Advanced",
+    "Notification": null,
+    "Requires": null,
+    "RequiresFalse": null,
+    "Refreshes": null,
+    "Type": "page",
+    "Group": null,
+    "Select": null,
+    "Multiselect": null,
+    "Toggle": null,
+    "Stepper": null,
+    "Segment": null,
+    "Text": null,
+    "Button": null,
+    "Link": null,
+    "Login": null,
+    "Page": {
+      "Items": [
+        {
+          "Key": "nsfw",
+          "Title": "Show NSFW",
+          "Notification": null,
+          "Requires": null,
+          "RequiresFalse": null,
+          "Refreshes": null,
+          "Type": "switch",
+          "Group": null,
+          "Select": null,
+          "Multiselect": null,
+          "Toggle": {
+            "Subtitle": "Adult content",
+            "AuthToDisable": null,
+            "DefaultValue": true
+          },
+          "Stepper": null,
+          "Segment": null,
+          "Text": null,
+          "Button": null,
+          "Link": null,
+          "Login": null,
+          "Page": null,
+          "EditableList": null,
+          "Picker": null
+        },
+        {
+          "Key": "url",
+          "Title": "Base URL",
+          "Notification": null,
+          "Requires": null,
+          "RequiresFalse": null,
+          "Refreshes": null,
+          "Type": "text",
+          "Group": null,
+          "Select": null,
+          "Multiselect": null,
+          "Toggle": null,
+          "Stepper": null,
+          "Segment": null,
+          "Text": {
+            "Placeholder": "https://",
+            "AutocapitalizationType": null,
+            "KeyboardType": null,
+            "ReturnKeyType": null,
+            "AutocorrectionDisabled": null,
+            "Secure": null,
+            "DefaultValue": "https://example.com"
+          },
+          "Button": null,
+          "Link": null,
+          "Login": null,
+          "Page": null,
+          "EditableList": null,
+          "Picker": null
+        }
+      ],
+      "InlineTitle": null,
+      "AuthToOpen": null,
+      "Icon": null,
+      "Info": null
+    },
+    "EditableList": null,
+    "Picker": null
+  }
+]
