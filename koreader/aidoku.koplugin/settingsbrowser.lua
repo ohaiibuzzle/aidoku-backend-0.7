@@ -7,6 +7,7 @@ itself just the user's bookmarked manga.
 ]]
 
 local ConfirmBox = require("ui/widget/confirmbox")
+local DownloadsEngine = require("downloadsengine")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
@@ -396,15 +397,18 @@ end
 -- ephemeralPathProblem returns a user-facing reason path can't be the
 -- Ephemeral Mode dir, or nil. The persistent downloads dir is refused: its
 -- index.db is the real library, and Ephemeral Mode's removeAllExcept would
--- delete every chapter in it.
+-- delete every chapter in it. So is any dir nesting with it either way: the
+-- "file is under downloads_dir" checks (main.lua, nextchapter.lua) would
+-- then claim the other mode's files too.
 function SettingsBrowser:ephemeralPathProblem(path)
     if not self:pathIsWritable(path) then
         return T(_("%1 doesn't exist or isn't writable."), path)
     end
     local real = ffiUtil.realpath(path)
     local persistent = ffiUtil.realpath(self.aidoku.persistent_downloads_dir)
-    if real and persistent and real == persistent then
-        return _("The Ephemeral storage path can't be the normal downloads folder.")
+    if real and persistent and (real == persistent
+            or DownloadsEngine.isUnder(persistent, real) or DownloadsEngine.isUnder(real, persistent)) then
+        return _("The Ephemeral storage path can't be, contain, or be inside the normal downloads folder.")
     end
 end
 

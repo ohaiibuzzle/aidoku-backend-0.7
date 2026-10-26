@@ -45,7 +45,7 @@ end
 function SourcesBrowser:genItemTable()
     local item_table = {}
     table.insert(item_table, { text = DOWNLOADS_TEXT, is_downloads_entry = true })
-    for _, source in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
+    for _idx, source in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
         table.insert(item_table, source)
     end
     return item_table

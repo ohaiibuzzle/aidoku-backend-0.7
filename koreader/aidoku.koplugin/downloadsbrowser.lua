@@ -36,7 +36,7 @@ end
 
 function DownloadsBrowser:genItemTable(entries)
     local item_table = {}
-    for _, entry in ipairs(entries) do
+    for _idx, entry in ipairs(entries) do
         table.insert(item_table, {
             text = entry.mangaTitle .. " - " .. entry.chapterTitle,
             download_entry = entry,

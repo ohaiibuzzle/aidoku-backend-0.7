@@ -81,15 +81,17 @@ local function buildCommand(bin_path, stderr_path, args, env, low_priority)
         table.insert(parts, "19")
     end
     table.insert(parts, shellQuote(bin_path))
-    for _, a in ipairs(args) do
+    for _idx, a in ipairs(args) do
         table.insert(parts, shellQuote(a))
     end
     table.insert(parts, "2>" .. shellQuote(stderr_path))
-    -- Trailing "; echo" guarantees at least one byte of output even if the
+    -- Trailing echo guarantees at least one byte of output even if the
     -- command itself prints nothing, per Trapper:dismissablePopen()'s own
     -- advice -- otherwise a silent failure can't be told apart from one
-    -- that hasn't produced output yet.
-    return table.concat(parts, " ") .. "; echo"
+    -- that hasn't produced output yet. It also carries the exit status
+    -- (parsed and stripped by exec()); $? is the binary's (or nice's, which
+    -- passes it through) since the stderr redirect is on that command.
+    return table.concat(parts, " ") .. '; echo "__rc=$?"'
 end
 
 -- errorMessage picks what to show the user out of a failed command's
@@ -136,7 +138,14 @@ function Runner:exec(args, progress_text, env, low_priority)
         return nil, _("Cancelled")
     end
 
-    output = output and output:gsub("%s+$", "") or ""
+    -- The trailer may follow stdout on the same line if stdout didn't end
+    -- in a newline; a missing trailer counts as failure.
+    local body, rc = (output or ""):match("^(.-)__rc=(%d+)%s*$")
+    output = (body or ""):gsub("%s+$", "")
+    if rc ~= "0" then
+        logger.warn("aidoku: command failed (exit " .. tostring(rc) .. "):", cmd, stderr, output)
+        return nil, errorMessage(stderr) or _("command failed")
+    end
     if output == "" then
         -- Full stderr goes to the log for debugging; only the error line is
         -- shown to the user.
@@ -155,7 +164,7 @@ function Runner:execJSON(args, progress_text, env)
     local ok, decoded = pcall(json.decode, output)
     if not ok then
         logger.warn("aidoku: could not decode JSON output:", output)
-        return nil, output
+        return nil, _("Invalid response from aidoku-run")
     end
     return decoded
 end

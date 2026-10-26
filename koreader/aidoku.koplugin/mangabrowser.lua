@@ -188,7 +188,7 @@ function MangaBrowser:reloadDownloadedKeys(all)
     if not all then
         return all
     end
-    for _, entry in ipairs(all) do
+    for _idx, entry in ipairs(all) do
         if entry.sourceKey == self.source_key and entry.mangaKey == self.manga.Key then
             self.downloaded_keys[entry.chapterKey] = entry.path
         end
@@ -319,7 +319,7 @@ end
 -- where to resume.
 function MangaBrowser:findLastReadChapter(ordered)
     local last_key
-    for _, c in ipairs(ordered) do
+    for _idx, c in ipairs(ordered) do
         if self.store:isChapterRead(self.source_key, self.manga.Key, c.Key) then
             last_key = c.Key
         end
@@ -368,7 +368,7 @@ function MangaBrowser:downloadNext(n)
     end
 
     local needs_download = false
-    for _, c in ipairs(upcoming) do
+    for _idx, c in ipairs(upcoming) do
         if self:downloadedPath(c.Key) == "" then
             needs_download = true
             break

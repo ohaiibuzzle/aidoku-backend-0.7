@@ -68,7 +68,7 @@ end
 
 function LibraryBrowser:genItemTable()
     local item_table = {}
-    for _, entry in ipairs(self:sortedLibraryEntries()) do
+    for _idx, entry in ipairs(self:sortedLibraryEntries()) do
         table.insert(item_table, { text = entry.title, library_entry = entry })
     end
     if #item_table == 0 then

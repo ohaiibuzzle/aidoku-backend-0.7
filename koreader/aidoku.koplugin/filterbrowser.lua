@@ -46,7 +46,7 @@ end
 
 function FilterBrowser:init()
     self.filters = {}
-    for _, f in ipairs(self.all_filters or {}) do
+    for _idx, f in ipairs(self.all_filters or {}) do
         if SUPPORTED_KINDS[f.Kind] then
             table.insert(self.filters, f)
         end
@@ -115,7 +115,7 @@ end
 
 function FilterBrowser:refresh()
     local item_table = {}
-    for _, filter in ipairs(self.filters) do
+    for _idx, filter in ipairs(self.filters) do
         table.insert(item_table, { text = self:summary(filter), filter = filter })
     end
     table.insert(item_table, { text = _("Clear all filters"), is_clear = true })
@@ -204,10 +204,10 @@ end
 -- user can toggle several options in one visit.
 function FilterBrowser:pickMultiselect(filter)
     local function state(included, excluded, id)
-        for _, v in ipairs(included) do
+        for _idx, v in ipairs(included) do
             if v == id then return "included" end
         end
-        for _, v in ipairs(excluded) do
+        for _idx, v in ipairs(excluded) do
             if v == id then return "excluded" end
         end
         return "none"
@@ -230,10 +230,10 @@ function FilterBrowser:pickMultiselect(filter)
         local current = self.values[filter.ID] or { type = "multi-select", id = filter.ID, included = {}, excluded = {} }
         local s = state(current.included, current.excluded, id)
         local included, excluded = {}, {}
-        for _, v in ipairs(current.included) do
+        for _idx, v in ipairs(current.included) do
             if v ~= id then table.insert(included, v) end
         end
-        for _, v in ipairs(current.excluded) do
+        for _idx, v in ipairs(current.excluded) do
             if v ~= id then table.insert(excluded, v) end
         end
         if s == "none" then

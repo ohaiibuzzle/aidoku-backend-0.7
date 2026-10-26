@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 15:04+0700\n"
+"POT-Creation-Date: 2026-10-26 18:29+0700\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -50,51 +50,55 @@ msgstr ""
 msgid "Remove"
 msgstr "წაშლა"
 
-#: downloadsengine.lua:224
+#: downloadsengine.lua:232
 msgid "Could not read the downloads index."
 msgstr "ჩამოტვირთვების ინდექსის წაკითხვა ვერ მოხერხდა."
 
-#: engine.lua:47
+#: engine.lua:46
 msgid "Fetching repository…"
 msgstr "რეპოზიტორიის მიღება…"
 
-#: engine.lua:51
+#: engine.lua:50
 msgid "Installing…"
 msgstr "ინსტალდება…"
 
-#: engine.lua:60
+#: engine.lua:59
 msgid "Loading cookies…"
 msgstr "ქუქიების ჩატვირთვა…"
 
-#: engine.lua:73
+#: engine.lua:72
 msgid "Checking for updates…"
 msgstr "განახლებების შემოწმება…"
 
-#: engine.lua:77
+#: engine.lua:76
 msgid "Downloading update…"
 msgstr "განახლების ჩამოტვირთვა…"
 
-#: engine.lua:81
+#: engine.lua:80
 msgid "Loading source…"
 msgstr "წყაროს ჩატვირთვა…"
 
-#: engine.lua:131
+#: engine.lua:134
+msgid "Could not write search filters"
+msgstr ""
+
+#: engine.lua:138
 msgid "Searching…"
 msgstr "ძიება…"
 
-#: engine.lua:138
+#: engine.lua:149
 msgid "Loading filters…"
 msgstr "ფილტრების ჩატვირთვა…"
 
-#: engine.lua:145
+#: engine.lua:156
 msgid "Loading settings…"
 msgstr "პარამეტრების ჩატვირთვა…"
 
-#: engine.lua:175
+#: engine.lua:191
 msgid "Loading chapters…"
 msgstr "თავების ჩატვირთვა…"
 
-#: engine.lua:206
+#: engine.lua:222
 msgid "Downloading chapter…"
 msgstr "თავის ჩამოტვირთვა…"
 
@@ -123,7 +127,7 @@ msgid "descending"
 msgstr "კლებადი"
 
 #: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
-#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:117
+#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
@@ -172,9 +176,9 @@ msgid "Title…"
 msgstr "სათაური…"
 
 #: globalsearchbrowser.lua:67 mangabrowser.lua:453 searchbrowser.lua:96
-#: settingsbrowser.lua:149 settingsbrowser.lua:183 settingsbrowser.lua:218
-#: settingsbrowser.lua:248 settingsbrowser.lua:285 settingsbrowser.lua:420
-#: sourcesettingsbrowser.lua:236
+#: settingsbrowser.lua:150 settingsbrowser.lua:184 settingsbrowser.lua:219
+#: settingsbrowser.lua:249 settingsbrowser.lua:286 settingsbrowser.lua:424
+#: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "გაუქმება"
 
@@ -194,11 +198,15 @@ msgstr "შედეგი არცერთი წყაროდან არ
 msgid "Some sources failed: %1"
 msgstr "ზოგიერთი წყარო ვერ მუშაობდა: %1"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:149 searchbrowser.lua:195
+msgid "Could not update library."
+msgstr ""
+
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Added '%1' to library"
 msgstr "'%1' დაემატა ბიბლიოთეკაში"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Removed '%1' from library"
 msgstr "'%1' ამოღებულია ბიბლიოთეკიდან"
 
@@ -206,7 +214,7 @@ msgstr "'%1' ამოღებულია ბიბლიოთეკიდა
 msgid "Library"
 msgstr "ბიბლიოთეკა"
 
-#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:113
+#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:114
 msgid "Ephemeral Mode"
 msgstr "დროებითი რეჟიმი"
 
@@ -216,7 +224,7 @@ msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr ""
 "ბიბლიოთეკა ცარიელია. მანგის საპოვნელად გამოიყენეთ მენიუ (ზემოთ მარცხნივ)."
 
-#: librarybrowser.lua:108 settingsbrowser.lua:34
+#: librarybrowser.lua:108 settingsbrowser.lua:35
 msgid "Settings"
 msgstr "პარამეტრები"
 
@@ -288,20 +296,20 @@ msgstr "'%1' აღარ არის დაინსტალირებუ�
 msgid "Remove '%1' from your library?"
 msgstr "წაიშალოს '%1' თქვენი ბიბლიოთეკიდან?"
 
-#: main.lua:229
+#: main.lua:236
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:237
+#: main.lua:244
 msgid "AidokuRunner for KOReader"
 msgstr "AidokuRunner KOReader-ისთვის"
 
-#: main.lua:256
+#: main.lua:263
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "aidoku-run ფაილი ვერ მოიძებნა. ხელახლა ააწყვეთ მოდული koreader/build.sh-ით."
 
-#: main.lua:262
+#: main.lua:269
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr ""
 "ჩამოტვირთვების მონაცემთა ბაზა ვერ გაიხსნა. ჩასაწერად ხელმისაწვდომია "
@@ -365,7 +373,7 @@ msgstr "ახლა არა"
 msgid "No chapters to download."
 msgstr "ჩამოსატვირთი თავები არ არის."
 
-#: mangabrowser.lua:366 nextchapter.lua:153
+#: mangabrowser.lua:366 nextchapter.lua:156
 msgid "No next chapter yet."
 msgstr "შემდეგი თავი ჯერ არ არის."
 
@@ -377,7 +385,7 @@ msgstr "უკვე ჩამოტვირთულია."
 msgid "Downloading %1/%2: %3"
 msgstr "მიმდინარეობს ჩამოტვირთვა %1/%2: %3"
 
-#: mangabrowser.lua:402 subprocess.lua:136
+#: mangabrowser.lua:402 subprocess.lua:138
 msgid "Cancelled"
 msgstr "გაუქმებულია"
 
@@ -385,7 +393,7 @@ msgstr "გაუქმებულია"
 msgid "Cancelled after %1 of %2 chapters."
 msgstr "გაუქმდა %1 %2-დან თავის შემდეგ."
 
-#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:211
+#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:214
 msgid ""
 "Download failed:\n"
 "%1"
@@ -425,23 +433,23 @@ msgstr "თავიდან ჩამოტვირთვა"
 msgid "Remove download"
 msgstr "ჩამოტვირთვის წაშლა"
 
-#: nextchapter.lua:170 nextchapter.lua:229
+#: nextchapter.lua:173 nextchapter.lua:232
 msgid "Continue to '%1'?"
 msgstr "გავაგრძელოთ '%1'-ზე?"
 
-#: nextchapter.lua:171 nextchapter.lua:230
+#: nextchapter.lua:174 nextchapter.lua:233
 msgid "Continue"
 msgstr "გაგრძელება"
 
-#: nextchapter.lua:182
+#: nextchapter.lua:185
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "ოფლაინ რეჟიმია და შემდეგი თავი ჩამოტვირთული არ არის."
 
-#: nextchapter.lua:186
+#: nextchapter.lua:189
 msgid "Source no longer installed."
 msgstr "წყარო აღარ არის დაინსტალირებული."
 
-#: nextchapter.lua:191
+#: nextchapter.lua:194
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -501,117 +509,117 @@ msgstr "ფილტრები…"
 msgid "No results."
 msgstr "შედეგი არ არის."
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Ask"
 msgstr "კითხვა"
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Auto"
 msgstr "ავტო"
 
-#: settingsbrowser.lua:44 settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:45 settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "გამორთული"
 
-#: settingsbrowser.lua:70
+#: settingsbrowser.lua:71
 msgid "N/A"
 msgstr "არ არის"
 
-#: settingsbrowser.lua:71 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:72 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "არცერთი"
 
-#: settingsbrowser.lua:73
+#: settingsbrowser.lua:74
 msgid " (using %1)"
 msgstr " (გამოიყენება %1)"
 
-#: settingsbrowser.lua:77 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:78 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "არ არის დაყენებული"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Custom"
 msgstr "მორგებული"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Default"
 msgstr "ნაგულისხმევი"
 
-#: settingsbrowser.lua:82
+#: settingsbrowser.lua:83
 msgid "Default (8)"
 msgstr "ნაგულისხმევი (8)"
 
-#: settingsbrowser.lua:88
+#: settingsbrowser.lua:89
 msgid "Sources"
 msgstr "წყაროები"
 
-#: settingsbrowser.lua:92 settingsbrowser.lua:143
+#: settingsbrowser.lua:93 settingsbrowser.lua:144
 msgid "Prefetch next chapters"
 msgstr "შემდეგი თავების წინასწარ ჩატვირთვა"
 
-#: settingsbrowser.lua:99
+#: settingsbrowser.lua:100
 msgid "Auto-advance at chapter end"
 msgstr "ავტომატური გადასვლა თავის ბოლოს"
 
-#: settingsbrowser.lua:104
+#: settingsbrowser.lua:105
 msgid "Storage limit"
 msgstr "მეხსიერების ლიმიტი"
 
-#: settingsbrowser.lua:107 settingsbrowser.lua:210
+#: settingsbrowser.lua:108 settingsbrowser.lua:211
 msgid "Source repository URL"
 msgstr "წყაროს რეპოზიტორიის URL"
 
-#: settingsbrowser.lua:108 settingsbrowser.lua:242
+#: settingsbrowser.lua:109 settingsbrowser.lua:243
 msgid "Network concurrency"
 msgstr "ქსელური პარალელიზმი"
 
-#: settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "ჩართული"
 
-#: settingsbrowser.lua:118 settingsbrowser.lua:414
+#: settingsbrowser.lua:119 settingsbrowser.lua:418
 msgid "Ephemeral storage path"
 msgstr "დროებითი მეხსიერების გზა"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:279
+#: settingsbrowser.lua:123 settingsbrowser.lua:280
 msgid "FlareSolverr host"
 msgstr "FlareSolverr ჰოსტი"
 
-#: settingsbrowser.lua:123
+#: settingsbrowser.lua:124
 msgid "Import cookies"
 msgstr "ქუქიების იმპორტი"
 
-#: settingsbrowser.lua:124
+#: settingsbrowser.lua:125
 msgid "Clear stored cookies"
 msgstr "შენახული ქუქიების წაშლა"
 
-#: settingsbrowser.lua:144
+#: settingsbrowser.lua:145
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "კითხვისას წინასწარ ჩასატვირთი თავები. 0 გამორთავს."
 
-#: settingsbrowser.lua:154 settingsbrowser.lua:188 settingsbrowser.lua:223
-#: settingsbrowser.lua:253 settingsbrowser.lua:290 settingsbrowser.lua:425
-#: sourcesettingsbrowser.lua:241
+#: settingsbrowser.lua:155 settingsbrowser.lua:189 settingsbrowser.lua:224
+#: settingsbrowser.lua:254 settingsbrowser.lua:291 settingsbrowser.lua:429
+#: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "დაყენება"
 
-#: settingsbrowser.lua:163 settingsbrowser.lua:266
+#: settingsbrowser.lua:164 settingsbrowser.lua:267
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:177
+#: settingsbrowser.lua:178
 msgid "Storage limit (MB)"
 msgstr "მეხსიერების ლიმიტი (MB)"
 
-#: settingsbrowser.lua:178
+#: settingsbrowser.lua:179
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "უძველესი თავები პირველად იშლება. 0 ნიშნავს ლიმიტის გარეშე."
 
-#: settingsbrowser.lua:197
+#: settingsbrowser.lua:198
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:212
+#: settingsbrowser.lua:213
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -619,7 +627,7 @@ msgstr ""
 "რეპოზიტორიის ინდექსის URL. ცარიელი დატოვეთ ნაგულისხმევისთვის:\n"
 "%1"
 
-#: settingsbrowser.lua:243
+#: settingsbrowser.lua:244
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -627,22 +635,22 @@ msgstr ""
 "პარალელური მოთხოვნები თითო წყაროზე. ცარიელი ან 0 ნაგულისხმევისთვის (8). "
 "მაღალი მნიშვნელობა მეტ მეხსიერებას მოიხმარს."
 
-#: settingsbrowser.lua:280
+#: settingsbrowser.lua:281
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
 "აგვარებს Cloudflare-ის შემოწმებებს, მაგ. localhost:8191. ცარიელი დატოვეთ "
 "გასათიშად."
 
-#: settingsbrowser.lua:282
+#: settingsbrowser.lua:283
 msgid "host:port"
 msgstr "host:port"
 
-#: settingsbrowser.lua:308
+#: settingsbrowser.lua:309
 msgid "Long-press a cookies.txt to import it"
 msgstr "cookies.txt-ზე ხანგრძლივი შეხებით იმპორტი"
 
-#: settingsbrowser.lua:318
+#: settingsbrowser.lua:319
 msgid ""
 "Import failed:\n"
 "%1"
@@ -650,19 +658,19 @@ msgstr ""
 "იმპორტი ვერ მოხერხდა:\n"
 "%1"
 
-#: settingsbrowser.lua:328
+#: settingsbrowser.lua:329
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr "ყველა წყაროს ქუქიების წაშლა? ამის გაუქმება შეუძლებელია."
 
-#: settingsbrowser.lua:329
+#: settingsbrowser.lua:330
 msgid "Clear"
 msgstr "წაშლა"
 
-#: settingsbrowser.lua:334
+#: settingsbrowser.lua:335
 msgid "Cookies cleared."
 msgstr "ქუქიები წაიშალა."
 
-#: settingsbrowser.lua:336
+#: settingsbrowser.lua:337
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -670,23 +678,25 @@ msgstr ""
 "ქუქიების წაშლა ვერ მოხერხდა:\n"
 "%1"
 
-#: settingsbrowser.lua:402
+#: settingsbrowser.lua:405
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 არ არსებობს ან ჩასაწერად არ არის ხელმისაწვდომი."
 
-#: settingsbrowser.lua:407
-msgid "The Ephemeral storage path can't be the normal downloads folder."
+#: settingsbrowser.lua:411
+msgid ""
+"The Ephemeral storage path can't be, contain, or be inside the normal "
+"downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:415
+#: settingsbrowser.lua:419
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "სად ინახება თავები დროებით რეჟიმში."
 
-#: settingsbrowser.lua:493
+#: settingsbrowser.lua:497
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "დროებითი რეჟიმი წინასწარ ჩატვირთვას 1 თავით ზღუდავს."
 
-#: settingsbrowser.lua:503
+#: settingsbrowser.lua:507
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "მეხსიერების ლიმიტი გამორთულია დროებით რეჟიმში."
 
@@ -722,11 +732,11 @@ msgstr ""
 "პარამეტრების ჩატვირთვა ვერ მოხერხდა:\n"
 "%1"
 
-#: sourcesettingsbrowser.lua:122
+#: sourcesettingsbrowser.lua:121
 msgid "This source has no configurable settings."
 msgstr "ამ წყაროს კონფიგურირებადი პარამეტრები არ აქვს."
 
-#: sourcesettingsbrowser.lua:132
+#: sourcesettingsbrowser.lua:131
 msgid ""
 "Could not save setting:\n"
 "%1"
@@ -734,6 +744,17 @@ msgstr ""
 "პარამეტრის შენახვა ვერ მოხერხდა:\n"
 "%1"
 
-#: subprocess.lua:144
+#: subprocess.lua:147
+#, fuzzy
+msgid "command failed"
+msgstr ""
+"ჩამოტვირთვა ვერ მოხერხდა:\n"
+"%1"
+
+#: subprocess.lua:153
 msgid "command produced no output"
 msgstr "ბრძანებამ გამომავალი არ მოგვცა"
+
+#: subprocess.lua:167
+msgid "Invalid response from aidoku-run"
+msgstr ""

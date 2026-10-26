@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 15:04+0700\n"
+"POT-Creation-Date: 2026-10-26 18:29+0700\n"
 "PO-Revision-Date: 2026-10-07 13:35+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -51,51 +51,55 @@ msgstr ""
 msgid "Remove"
 msgstr "Διαγραφή"
 
-#: downloadsengine.lua:224
+#: downloadsengine.lua:232
 msgid "Could not read the downloads index."
 msgstr "Δεν ήταν δυνατή η ανάγνωση του ευρετηρίου λήψεων."
 
-#: engine.lua:47
+#: engine.lua:46
 msgid "Fetching repository…"
 msgstr "Λήψη αποθετηρίου…"
 
-#: engine.lua:51
+#: engine.lua:50
 msgid "Installing…"
 msgstr "Εγκατάσταση…"
 
-#: engine.lua:60
+#: engine.lua:59
 msgid "Loading cookies…"
 msgstr "Φόρτωση cookies…"
 
-#: engine.lua:73
+#: engine.lua:72
 msgid "Checking for updates…"
 msgstr "Έλεγχος για ενημερώσεις…"
 
-#: engine.lua:77
+#: engine.lua:76
 msgid "Downloading update…"
 msgstr "Λήψη ενημέρωσης…"
 
-#: engine.lua:81
+#: engine.lua:80
 msgid "Loading source…"
 msgstr "Φόρτωση πηγής…"
 
-#: engine.lua:131
+#: engine.lua:134
+msgid "Could not write search filters"
+msgstr ""
+
+#: engine.lua:138
 msgid "Searching…"
 msgstr "Αναζήτηση…"
 
-#: engine.lua:138
+#: engine.lua:149
 msgid "Loading filters…"
 msgstr "Φόρτωση φίλτρων…"
 
-#: engine.lua:145
+#: engine.lua:156
 msgid "Loading settings…"
 msgstr "Φόρτωση ρυθμίσεων…"
 
-#: engine.lua:175
+#: engine.lua:191
 msgid "Loading chapters…"
 msgstr "Φόρτωση κεφαλαίων…"
 
-#: engine.lua:206
+#: engine.lua:222
 msgid "Downloading chapter…"
 msgstr "Λήψη κεφαλαίου…"
 
@@ -124,7 +128,7 @@ msgid "descending"
 msgstr "φθίνουσα"
 
 #: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
-#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:117
+#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
@@ -174,9 +178,9 @@ msgid "Title…"
 msgstr "Τίτλος…"
 
 #: globalsearchbrowser.lua:67 mangabrowser.lua:453 searchbrowser.lua:96
-#: settingsbrowser.lua:149 settingsbrowser.lua:183 settingsbrowser.lua:218
-#: settingsbrowser.lua:248 settingsbrowser.lua:285 settingsbrowser.lua:420
-#: sourcesettingsbrowser.lua:236
+#: settingsbrowser.lua:150 settingsbrowser.lua:184 settingsbrowser.lua:219
+#: settingsbrowser.lua:249 settingsbrowser.lua:286 settingsbrowser.lua:424
+#: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "Ακύρωση"
 
@@ -196,11 +200,15 @@ msgstr "Κανένα αποτέλεσμα από καμία πηγή."
 msgid "Some sources failed: %1"
 msgstr "Ορισμένες πηγές απέτυχαν: %1"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:149 searchbrowser.lua:195
+msgid "Could not update library."
+msgstr ""
+
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Added '%1' to library"
 msgstr "Το '%1' προστέθηκε στη βιβλιοθήκη"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Removed '%1' from library"
 msgstr "Το '%1' αφαιρέθηκε από τη βιβλιοθήκη"
 
@@ -208,7 +216,7 @@ msgstr "Το '%1' αφαιρέθηκε από τη βιβλιοθήκη"
 msgid "Library"
 msgstr "Βιβλιοθήκη"
 
-#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:113
+#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:114
 msgid "Ephemeral Mode"
 msgstr "Εφήμερη λειτουργία"
 
@@ -219,7 +227,7 @@ msgstr ""
 "Η βιβλιοθήκη είναι άδεια. Χρησιμοποιήστε το μενού (πάνω αριστερά) για να "
 "βρείτε manga."
 
-#: librarybrowser.lua:108 settingsbrowser.lua:34
+#: librarybrowser.lua:108 settingsbrowser.lua:35
 msgid "Settings"
 msgstr "Ρυθμίσεις"
 
@@ -292,21 +300,21 @@ msgstr ""
 msgid "Remove '%1' from your library?"
 msgstr "Να αφαιρεθεί το '%1' από τη βιβλιοθήκη σας;"
 
-#: main.lua:229
+#: main.lua:236
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:237
+#: main.lua:244
 msgid "AidokuRunner for KOReader"
 msgstr "AidokuRunner για KOReader"
 
-#: main.lua:256
+#: main.lua:263
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "Δεν βρέθηκε το εκτελέσιμο aidoku-run. Ξαναχτίστε το plugin με το koreader/"
 "build.sh."
 
-#: main.lua:262
+#: main.lua:269
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr ""
 "Δεν ήταν δυνατό το άνοιγμα της βάσης δεδομένων λήψεων. Είναι εγγράψιμος ο "
@@ -370,7 +378,7 @@ msgstr "Όχι τώρα"
 msgid "No chapters to download."
 msgstr "Δεν υπάρχουν κεφάλαια για λήψη."
 
-#: mangabrowser.lua:366 nextchapter.lua:153
+#: mangabrowser.lua:366 nextchapter.lua:156
 msgid "No next chapter yet."
 msgstr "Δεν υπάρχει ακόμη επόμενο κεφάλαιο."
 
@@ -382,7 +390,7 @@ msgstr "Έχει ήδη ληφθεί."
 msgid "Downloading %1/%2: %3"
 msgstr "Λήψη %1/%2: %3"
 
-#: mangabrowser.lua:402 subprocess.lua:136
+#: mangabrowser.lua:402 subprocess.lua:138
 msgid "Cancelled"
 msgstr "Ακυρώθηκε"
 
@@ -390,7 +398,7 @@ msgstr "Ακυρώθηκε"
 msgid "Cancelled after %1 of %2 chapters."
 msgstr "Ακυρώθηκε μετά από %1 από %2 κεφάλαια."
 
-#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:211
+#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:214
 msgid ""
 "Download failed:\n"
 "%1"
@@ -430,23 +438,23 @@ msgstr "Νέα λήψη"
 msgid "Remove download"
 msgstr "Διαγραφή λήψης"
 
-#: nextchapter.lua:170 nextchapter.lua:229
+#: nextchapter.lua:173 nextchapter.lua:232
 msgid "Continue to '%1'?"
 msgstr "Συνέχεια στο '%1';"
 
-#: nextchapter.lua:171 nextchapter.lua:230
+#: nextchapter.lua:174 nextchapter.lua:233
 msgid "Continue"
 msgstr "Συνέχεια"
 
-#: nextchapter.lua:182
+#: nextchapter.lua:185
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "Εκτός σύνδεσης, και το επόμενο κεφάλαιο δεν έχει ληφθεί."
 
-#: nextchapter.lua:186
+#: nextchapter.lua:189
 msgid "Source no longer installed."
 msgstr "Η πηγή δεν είναι πλέον εγκατεστημένη."
 
-#: nextchapter.lua:191
+#: nextchapter.lua:194
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -506,118 +514,118 @@ msgstr "Φίλτρα…"
 msgid "No results."
 msgstr "Κανένα αποτέλεσμα."
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Ask"
 msgstr "Ερώτηση"
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Auto"
 msgstr "Αυτόματα"
 
-#: settingsbrowser.lua:44 settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:45 settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "Ανενεργό"
 
-#: settingsbrowser.lua:70
+#: settingsbrowser.lua:71
 msgid "N/A"
 msgstr "Μ/Δ"
 
-#: settingsbrowser.lua:71 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:72 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "καμία"
 
-#: settingsbrowser.lua:73
+#: settingsbrowser.lua:74
 msgid " (using %1)"
 msgstr " (χρήση: %1)"
 
-#: settingsbrowser.lua:77 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:78 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "δεν έχει οριστεί"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Custom"
 msgstr "Προσαρμοσμένο"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Default"
 msgstr "Προεπιλογή"
 
-#: settingsbrowser.lua:82
+#: settingsbrowser.lua:83
 msgid "Default (8)"
 msgstr "Προεπιλογή (8)"
 
-#: settingsbrowser.lua:88
+#: settingsbrowser.lua:89
 msgid "Sources"
 msgstr "Πηγές"
 
-#: settingsbrowser.lua:92 settingsbrowser.lua:143
+#: settingsbrowser.lua:93 settingsbrowser.lua:144
 msgid "Prefetch next chapters"
 msgstr "Προφόρτωση επόμενων κεφαλαίων"
 
-#: settingsbrowser.lua:99
+#: settingsbrowser.lua:100
 msgid "Auto-advance at chapter end"
 msgstr "Αυτόματη μετάβαση στο τέλος κεφαλαίου"
 
-#: settingsbrowser.lua:104
+#: settingsbrowser.lua:105
 msgid "Storage limit"
 msgstr "Όριο αποθήκευσης"
 
-#: settingsbrowser.lua:107 settingsbrowser.lua:210
+#: settingsbrowser.lua:108 settingsbrowser.lua:211
 msgid "Source repository URL"
 msgstr "URL αποθετηρίου πηγών"
 
-#: settingsbrowser.lua:108 settingsbrowser.lua:242
+#: settingsbrowser.lua:109 settingsbrowser.lua:243
 msgid "Network concurrency"
 msgstr "Ταυτόχρονες συνδέσεις"
 
-#: settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "Ενεργό"
 
-#: settingsbrowser.lua:118 settingsbrowser.lua:414
+#: settingsbrowser.lua:119 settingsbrowser.lua:418
 msgid "Ephemeral storage path"
 msgstr "Διαδρομή εφήμερης αποθήκευσης"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:279
+#: settingsbrowser.lua:123 settingsbrowser.lua:280
 msgid "FlareSolverr host"
 msgstr "Διακομιστής FlareSolverr"
 
-#: settingsbrowser.lua:123
+#: settingsbrowser.lua:124
 msgid "Import cookies"
 msgstr "Εισαγωγή cookies"
 
-#: settingsbrowser.lua:124
+#: settingsbrowser.lua:125
 msgid "Clear stored cookies"
 msgstr "Διαγραφή αποθηκευμένων cookies"
 
-#: settingsbrowser.lua:144
+#: settingsbrowser.lua:145
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr ""
 "Κεφάλαια για λήψη εκ των προτέρων κατά την ανάγνωση. Το 0 την απενεργοποιεί."
 
-#: settingsbrowser.lua:154 settingsbrowser.lua:188 settingsbrowser.lua:223
-#: settingsbrowser.lua:253 settingsbrowser.lua:290 settingsbrowser.lua:425
-#: sourcesettingsbrowser.lua:241
+#: settingsbrowser.lua:155 settingsbrowser.lua:189 settingsbrowser.lua:224
+#: settingsbrowser.lua:254 settingsbrowser.lua:291 settingsbrowser.lua:429
+#: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "Ορισμός"
 
-#: settingsbrowser.lua:163 settingsbrowser.lua:266
+#: settingsbrowser.lua:164 settingsbrowser.lua:267
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:177
+#: settingsbrowser.lua:178
 msgid "Storage limit (MB)"
 msgstr "Όριο αποθήκευσης (MB)"
 
-#: settingsbrowser.lua:178
+#: settingsbrowser.lua:179
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "Τα παλαιότερα κεφάλαια διαγράφονται πρώτα. Το 0 σημαίνει χωρίς όριο."
 
-#: settingsbrowser.lua:197
+#: settingsbrowser.lua:198
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:212
+#: settingsbrowser.lua:213
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -625,7 +633,7 @@ msgstr ""
 "URL ευρετηρίου αποθετηρίου. Αφήστε κενό για την προεπιλογή:\n"
 "%1"
 
-#: settingsbrowser.lua:243
+#: settingsbrowser.lua:244
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -633,22 +641,22 @@ msgstr ""
 "Παράλληλα αιτήματα ανά πηγή. Κενό ή 0 για προεπιλογή (8). Οι μεγαλύτερες "
 "τιμές χρησιμοποιούν περισσότερη μνήμη."
 
-#: settingsbrowser.lua:280
+#: settingsbrowser.lua:281
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
 "Επιλύει προκλήσεις Cloudflare, π.χ. localhost:8191. Αφήστε κενό για "
 "απενεργοποίηση."
 
-#: settingsbrowser.lua:282
+#: settingsbrowser.lua:283
 msgid "host:port"
 msgstr "host:port"
 
-#: settingsbrowser.lua:308
+#: settingsbrowser.lua:309
 msgid "Long-press a cookies.txt to import it"
 msgstr "Πατήστε παρατεταμένα ένα cookies.txt για εισαγωγή"
 
-#: settingsbrowser.lua:318
+#: settingsbrowser.lua:319
 msgid ""
 "Import failed:\n"
 "%1"
@@ -656,20 +664,20 @@ msgstr ""
 "Η εισαγωγή απέτυχε:\n"
 "%1"
 
-#: settingsbrowser.lua:328
+#: settingsbrowser.lua:329
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr ""
 "Διαγραφή cookies για όλες τις πηγές; Η ενέργεια δεν μπορεί να αναιρεθεί."
 
-#: settingsbrowser.lua:329
+#: settingsbrowser.lua:330
 msgid "Clear"
 msgstr "Διαγραφή"
 
-#: settingsbrowser.lua:334
+#: settingsbrowser.lua:335
 msgid "Cookies cleared."
 msgstr "Τα cookies διαγράφηκαν."
 
-#: settingsbrowser.lua:336
+#: settingsbrowser.lua:337
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -677,23 +685,25 @@ msgstr ""
 "Δεν ήταν δυνατή η διαγραφή των cookies:\n"
 "%1"
 
-#: settingsbrowser.lua:402
+#: settingsbrowser.lua:405
 msgid "%1 doesn't exist or isn't writable."
 msgstr "Το %1 δεν υπάρχει ή δεν είναι εγγράψιμο."
 
-#: settingsbrowser.lua:407
-msgid "The Ephemeral storage path can't be the normal downloads folder."
+#: settingsbrowser.lua:411
+msgid ""
+"The Ephemeral storage path can't be, contain, or be inside the normal "
+"downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:415
+#: settingsbrowser.lua:419
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "Πού αποθηκεύονται τα κεφάλαια στην εφήμερη λειτουργία."
 
-#: settingsbrowser.lua:493
+#: settingsbrowser.lua:497
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "Η εφήμερη λειτουργία περιορίζει την προφόρτωση σε 1 κεφάλαιο."
 
-#: settingsbrowser.lua:503
+#: settingsbrowser.lua:507
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "Το όριο αποθήκευσης είναι απενεργοποιημένο στην εφήμερη λειτουργία."
 
@@ -729,11 +739,11 @@ msgstr ""
 "Δεν ήταν δυνατή η φόρτωση των ρυθμίσεων:\n"
 "%1"
 
-#: sourcesettingsbrowser.lua:122
+#: sourcesettingsbrowser.lua:121
 msgid "This source has no configurable settings."
 msgstr "Αυτή η πηγή δεν έχει ρυθμίσεις."
 
-#: sourcesettingsbrowser.lua:132
+#: sourcesettingsbrowser.lua:131
 msgid ""
 "Could not save setting:\n"
 "%1"
@@ -741,6 +751,17 @@ msgstr ""
 "Δεν ήταν δυνατή η αποθήκευση της ρύθμισης:\n"
 "%1"
 
-#: subprocess.lua:144
+#: subprocess.lua:147
+#, fuzzy
+msgid "command failed"
+msgstr ""
+"Η λήψη απέτυχε:\n"
+"%1"
+
+#: subprocess.lua:153
 msgid "command produced no output"
 msgstr "η εντολή δεν παρήγαγε έξοδο"
+
+#: subprocess.lua:167
+msgid "Invalid response from aidoku-run"
+msgstr ""

@@ -119,7 +119,7 @@ function SearchBrowser:runSearch(query)
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
             local filters = {}
-            for _, v in pairs(self.filter_values) do
+            for _idx, v in pairs(self.filter_values) do
                 table.insert(filters, v)
             end
             local result, err = self.engine:search(self.source_path, query, self.page, filters)
@@ -130,7 +130,7 @@ function SearchBrowser:runSearch(query)
             local item_table = {}
             if self.available_filters and #self.available_filters > 0 then
                 local n = 0
-                for _ in pairs(self.filter_values) do n = n + 1 end
+                for _idx in pairs(self.filter_values) do n = n + 1 end
                 local label = n > 0 and T(_("Filters (%1 set)…"), n) or _("Filters…")
                 table.insert(item_table, { text = label, is_filters_entry = true })
             end
@@ -138,7 +138,7 @@ function SearchBrowser:runSearch(query)
             -- empty) here, but guard anyway -- see the null-decoding note
             -- in mangabrowser.lua.
             local entries = type(result.Entries) == "table" and result.Entries or {}
-            for _, manga in ipairs(entries) do
+            for _idx, manga in ipairs(entries) do
                 local label = mangaLabel(manga)
                 if self.store:isBookmarked(self.source_key, manga.Key) then
                     label = "★ " .. label
@@ -183,13 +183,17 @@ function SearchBrowser:onMenuHold(item)
     end
     local manga = item.manga
     local label = mangaLabel(manga)
-    local now_bookmarked
+    local now_bookmarked, ok
     if self.store:isBookmarked(self.source_key, manga.Key) then
-        self.store:removeBookmark(self.source_key, manga.Key)
+        ok = self.store:removeBookmark(self.source_key, manga.Key)
         now_bookmarked = false
     else
-        self.store:addBookmark(self.source_key, self.source_path, manga.Key, label, mangaCover(manga))
+        ok = self.store:addBookmark(self.source_key, self.source_path, manga.Key, label, mangaCover(manga))
         now_bookmarked = true
+    end
+    if not ok then
+        UIManager:show(InfoMessage:new{ text = _("Could not update library."), timeout = 2 })
+        return true
     end
     -- Update this row's marker in place rather than re-running the search.
     item.text = now_bookmarked and ("★ " .. label) or label

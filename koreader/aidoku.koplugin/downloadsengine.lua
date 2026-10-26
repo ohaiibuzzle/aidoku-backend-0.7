@@ -20,6 +20,14 @@ local _ = require("aidoku_l10n")
 local DownloadsEngine = {}
 DownloadsEngine.__index = DownloadsEngine
 
+-- isUnder reports whether file lies strictly inside dir (a trailing slash
+-- on dir is ignored) -- a bare prefix check would also match a sibling
+-- like "<dir>-old/x".
+function DownloadsEngine.isUnder(file, dir)
+    dir = dir:gsub("/+$", "")
+    return file:sub(1, #dir + 1) == dir .. "/"
+end
+
 local ENTRY_COLUMNS = "source_key, source_path, manga_key, chapter_key, path, "
     .. "manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number"
 

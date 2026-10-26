@@ -65,7 +65,7 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
     end
     Trapper:wrap(function()
         local any_new = false
-        for _, c in ipairs(upcoming) do
+        for _idx, c in ipairs(upcoming) do
             if ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key) == "" then
                 local chapter_filename = util.getSafeFilename(
                     Prefetch.chapterLabel(c) .. ".cbz", ctx.downloads_dir)
@@ -101,7 +101,7 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
         -- tight limit would only re-download them when the reader arrives.
         if any_new and not ctx.store:isEphemeralMode() then
             local keep = {}
-            for _, c in ipairs(upcoming) do
+            for _idx, c in ipairs(upcoming) do
                 keep[ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key)] = true
             end
             keep[ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, chapter_key)] = true

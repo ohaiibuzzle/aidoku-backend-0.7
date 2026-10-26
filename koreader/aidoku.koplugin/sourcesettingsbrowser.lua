@@ -37,7 +37,7 @@ end
 -- for just the supported leaf types.
 local function flatten(settings, prefix, out)
     out = out or {}
-    for _, setting in ipairs(array(settings)) do
+    for _idx, setting in ipairs(array(settings)) do
         local label = prefix ~= "" and (prefix .. ": " .. setting.Title) or setting.Title
         if setting.Type == "group" and setting.Group then
             flatten(setting.Group.Items, setting.Title ~= "" and setting.Title or prefix, out)
@@ -77,7 +77,7 @@ function SourceSettingsBrowser:reload()
         end
         self.entries = flatten(schema, "")
         self.values = {}
-        for _, entry in ipairs(self.entries) do
+        for _idx, entry in ipairs(self.entries) do
             self.values[entry.setting.Key] = self.engine:settingsGet(self.source_path, entry.setting.Key)
         end
         self:refresh()
@@ -106,11 +106,10 @@ end
 function SourceSettingsBrowser:refresh()
     local item_table = {}
     -- Not `for _, entry in ipairs(...)`: `_` is also this file's gettext
-    -- local, and a loop variable of the same name shadows it for the rest
-    -- of this function's body -- calling _(...) below would try to call the
-    -- loop's integer index instead. Confirmed live: this crashed on
-    -- MangaDex's settings screen with "attempt to call local '_' (a number
-    -- value)".
+    -- local, and a loop variable of the same name shadows it inside the
+    -- loop body -- calling _(...) there would try to call the loop's integer
+    -- index instead. Confirmed live: this crashed on MangaDex's settings
+    -- screen with "attempt to call local '_' (a number value)".
     for _idx, entry in ipairs(self.entries) do
         local value = self.values[entry.setting.Key]
         table.insert(item_table, {
@@ -170,7 +169,7 @@ function SourceSettingsBrowser:pickMultiselect(entry)
     local setting = entry.setting
 
     local function isSelected(selected, option)
-        for _, v in ipairs(selected) do
+        for _idx, v in ipairs(selected) do
             if v == option then return true end
         end
         return false
@@ -190,7 +189,7 @@ function SourceSettingsBrowser:pickMultiselect(entry)
     local selected = {}
     local current = self.values[setting.Key]
     if type(current) == "table" then
-        for _, v in ipairs(current) do table.insert(selected, v) end
+        for _idx, v in ipairs(current) do table.insert(selected, v) end
     end
 
     local picker
@@ -203,7 +202,7 @@ function SourceSettingsBrowser:pickMultiselect(entry)
         onMenuSelect = function(_menu, item)
             if isSelected(selected, item.value) then
                 local next_selected = {}
-                for _, v in ipairs(selected) do
+                for _idx, v in ipairs(selected) do
                     if v ~= item.value then table.insert(next_selected, v) end
                 end
                 selected = next_selected

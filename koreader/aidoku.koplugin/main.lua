@@ -124,7 +124,7 @@ end
 -- coroutine is needed here.
 function Aidoku:markCurrentChapterRead()
     local file = self.document and self.document.file
-    if not file or file:sub(1, #self.downloads_dir) ~= self.downloads_dir then
+    if not file or not DownloadsEngine.isUnder(file, self.downloads_dir) then
         return
     end
     local entry = self.downloads_engine:byPath(file)
@@ -184,7 +184,7 @@ function Aidoku:hookShowFileManager()
     local original_show_file_manager = self.ui.showFileManager
     self.ui.showFileManager = function(ui_self, file, ...)
         file = file or (self.document and self.document.file)
-        if file and file:sub(1, #self.downloads_dir) == self.downloads_dir then
+        if file and DownloadsEngine.isUnder(file, self.downloads_dir) then
             require("pendinglibrary").open = true
         end
         return original_show_file_manager(ui_self, file, ...)

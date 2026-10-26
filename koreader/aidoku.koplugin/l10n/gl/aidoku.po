@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 15:04+0700\n"
+"POT-Creation-Date: 2026-10-26 18:29+0700\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -50,51 +50,55 @@ msgstr ""
 msgid "Remove"
 msgstr "Eliminar"
 
-#: downloadsengine.lua:224
+#: downloadsengine.lua:232
 msgid "Could not read the downloads index."
 msgstr "Non se puido ler o índice das descargas."
 
-#: engine.lua:47
+#: engine.lua:46
 msgid "Fetching repository…"
 msgstr "Obtendo o repositorio…"
 
-#: engine.lua:51
+#: engine.lua:50
 msgid "Installing…"
 msgstr "Instalando…"
 
-#: engine.lua:60
+#: engine.lua:59
 msgid "Loading cookies…"
 msgstr "Cargando as cookies…"
 
-#: engine.lua:73
+#: engine.lua:72
 msgid "Checking for updates…"
 msgstr "Buscando actualizacións…"
 
-#: engine.lua:77
+#: engine.lua:76
 msgid "Downloading update…"
 msgstr "Descargando a actualización…"
 
-#: engine.lua:81
+#: engine.lua:80
 msgid "Loading source…"
 msgstr "Cargando a fonte…"
 
-#: engine.lua:131
+#: engine.lua:134
+msgid "Could not write search filters"
+msgstr ""
+
+#: engine.lua:138
 msgid "Searching…"
 msgstr "Buscando…"
 
-#: engine.lua:138
+#: engine.lua:149
 msgid "Loading filters…"
 msgstr "Cargando os filtros…"
 
-#: engine.lua:145
+#: engine.lua:156
 msgid "Loading settings…"
 msgstr "Cargando os axustes…"
 
-#: engine.lua:175
+#: engine.lua:191
 msgid "Loading chapters…"
 msgstr "Cargando os capítulos…"
 
-#: engine.lua:206
+#: engine.lua:222
 msgid "Downloading chapter…"
 msgstr "Descargando o capítulo…"
 
@@ -123,7 +127,7 @@ msgid "descending"
 msgstr "descendente"
 
 #: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
-#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:117
+#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
@@ -172,9 +176,9 @@ msgid "Title…"
 msgstr "Título…"
 
 #: globalsearchbrowser.lua:67 mangabrowser.lua:453 searchbrowser.lua:96
-#: settingsbrowser.lua:149 settingsbrowser.lua:183 settingsbrowser.lua:218
-#: settingsbrowser.lua:248 settingsbrowser.lua:285 settingsbrowser.lua:420
-#: sourcesettingsbrowser.lua:236
+#: settingsbrowser.lua:150 settingsbrowser.lua:184 settingsbrowser.lua:219
+#: settingsbrowser.lua:249 settingsbrowser.lua:286 settingsbrowser.lua:424
+#: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "Cancelar"
 
@@ -194,11 +198,15 @@ msgstr "Sen resultados de ningunha fonte."
 msgid "Some sources failed: %1"
 msgstr "Fallaron algunhas fontes: %1"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:149 searchbrowser.lua:195
+msgid "Could not update library."
+msgstr ""
+
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Added '%1' to library"
 msgstr "Engadido '%1' á biblioteca"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Removed '%1' from library"
 msgstr "Quitado '%1' da biblioteca"
 
@@ -206,7 +214,7 @@ msgstr "Quitado '%1' da biblioteca"
 msgid "Library"
 msgstr "Biblioteca"
 
-#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:113
+#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:114
 msgid "Ephemeral Mode"
 msgstr "Modo efémero"
 
@@ -216,7 +224,7 @@ msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr ""
 "A biblioteca está baleira. Use o menú (arriba á esquerda) para atopar mangas."
 
-#: librarybrowser.lua:108 settingsbrowser.lua:34
+#: librarybrowser.lua:108 settingsbrowser.lua:35
 msgid "Settings"
 msgstr "Axustes"
 
@@ -288,21 +296,21 @@ msgstr "'%1' xa non está instalada. Manteña premido para quitala."
 msgid "Remove '%1' from your library?"
 msgstr "Quitar '%1' da súa biblioteca?"
 
-#: main.lua:229
+#: main.lua:236
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:237
+#: main.lua:244
 msgid "AidokuRunner for KOReader"
 msgstr "AidokuRunner para KOReader"
 
-#: main.lua:256
+#: main.lua:263
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "Non se atopou o binario aidoku-run. Reconstrúa o complemento con koreader/"
 "build.sh."
 
-#: main.lua:262
+#: main.lua:269
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr ""
 "Non se puido abrir a base de datos de descargas. É escribible o "
@@ -366,7 +374,7 @@ msgstr "Agora non"
 msgid "No chapters to download."
 msgstr "Non hai capítulos para descargar."
 
-#: mangabrowser.lua:366 nextchapter.lua:153
+#: mangabrowser.lua:366 nextchapter.lua:156
 msgid "No next chapter yet."
 msgstr "Aínda non hai capítulo seguinte."
 
@@ -378,7 +386,7 @@ msgstr "Xa descargado."
 msgid "Downloading %1/%2: %3"
 msgstr "Descargando %1/%2: %3"
 
-#: mangabrowser.lua:402 subprocess.lua:136
+#: mangabrowser.lua:402 subprocess.lua:138
 msgid "Cancelled"
 msgstr "Cancelado"
 
@@ -386,7 +394,7 @@ msgstr "Cancelado"
 msgid "Cancelled after %1 of %2 chapters."
 msgstr "Cancelado despois de %1 de %2 capítulos."
 
-#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:211
+#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:214
 msgid ""
 "Download failed:\n"
 "%1"
@@ -426,23 +434,23 @@ msgstr "Volver descargar"
 msgid "Remove download"
 msgstr "Eliminar descarga"
 
-#: nextchapter.lua:170 nextchapter.lua:229
+#: nextchapter.lua:173 nextchapter.lua:232
 msgid "Continue to '%1'?"
 msgstr "Continuar con '%1'?"
 
-#: nextchapter.lua:171 nextchapter.lua:230
+#: nextchapter.lua:174 nextchapter.lua:233
 msgid "Continue"
 msgstr "Continuar"
 
-#: nextchapter.lua:182
+#: nextchapter.lua:185
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "Sen conexión, e o capítulo seguinte non está descargado."
 
-#: nextchapter.lua:186
+#: nextchapter.lua:189
 msgid "Source no longer installed."
 msgstr "A fonte xa non está instalada."
 
-#: nextchapter.lua:191
+#: nextchapter.lua:194
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -502,117 +510,117 @@ msgstr "Filtros…"
 msgid "No results."
 msgstr "Sen resultados."
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Ask"
 msgstr "Preguntar"
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Auto"
 msgstr "Automático"
 
-#: settingsbrowser.lua:44 settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:45 settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "Desactivado"
 
-#: settingsbrowser.lua:70
+#: settingsbrowser.lua:71
 msgid "N/A"
 msgstr "N/D"
 
-#: settingsbrowser.lua:71 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:72 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "ningún"
 
-#: settingsbrowser.lua:73
+#: settingsbrowser.lua:74
 msgid " (using %1)"
 msgstr " (usando %1)"
 
-#: settingsbrowser.lua:77 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:78 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "sen definir"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Custom"
 msgstr "Personalizado"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Default"
 msgstr "Predeterminado"
 
-#: settingsbrowser.lua:82
+#: settingsbrowser.lua:83
 msgid "Default (8)"
 msgstr "Predeterminado (8)"
 
-#: settingsbrowser.lua:88
+#: settingsbrowser.lua:89
 msgid "Sources"
 msgstr "Fontes"
 
-#: settingsbrowser.lua:92 settingsbrowser.lua:143
+#: settingsbrowser.lua:93 settingsbrowser.lua:144
 msgid "Prefetch next chapters"
 msgstr "Precargar os seguintes capítulos"
 
-#: settingsbrowser.lua:99
+#: settingsbrowser.lua:100
 msgid "Auto-advance at chapter end"
 msgstr "Avanzar automaticamente ao final do capítulo"
 
-#: settingsbrowser.lua:104
+#: settingsbrowser.lua:105
 msgid "Storage limit"
 msgstr "Límite de almacenamento"
 
-#: settingsbrowser.lua:107 settingsbrowser.lua:210
+#: settingsbrowser.lua:108 settingsbrowser.lua:211
 msgid "Source repository URL"
 msgstr "URL do repositorio de fontes"
 
-#: settingsbrowser.lua:108 settingsbrowser.lua:242
+#: settingsbrowser.lua:109 settingsbrowser.lua:243
 msgid "Network concurrency"
 msgstr "Concorrencia de rede"
 
-#: settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "Activado"
 
-#: settingsbrowser.lua:118 settingsbrowser.lua:414
+#: settingsbrowser.lua:119 settingsbrowser.lua:418
 msgid "Ephemeral storage path"
 msgstr "Ruta do almacenamento efémero"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:279
+#: settingsbrowser.lua:123 settingsbrowser.lua:280
 msgid "FlareSolverr host"
 msgstr "Servidor de FlareSolverr"
 
-#: settingsbrowser.lua:123
+#: settingsbrowser.lua:124
 msgid "Import cookies"
 msgstr "Importar cookies"
 
-#: settingsbrowser.lua:124
+#: settingsbrowser.lua:125
 msgid "Clear stored cookies"
 msgstr "Borrar cookies gardadas"
 
-#: settingsbrowser.lua:144
+#: settingsbrowser.lua:145
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "Capítulos a descargar por adiantado durante a lectura. 0 desactívao."
 
-#: settingsbrowser.lua:154 settingsbrowser.lua:188 settingsbrowser.lua:223
-#: settingsbrowser.lua:253 settingsbrowser.lua:290 settingsbrowser.lua:425
-#: sourcesettingsbrowser.lua:241
+#: settingsbrowser.lua:155 settingsbrowser.lua:189 settingsbrowser.lua:224
+#: settingsbrowser.lua:254 settingsbrowser.lua:291 settingsbrowser.lua:429
+#: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "Definir"
 
-#: settingsbrowser.lua:163 settingsbrowser.lua:266
+#: settingsbrowser.lua:164 settingsbrowser.lua:267
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:177
+#: settingsbrowser.lua:178
 msgid "Storage limit (MB)"
 msgstr "Límite de almacenamento (MB)"
 
-#: settingsbrowser.lua:178
+#: settingsbrowser.lua:179
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "Bórranse primeiro os capítulos máis antigos. 0 significa sen límite."
 
-#: settingsbrowser.lua:197
+#: settingsbrowser.lua:198
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:212
+#: settingsbrowser.lua:213
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -620,7 +628,7 @@ msgstr ""
 "URL do índice do repositorio. Déixeo en branco para o predeterminado:\n"
 "%1"
 
-#: settingsbrowser.lua:243
+#: settingsbrowser.lua:244
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -628,22 +636,22 @@ msgstr ""
 "Solicitudes paralelas por fonte. En branco ou 0 para o predeterminado (8). "
 "Un valor máis alto usa máis memoria."
 
-#: settingsbrowser.lua:280
+#: settingsbrowser.lua:281
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
 "Resolve os desafíos de Cloudflare, p. ex. localhost:8191. Déixeo en branco "
 "para desactivar."
 
-#: settingsbrowser.lua:282
+#: settingsbrowser.lua:283
 msgid "host:port"
 msgstr "servidor:porto"
 
-#: settingsbrowser.lua:308
+#: settingsbrowser.lua:309
 msgid "Long-press a cookies.txt to import it"
 msgstr "Manteña premido un cookies.txt para importalo"
 
-#: settingsbrowser.lua:318
+#: settingsbrowser.lua:319
 msgid ""
 "Import failed:\n"
 "%1"
@@ -651,19 +659,19 @@ msgstr ""
 "A importación fallou:\n"
 "%1"
 
-#: settingsbrowser.lua:328
+#: settingsbrowser.lua:329
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr "Borrar as cookies de todas as fontes? Non se pode desfacer."
 
-#: settingsbrowser.lua:329
+#: settingsbrowser.lua:330
 msgid "Clear"
 msgstr "Borrar"
 
-#: settingsbrowser.lua:334
+#: settingsbrowser.lua:335
 msgid "Cookies cleared."
 msgstr "Cookies borradas."
 
-#: settingsbrowser.lua:336
+#: settingsbrowser.lua:337
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -671,23 +679,25 @@ msgstr ""
 "Non se puideron borrar as cookies:\n"
 "%1"
 
-#: settingsbrowser.lua:402
+#: settingsbrowser.lua:405
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 non existe ou non é escribible."
 
-#: settingsbrowser.lua:407
-msgid "The Ephemeral storage path can't be the normal downloads folder."
+#: settingsbrowser.lua:411
+msgid ""
+"The Ephemeral storage path can't be, contain, or be inside the normal "
+"downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:415
+#: settingsbrowser.lua:419
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "Onde se gardan os capítulos no modo efémero."
 
-#: settingsbrowser.lua:493
+#: settingsbrowser.lua:497
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "O modo efémero limita a precarga a 1 capítulo."
 
-#: settingsbrowser.lua:503
+#: settingsbrowser.lua:507
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "O límite de almacenamento está desactivado no modo efémero."
 
@@ -723,11 +733,11 @@ msgstr ""
 "Non se puideron cargar os axustes:\n"
 "%1"
 
-#: sourcesettingsbrowser.lua:122
+#: sourcesettingsbrowser.lua:121
 msgid "This source has no configurable settings."
 msgstr "Esta fonte non ten axustes configurables."
 
-#: sourcesettingsbrowser.lua:132
+#: sourcesettingsbrowser.lua:131
 msgid ""
 "Could not save setting:\n"
 "%1"
@@ -735,6 +745,17 @@ msgstr ""
 "Non se puido gardar o axuste:\n"
 "%1"
 
-#: subprocess.lua:144
+#: subprocess.lua:147
+#, fuzzy
+msgid "command failed"
+msgstr ""
+"A descarga fallou:\n"
+"%1"
+
+#: subprocess.lua:153
 msgid "command produced no output"
 msgstr "o comando non produciu saída"
+
+#: subprocess.lua:167
+msgid "Invalid response from aidoku-run"
+msgstr ""

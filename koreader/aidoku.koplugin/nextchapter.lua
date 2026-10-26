@@ -11,6 +11,7 @@ next_chapter_mode setting, either offers or silently proceeds.
 local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
+local DownloadsEngine = require("downloadsengine")
 local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
 local NetworkMgr = require("ui/network/manager")
@@ -40,7 +41,7 @@ function NextChapter.handle(ctx, file_path)
     -- SQLite lookup entirely for the common case of finishing some other,
     -- unrelated book: only chapters we downloaded ever live under
     -- downloads_dir.
-    if file_path:sub(1, #ctx.downloads_dir) ~= ctx.downloads_dir then
+    if not DownloadsEngine.isUnder(file_path, ctx.downloads_dir) then
         return false
     end
     if ctx.store:nextChapterMode() == "off" then

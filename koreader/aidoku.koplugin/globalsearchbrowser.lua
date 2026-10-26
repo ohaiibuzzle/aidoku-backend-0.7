@@ -98,11 +98,11 @@ function GlobalSearchBrowser:runSearch(query)
             end
             local item_table = {}
             local failed = {}
-            for _, src in ipairs(sources) do
+            for _idx, src in ipairs(sources) do
                 local result = src.key and self.engine:search(src.path, query, 1)
                 local entries = result and type(result.Entries) == "table" and result.Entries or nil
                 if entries then
-                    for _, manga in ipairs(entries) do
+                    for _idx, manga in ipairs(entries) do
                         local label = mangaLabel(manga)
                         if self.store:isBookmarked(src.key, manga.Key) then
                             label = "★ " .. label
@@ -137,13 +137,17 @@ end
 function GlobalSearchBrowser:onMenuHold(item)
     local manga = item.manga
     local label = mangaLabel(manga)
-    local now_bookmarked
+    local now_bookmarked, ok
     if self.store:isBookmarked(item.source_key, manga.Key) then
-        self.store:removeBookmark(item.source_key, manga.Key)
+        ok = self.store:removeBookmark(item.source_key, manga.Key)
         now_bookmarked = false
     else
-        self.store:addBookmark(item.source_key, item.source_path, manga.Key, label, mangaCover(manga))
+        ok = self.store:addBookmark(item.source_key, item.source_path, manga.Key, label, mangaCover(manga))
         now_bookmarked = true
+    end
+    if not ok then
+        UIManager:show(InfoMessage:new{ text = _("Could not update library."), timeout = 2 })
+        return true
     end
     -- Update this row's marker in place rather than re-running the search.
     item.text = now_bookmarked and ("★ " .. label) or label

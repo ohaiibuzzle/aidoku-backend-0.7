@@ -6,7 +6,6 @@ underlying "shell out and decode JSON" mechanics and its important note
 about Trapper:wrap().
 ]]
 
-local DataStorage = require("datastorage")
 local Runner = require("subprocess")
 local json = require("json")
 local _ = require("aidoku_l10n")
@@ -116,19 +115,31 @@ end
 -- sortAscending/checkValue/included/excluded) -- written to a scratch JSON
 -- file and passed as aidoku-run's `search` command's optional third
 -- argument, since that's the only way to hand it a JSON body (no stdin
--- piping through Trapper:dismissablePopen()'s shell-command model).
+-- piping through Trapper:dismissablePopen()'s shell-command model). The
+-- file is an os.tmpname() (tmpfs, like subprocess.lua's stderr capture), so
+-- searching doesn't wear flash.
 function Engine:search(source_path, query, page, filter_values)
     local args = { source_path, "search", query, tostring(page or 1) }
+    local filters_path
     if filter_values and #filter_values > 0 then
-        local filters_path = DataStorage:getDataDir() .. "/cache/aidoku-search-filters.json"
+        filters_path = os.tmpname()
         local f = io.open(filters_path, "w")
+        local ok = f and f:write(encodeFilterValues(filter_values))
         if f then
-            f:write(encodeFilterValues(filter_values))
-            f:close()
-            table.insert(args, filters_path)
+            ok = f:close() and ok
         end
+        if not ok then
+            os.remove(filters_path)
+            -- Searching unfiltered instead would silently show wrong results.
+            return nil, _("Could not write search filters")
+        end
+        table.insert(args, filters_path)
     end
-    return self.runner:execJSON(args, _("Searching…"), self:sourceEnv())
+    local result, err = self.runner:execJSON(args, _("Searching…"), self:sourceEnv())
+    if filters_path then
+        os.remove(filters_path)
+    end
+    return result, err
 end
 
 -- filters lists a source's static + dynamic search filters (see
@@ -148,11 +159,16 @@ end
 -- settingsGet returns the current value of one setting (key is the bare
 -- setting key, without the sourceKey. prefix aidoku-run's settings store
 -- namespaces it under internally) -- nil if neither an explicit override nor
--- a manifest default exists.
+-- a manifest default exists (aidoku-run prints {"value": null}, which
+-- KOReader's json decodes to a function sentinel, mapped back to nil here).
+-- On failure returns nil plus an error message.
 function Engine:settingsGet(source_path, key)
     local result, err = self.runner:execJSON({ source_path, "settings", "get", key }, nil, self:sourceEnv())
-    if not result then
+    if type(result) ~= "table" then
         return nil, err
+    end
+    if type(result.value) == "function" then
+        return nil
     end
     return result.value
 end
@@ -165,7 +181,7 @@ end
 -- or one element per selection for multiselect.
 function Engine:settingsSet(source_path, key, setting_type, values)
     local args = { source_path, "settings", "set", key, setting_type }
-    for _, v in ipairs(values) do
+    for _idx, v in ipairs(values) do
         table.insert(args, v)
     end
     return self.runner:exec(args, nil, self:sourceEnv())

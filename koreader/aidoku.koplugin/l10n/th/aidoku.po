@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 15:04+0700\n"
+"POT-Creation-Date: 2026-10-26 18:29+0700\n"
 "PO-Revision-Date: 2026-10-07 13:35+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -50,51 +50,55 @@ msgstr ""
 msgid "Remove"
 msgstr "ลบ"
 
-#: downloadsengine.lua:224
+#: downloadsengine.lua:232
 msgid "Could not read the downloads index."
 msgstr "ไม่สามารถอ่านรายการดาวน์โหลดได้"
 
-#: engine.lua:47
+#: engine.lua:46
 msgid "Fetching repository…"
 msgstr "กำลังดึงข้อมูลคลังซอร์ส…"
 
-#: engine.lua:51
+#: engine.lua:50
 msgid "Installing…"
 msgstr "กำลังติดตั้ง…"
 
-#: engine.lua:60
+#: engine.lua:59
 msgid "Loading cookies…"
 msgstr "กำลังโหลดคุกกี้…"
 
-#: engine.lua:73
+#: engine.lua:72
 msgid "Checking for updates…"
 msgstr "กำลังตรวจสอบการอัปเดต…"
 
-#: engine.lua:77
+#: engine.lua:76
 msgid "Downloading update…"
 msgstr "กำลังดาวน์โหลดการอัปเดต…"
 
-#: engine.lua:81
+#: engine.lua:80
 msgid "Loading source…"
 msgstr "กำลังโหลดซอร์ส…"
 
-#: engine.lua:131
+#: engine.lua:134
+msgid "Could not write search filters"
+msgstr ""
+
+#: engine.lua:138
 msgid "Searching…"
 msgstr "กำลังค้นหา…"
 
-#: engine.lua:138
+#: engine.lua:149
 msgid "Loading filters…"
 msgstr "กำลังโหลดตัวกรอง…"
 
-#: engine.lua:145
+#: engine.lua:156
 msgid "Loading settings…"
 msgstr "กำลังโหลดการตั้งค่า…"
 
-#: engine.lua:175
+#: engine.lua:191
 msgid "Loading chapters…"
 msgstr "กำลังโหลดตอน…"
 
-#: engine.lua:206
+#: engine.lua:222
 msgid "Downloading chapter…"
 msgstr "กำลังดาวน์โหลดตอน…"
 
@@ -123,7 +127,7 @@ msgid "descending"
 msgstr "มากไปน้อย"
 
 #: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
-#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:117
+#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
@@ -172,9 +176,9 @@ msgid "Title…"
 msgstr "ชื่อเรื่อง…"
 
 #: globalsearchbrowser.lua:67 mangabrowser.lua:453 searchbrowser.lua:96
-#: settingsbrowser.lua:149 settingsbrowser.lua:183 settingsbrowser.lua:218
-#: settingsbrowser.lua:248 settingsbrowser.lua:285 settingsbrowser.lua:420
-#: sourcesettingsbrowser.lua:236
+#: settingsbrowser.lua:150 settingsbrowser.lua:184 settingsbrowser.lua:219
+#: settingsbrowser.lua:249 settingsbrowser.lua:286 settingsbrowser.lua:424
+#: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "ยกเลิก"
 
@@ -194,11 +198,15 @@ msgstr "ไม่พบผลลัพธ์จากซอร์สใดเล
 msgid "Some sources failed: %1"
 msgstr "ซอร์สบางรายการล้มเหลว: %1"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:149 searchbrowser.lua:195
+msgid "Could not update library."
+msgstr ""
+
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Added '%1' to library"
 msgstr "เพิ่ม '%1' ลงในคลังแล้ว"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Removed '%1' from library"
 msgstr "นำ '%1' ออกจากคลังแล้ว"
 
@@ -206,7 +214,7 @@ msgstr "นำ '%1' ออกจากคลังแล้ว"
 msgid "Library"
 msgstr "คลัง"
 
-#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:113
+#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:114
 msgid "Ephemeral Mode"
 msgstr "โหมดชั่วคราว"
 
@@ -215,7 +223,7 @@ msgstr "โหมดชั่วคราว"
 msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr "คลังว่างเปล่า ใช้เมนู (มุมซ้ายบน) เพื่อค้นหามังงะ"
 
-#: librarybrowser.lua:108 settingsbrowser.lua:34
+#: librarybrowser.lua:108 settingsbrowser.lua:35
 msgid "Settings"
 msgstr "การตั้งค่า"
 
@@ -287,19 +295,19 @@ msgstr "'%1' ไม่ได้ติดตั้งแล้ว กดค้า
 msgid "Remove '%1' from your library?"
 msgstr "ลบ '%1' ออกจากคลังของคุณใช่ไหม?"
 
-#: main.lua:229
+#: main.lua:236
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:237
+#: main.lua:244
 msgid "AidokuRunner for KOReader"
 msgstr "AidokuRunner สำหรับ KOReader"
 
-#: main.lua:256
+#: main.lua:263
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr "ไม่พบไฟล์ aidoku-run กรุณาคอมไพล์ปลั๊กอินใหม่ด้วย koreader/build.sh"
 
-#: main.lua:262
+#: main.lua:269
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr "ไม่สามารถเปิดฐานข้อมูลการดาวน์โหลดได้ ที่เก็บข้อมูลเขียนได้หรือไม่?"
 
@@ -361,7 +369,7 @@ msgstr "ไว้ก่อน"
 msgid "No chapters to download."
 msgstr "ไม่มีตอนให้ดาวน์โหลด"
 
-#: mangabrowser.lua:366 nextchapter.lua:153
+#: mangabrowser.lua:366 nextchapter.lua:156
 msgid "No next chapter yet."
 msgstr "ยังไม่มีตอนถัดไป"
 
@@ -373,7 +381,7 @@ msgstr "ดาวน์โหลดแล้ว"
 msgid "Downloading %1/%2: %3"
 msgstr "กำลังดาวน์โหลด %1/%2: %3"
 
-#: mangabrowser.lua:402 subprocess.lua:136
+#: mangabrowser.lua:402 subprocess.lua:138
 msgid "Cancelled"
 msgstr "ยกเลิกแล้ว"
 
@@ -381,7 +389,7 @@ msgstr "ยกเลิกแล้ว"
 msgid "Cancelled after %1 of %2 chapters."
 msgstr "ยกเลิกหลังจาก %1 จาก %2 ตอน"
 
-#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:211
+#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:214
 msgid ""
 "Download failed:\n"
 "%1"
@@ -421,23 +429,23 @@ msgstr "ดาวน์โหลดใหม่"
 msgid "Remove download"
 msgstr "ลบการดาวน์โหลด"
 
-#: nextchapter.lua:170 nextchapter.lua:229
+#: nextchapter.lua:173 nextchapter.lua:232
 msgid "Continue to '%1'?"
 msgstr "ไปต่อยัง '%1' ใช่ไหม?"
 
-#: nextchapter.lua:171 nextchapter.lua:230
+#: nextchapter.lua:174 nextchapter.lua:233
 msgid "Continue"
 msgstr "ไปต่อ"
 
-#: nextchapter.lua:182
+#: nextchapter.lua:185
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "ออฟไลน์อยู่ และยังไม่ได้ดาวน์โหลดตอนถัดไป"
 
-#: nextchapter.lua:186
+#: nextchapter.lua:189
 msgid "Source no longer installed."
 msgstr "ซอร์สไม่ได้ติดตั้งแล้ว"
 
-#: nextchapter.lua:191
+#: nextchapter.lua:194
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -497,117 +505,117 @@ msgstr "ตัวกรอง…"
 msgid "No results."
 msgstr "ไม่พบผลลัพธ์"
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Ask"
 msgstr "ถามทุกครั้ง"
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Auto"
 msgstr "อัตโนมัติ"
 
-#: settingsbrowser.lua:44 settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:45 settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "ปิด"
 
-#: settingsbrowser.lua:70
+#: settingsbrowser.lua:71
 msgid "N/A"
 msgstr "ไม่มี"
 
-#: settingsbrowser.lua:71 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:72 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "ไม่มี"
 
-#: settingsbrowser.lua:73
+#: settingsbrowser.lua:74
 msgid " (using %1)"
 msgstr " (ใช้ %1)"
 
-#: settingsbrowser.lua:77 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:78 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "ยังไม่ได้ตั้งค่า"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Custom"
 msgstr "กำหนดเอง"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Default"
 msgstr "ค่าเริ่มต้น"
 
-#: settingsbrowser.lua:82
+#: settingsbrowser.lua:83
 msgid "Default (8)"
 msgstr "ค่าเริ่มต้น (8)"
 
-#: settingsbrowser.lua:88
+#: settingsbrowser.lua:89
 msgid "Sources"
 msgstr "ซอร์ส"
 
-#: settingsbrowser.lua:92 settingsbrowser.lua:143
+#: settingsbrowser.lua:93 settingsbrowser.lua:144
 msgid "Prefetch next chapters"
 msgstr "ดาวน์โหลดล่วงหน้าตอนถัดไป"
 
-#: settingsbrowser.lua:99
+#: settingsbrowser.lua:100
 msgid "Auto-advance at chapter end"
 msgstr "ไปตอนถัดไปอัตโนมัติเมื่อจบตอน"
 
-#: settingsbrowser.lua:104
+#: settingsbrowser.lua:105
 msgid "Storage limit"
 msgstr "จำกัดพื้นที่จัดเก็บ"
 
-#: settingsbrowser.lua:107 settingsbrowser.lua:210
+#: settingsbrowser.lua:108 settingsbrowser.lua:211
 msgid "Source repository URL"
 msgstr "URL ของคลังซอร์ส"
 
-#: settingsbrowser.lua:108 settingsbrowser.lua:242
+#: settingsbrowser.lua:109 settingsbrowser.lua:243
 msgid "Network concurrency"
 msgstr "จำนวนคำขอพร้อมกัน"
 
-#: settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "เปิด"
 
-#: settingsbrowser.lua:118 settingsbrowser.lua:414
+#: settingsbrowser.lua:119 settingsbrowser.lua:418
 msgid "Ephemeral storage path"
 msgstr "เส้นทางพื้นที่จัดเก็บชั่วคราว"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:279
+#: settingsbrowser.lua:123 settingsbrowser.lua:280
 msgid "FlareSolverr host"
 msgstr "โฮสต์ FlareSolverr"
 
-#: settingsbrowser.lua:123
+#: settingsbrowser.lua:124
 msgid "Import cookies"
 msgstr "นำเข้าคุกกี้"
 
-#: settingsbrowser.lua:124
+#: settingsbrowser.lua:125
 msgid "Clear stored cookies"
 msgstr "ล้างคุกกี้ที่เก็บไว้"
 
-#: settingsbrowser.lua:144
+#: settingsbrowser.lua:145
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "จำนวนตอนที่ดาวน์โหลดล่วงหน้าขณะอ่าน 0 หมายถึงปิด"
 
-#: settingsbrowser.lua:154 settingsbrowser.lua:188 settingsbrowser.lua:223
-#: settingsbrowser.lua:253 settingsbrowser.lua:290 settingsbrowser.lua:425
-#: sourcesettingsbrowser.lua:241
+#: settingsbrowser.lua:155 settingsbrowser.lua:189 settingsbrowser.lua:224
+#: settingsbrowser.lua:254 settingsbrowser.lua:291 settingsbrowser.lua:429
+#: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "ตั้งค่า"
 
-#: settingsbrowser.lua:163 settingsbrowser.lua:266
+#: settingsbrowser.lua:164 settingsbrowser.lua:267
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:177
+#: settingsbrowser.lua:178
 msgid "Storage limit (MB)"
 msgstr "จำกัดพื้นที่จัดเก็บ (MB)"
 
-#: settingsbrowser.lua:178
+#: settingsbrowser.lua:179
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "ตอนที่เก่าที่สุดจะถูกลบก่อน 0 หมายถึงไม่จำกัด"
 
-#: settingsbrowser.lua:197
+#: settingsbrowser.lua:198
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:212
+#: settingsbrowser.lua:213
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -615,27 +623,27 @@ msgstr ""
 "URL ดัชนีคลังซอร์ส เว้นว่างเพื่อใช้ค่าเริ่มต้น:\n"
 "%1"
 
-#: settingsbrowser.lua:243
+#: settingsbrowser.lua:244
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
 msgstr ""
 "จำนวนคำขอพร้อมกันต่อซอร์ส เว้นว่างหรือ 0 ใช้ค่าเริ่มต้น (8) ค่าที่สูงขึ้นใช้หน่วยความจำมากขึ้น"
 
-#: settingsbrowser.lua:280
+#: settingsbrowser.lua:281
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr "แก้ปัญหาการท้าทายของ Cloudflare เช่น localhost:8191 เว้นว่างเพื่อปิดใช้งาน"
 
-#: settingsbrowser.lua:282
+#: settingsbrowser.lua:283
 msgid "host:port"
 msgstr "host:port"
 
-#: settingsbrowser.lua:308
+#: settingsbrowser.lua:309
 msgid "Long-press a cookies.txt to import it"
 msgstr "กดค้างที่ cookies.txt เพื่อนำเข้า"
 
-#: settingsbrowser.lua:318
+#: settingsbrowser.lua:319
 msgid ""
 "Import failed:\n"
 "%1"
@@ -643,19 +651,19 @@ msgstr ""
 "นำเข้าไม่สำเร็จ:\n"
 "%1"
 
-#: settingsbrowser.lua:328
+#: settingsbrowser.lua:329
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr "ล้างคุกกี้ของทุกซอร์สใช่ไหม? การกระทำนี้ไม่สามารถย้อนกลับได้"
 
-#: settingsbrowser.lua:329
+#: settingsbrowser.lua:330
 msgid "Clear"
 msgstr "ล้าง"
 
-#: settingsbrowser.lua:334
+#: settingsbrowser.lua:335
 msgid "Cookies cleared."
 msgstr "ล้างคุกกี้แล้ว"
 
-#: settingsbrowser.lua:336
+#: settingsbrowser.lua:337
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -663,23 +671,25 @@ msgstr ""
 "ไม่สามารถล้างคุกกี้ได้:\n"
 "%1"
 
-#: settingsbrowser.lua:402
+#: settingsbrowser.lua:405
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 ไม่มีอยู่หรือเขียนไม่ได้"
 
-#: settingsbrowser.lua:407
-msgid "The Ephemeral storage path can't be the normal downloads folder."
+#: settingsbrowser.lua:411
+msgid ""
+"The Ephemeral storage path can't be, contain, or be inside the normal "
+"downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:415
+#: settingsbrowser.lua:419
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "ตำแหน่งที่เก็บตอนในโหมดชั่วคราว"
 
-#: settingsbrowser.lua:493
+#: settingsbrowser.lua:497
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "โหมดชั่วคราวจำกัดการดาวน์โหลดล่วงหน้าไว้ที่ 1 ตอน"
 
-#: settingsbrowser.lua:503
+#: settingsbrowser.lua:507
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "ปิดการจำกัดพื้นที่จัดเก็บในโหมดชั่วคราว"
 
@@ -715,11 +725,11 @@ msgstr ""
 "ไม่สามารถโหลดการตั้งค่าได้:\n"
 "%1"
 
-#: sourcesettingsbrowser.lua:122
+#: sourcesettingsbrowser.lua:121
 msgid "This source has no configurable settings."
 msgstr "ซอร์สนี้ไม่มีการตั้งค่าให้ปรับแต่ง"
 
-#: sourcesettingsbrowser.lua:132
+#: sourcesettingsbrowser.lua:131
 msgid ""
 "Could not save setting:\n"
 "%1"
@@ -727,6 +737,17 @@ msgstr ""
 "ไม่สามารถบันทึกการตั้งค่าได้:\n"
 "%1"
 
-#: subprocess.lua:144
+#: subprocess.lua:147
+#, fuzzy
+msgid "command failed"
+msgstr ""
+"ดาวน์โหลดไม่สำเร็จ:\n"
+"%1"
+
+#: subprocess.lua:153
 msgid "command produced no output"
 msgstr "คำสั่งไม่ให้ผลลัพธ์"
+
+#: subprocess.lua:167
+msgid "Invalid response from aidoku-run"
+msgstr ""

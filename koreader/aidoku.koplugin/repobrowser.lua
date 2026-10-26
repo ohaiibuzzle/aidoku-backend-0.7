@@ -58,7 +58,7 @@ function RepoBrowser:reload()
         -- version is available, rather than sitting wherever the repo
         -- index happens to order it.
         local installed_version_by_key = {}
-        for _, installed in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
+        for _idx, installed in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
             if installed.key then
                 installed_version_by_key[installed.key] = installed.version
             end
@@ -68,7 +68,7 @@ function RepoBrowser:reload()
         -- to a function sentinel rather than nil.
         local sources = type(index.sources) == "table" and index.sources or {}
         local installed_items, other_items = {}, {}
-        for _, src in ipairs(sources) do
+        for _idx, src in ipairs(sources) do
             local src_langs = type(src.languages) == "table" and src.languages or {}
             local langs = table.concat(src_langs, ", ")
             local text = langs ~= "" and (src.name .. " (" .. langs .. ")") or src.name
@@ -87,10 +87,10 @@ function RepoBrowser:reload()
             table.insert(is_installed and installed_items or other_items, item)
         end
         local item_table = {}
-        for _, item in ipairs(installed_items) do
+        for _idx, item in ipairs(installed_items) do
             table.insert(item_table, item)
         end
-        for _, item in ipairs(other_items) do
+        for _idx, item in ipairs(other_items) do
             table.insert(item_table, item)
         end
         self.item_table = item_table

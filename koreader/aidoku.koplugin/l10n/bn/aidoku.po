@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 15:04+0700\n"
+"POT-Creation-Date: 2026-10-26 18:29+0700\n"
 "PO-Revision-Date: 2026-10-07 13:35+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -50,51 +50,55 @@ msgstr ""
 msgid "Remove"
 msgstr "মুছুন"
 
-#: downloadsengine.lua:224
+#: downloadsengine.lua:232
 msgid "Could not read the downloads index."
 msgstr "ডাউনলোড সূচি পড়া যায়নি।"
 
-#: engine.lua:47
+#: engine.lua:46
 msgid "Fetching repository…"
 msgstr "রিপোজিটরি আনা হচ্ছে…"
 
-#: engine.lua:51
+#: engine.lua:50
 msgid "Installing…"
 msgstr "ইনস্টল হচ্ছে…"
 
-#: engine.lua:60
+#: engine.lua:59
 msgid "Loading cookies…"
 msgstr "কুকি লোড হচ্ছে…"
 
-#: engine.lua:73
+#: engine.lua:72
 msgid "Checking for updates…"
 msgstr "আপডেট পরীক্ষা করা হচ্ছে…"
 
-#: engine.lua:77
+#: engine.lua:76
 msgid "Downloading update…"
 msgstr "আপডেট ডাউনলোড হচ্ছে…"
 
-#: engine.lua:81
+#: engine.lua:80
 msgid "Loading source…"
 msgstr "সোর্স লোড হচ্ছে…"
 
-#: engine.lua:131
+#: engine.lua:134
+msgid "Could not write search filters"
+msgstr ""
+
+#: engine.lua:138
 msgid "Searching…"
 msgstr "খোঁজা হচ্ছে…"
 
-#: engine.lua:138
+#: engine.lua:149
 msgid "Loading filters…"
 msgstr "ফিল্টার লোড হচ্ছে…"
 
-#: engine.lua:145
+#: engine.lua:156
 msgid "Loading settings…"
 msgstr "সেটিংস লোড হচ্ছে…"
 
-#: engine.lua:175
+#: engine.lua:191
 msgid "Loading chapters…"
 msgstr "অধ্যায় লোড হচ্ছে…"
 
-#: engine.lua:206
+#: engine.lua:222
 msgid "Downloading chapter…"
 msgstr "অধ্যায় ডাউনলোড হচ্ছে…"
 
@@ -123,7 +127,7 @@ msgid "descending"
 msgstr "নিম্নক্রম"
 
 #: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
-#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:117
+#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
@@ -172,9 +176,9 @@ msgid "Title…"
 msgstr "শিরোনাম…"
 
 #: globalsearchbrowser.lua:67 mangabrowser.lua:453 searchbrowser.lua:96
-#: settingsbrowser.lua:149 settingsbrowser.lua:183 settingsbrowser.lua:218
-#: settingsbrowser.lua:248 settingsbrowser.lua:285 settingsbrowser.lua:420
-#: sourcesettingsbrowser.lua:236
+#: settingsbrowser.lua:150 settingsbrowser.lua:184 settingsbrowser.lua:219
+#: settingsbrowser.lua:249 settingsbrowser.lua:286 settingsbrowser.lua:424
+#: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "বাতিল"
 
@@ -194,11 +198,15 @@ msgstr "কোনো সোর্স থেকেই ফলাফল পাও�
 msgid "Some sources failed: %1"
 msgstr "কিছু সোর্স ব্যর্থ হয়েছে: %1"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:149 searchbrowser.lua:195
+msgid "Could not update library."
+msgstr ""
+
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Added '%1' to library"
 msgstr "'%1' লাইব্রেরিতে যোগ হয়েছে"
 
-#: globalsearchbrowser.lua:155 searchbrowser.lua:201
+#: globalsearchbrowser.lua:159 searchbrowser.lua:205
 msgid "Removed '%1' from library"
 msgstr "'%1' লাইব্রেরি থেকে সরানো হয়েছে"
 
@@ -206,7 +214,7 @@ msgstr "'%1' লাইব্রেরি থেকে সরানো হয়�
 msgid "Library"
 msgstr "লাইব্রেরি"
 
-#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:113
+#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:114
 msgid "Ephemeral Mode"
 msgstr "অস্থায়ী মোড"
 
@@ -215,7 +223,7 @@ msgstr "অস্থায়ী মোড"
 msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr "লাইব্রেরি খালি। মাঙ্গা খুঁজতে (উপরে বাঁয়ে) মেনু ব্যবহার করুন।"
 
-#: librarybrowser.lua:108 settingsbrowser.lua:34
+#: librarybrowser.lua:108 settingsbrowser.lua:35
 msgid "Settings"
 msgstr "সেটিংস"
 
@@ -287,20 +295,20 @@ msgstr "'%1' আর ইনস্টল নেই। সরাতে চেপে
 msgid "Remove '%1' from your library?"
 msgstr "আপনার লাইব্রেরি থেকে '%1' সরাবেন?"
 
-#: main.lua:229
+#: main.lua:236
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:237
+#: main.lua:244
 msgid "AidokuRunner for KOReader"
 msgstr "KOReader-এর জন্য AidokuRunner"
 
-#: main.lua:256
+#: main.lua:263
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "aidoku-run বাইনারি পাওয়া যায়নি। koreader/build.sh দিয়ে প্লাগিন পুনরায় তৈরি করুন।"
 
-#: main.lua:262
+#: main.lua:269
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr "ডাউনলোড ডেটাবেস খোলা যায়নি। স্টোরেজে লেখা যায় কি?"
 
@@ -362,7 +370,7 @@ msgstr "এখন না"
 msgid "No chapters to download."
 msgstr "ডাউনলোডের জন্য কোনো অধ্যায় নেই।"
 
-#: mangabrowser.lua:366 nextchapter.lua:153
+#: mangabrowser.lua:366 nextchapter.lua:156
 msgid "No next chapter yet."
 msgstr "এখনও পরবর্তী অধ্যায় নেই।"
 
@@ -374,7 +382,7 @@ msgstr "ইতিমধ্যে ডাউনলোড হয়েছে।"
 msgid "Downloading %1/%2: %3"
 msgstr "ডাউনলোড হচ্ছে %1/%2: %3"
 
-#: mangabrowser.lua:402 subprocess.lua:136
+#: mangabrowser.lua:402 subprocess.lua:138
 msgid "Cancelled"
 msgstr "বাতিল হয়েছে"
 
@@ -382,7 +390,7 @@ msgstr "বাতিল হয়েছে"
 msgid "Cancelled after %1 of %2 chapters."
 msgstr "%2টির মধ্যে %1টি অধ্যায়ের পর বাতিল হয়েছে।"
 
-#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:211
+#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:214
 msgid ""
 "Download failed:\n"
 "%1"
@@ -422,23 +430,23 @@ msgstr "আবার ডাউনলোড"
 msgid "Remove download"
 msgstr "ডাউনলোড মুছুন"
 
-#: nextchapter.lua:170 nextchapter.lua:229
+#: nextchapter.lua:173 nextchapter.lua:232
 msgid "Continue to '%1'?"
 msgstr "'%1'-এ এগোবেন?"
 
-#: nextchapter.lua:171 nextchapter.lua:230
+#: nextchapter.lua:174 nextchapter.lua:233
 msgid "Continue"
 msgstr "এগিয়ে যান"
 
-#: nextchapter.lua:182
+#: nextchapter.lua:185
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "অফলাইনে আছেন, এবং পরবর্তী অধ্যায় ডাউনলোড হয়নি।"
 
-#: nextchapter.lua:186
+#: nextchapter.lua:189
 msgid "Source no longer installed."
 msgstr "সোর্সটি আর ইনস্টল করা নেই।"
 
-#: nextchapter.lua:191
+#: nextchapter.lua:194
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -498,117 +506,117 @@ msgstr "ফিল্টার…"
 msgid "No results."
 msgstr "কোনো ফলাফল নেই।"
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Ask"
 msgstr "জিজ্ঞাসা করুন"
 
-#: settingsbrowser.lua:44
+#: settingsbrowser.lua:45
 msgid "Auto"
 msgstr "স্বয়ংক্রিয়"
 
-#: settingsbrowser.lua:44 settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:45 settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "বন্ধ"
 
-#: settingsbrowser.lua:70
+#: settingsbrowser.lua:71
 msgid "N/A"
 msgstr "প্রযোজ্য নয়"
 
-#: settingsbrowser.lua:71 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:72 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "কিছু নেই"
 
-#: settingsbrowser.lua:73
+#: settingsbrowser.lua:74
 msgid " (using %1)"
 msgstr " (%1 ব্যবহার করে)"
 
-#: settingsbrowser.lua:77 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:78 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "সেট করা নেই"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Custom"
 msgstr "কাস্টম"
 
-#: settingsbrowser.lua:79
+#: settingsbrowser.lua:80
 msgid "Default"
 msgstr "ডিফল্ট"
 
-#: settingsbrowser.lua:82
+#: settingsbrowser.lua:83
 msgid "Default (8)"
 msgstr "ডিফল্ট (8)"
 
-#: settingsbrowser.lua:88
+#: settingsbrowser.lua:89
 msgid "Sources"
 msgstr "সোর্স"
 
-#: settingsbrowser.lua:92 settingsbrowser.lua:143
+#: settingsbrowser.lua:93 settingsbrowser.lua:144
 msgid "Prefetch next chapters"
 msgstr "পরবর্তী অধ্যায় আগে থেকে নামান"
 
-#: settingsbrowser.lua:99
+#: settingsbrowser.lua:100
 msgid "Auto-advance at chapter end"
 msgstr "অধ্যায় শেষে স্বয়ংক্রিয়ভাবে এগিয়ে যান"
 
-#: settingsbrowser.lua:104
+#: settingsbrowser.lua:105
 msgid "Storage limit"
 msgstr "স্টোরেজ সীমা"
 
-#: settingsbrowser.lua:107 settingsbrowser.lua:210
+#: settingsbrowser.lua:108 settingsbrowser.lua:211
 msgid "Source repository URL"
 msgstr "সোর্স রিপোজিটরি URL"
 
-#: settingsbrowser.lua:108 settingsbrowser.lua:242
+#: settingsbrowser.lua:109 settingsbrowser.lua:243
 msgid "Network concurrency"
 msgstr "একই সময়ে নেটওয়ার্ক অনুরোধ"
 
-#: settingsbrowser.lua:114 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "চালু"
 
-#: settingsbrowser.lua:118 settingsbrowser.lua:414
+#: settingsbrowser.lua:119 settingsbrowser.lua:418
 msgid "Ephemeral storage path"
 msgstr "অস্থায়ী স্টোরেজ পাথ"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:279
+#: settingsbrowser.lua:123 settingsbrowser.lua:280
 msgid "FlareSolverr host"
 msgstr "FlareSolverr হোস্ট"
 
-#: settingsbrowser.lua:123
+#: settingsbrowser.lua:124
 msgid "Import cookies"
 msgstr "কুকি আমদানি করুন"
 
-#: settingsbrowser.lua:124
+#: settingsbrowser.lua:125
 msgid "Clear stored cookies"
 msgstr "সংরক্ষিত কুকি মুছুন"
 
-#: settingsbrowser.lua:144
+#: settingsbrowser.lua:145
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "পড়ার সময় আগে থেকে ডাউনলোড হওয়া অধ্যায় সংখ্যা। 0 দিলে বন্ধ থাকবে।"
 
-#: settingsbrowser.lua:154 settingsbrowser.lua:188 settingsbrowser.lua:223
-#: settingsbrowser.lua:253 settingsbrowser.lua:290 settingsbrowser.lua:425
-#: sourcesettingsbrowser.lua:241
+#: settingsbrowser.lua:155 settingsbrowser.lua:189 settingsbrowser.lua:224
+#: settingsbrowser.lua:254 settingsbrowser.lua:291 settingsbrowser.lua:429
+#: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "সেট করুন"
 
-#: settingsbrowser.lua:163 settingsbrowser.lua:266
+#: settingsbrowser.lua:164 settingsbrowser.lua:267
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:177
+#: settingsbrowser.lua:178
 msgid "Storage limit (MB)"
 msgstr "স্টোরেজ সীমা (MB)"
 
-#: settingsbrowser.lua:178
+#: settingsbrowser.lua:179
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "সবচেয়ে পুরোনো অধ্যায় আগে মোছা হবে। 0 মানে কোনো সীমা নেই।"
 
-#: settingsbrowser.lua:197
+#: settingsbrowser.lua:198
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:212
+#: settingsbrowser.lua:213
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -616,7 +624,7 @@ msgstr ""
 "রিপোজিটরি ইনডেক্স URL। ডিফল্টের জন্য ফাঁকা রাখুন:\n"
 "%1"
 
-#: settingsbrowser.lua:243
+#: settingsbrowser.lua:244
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -624,21 +632,21 @@ msgstr ""
 "প্রতি সোর্সে একসাথে অনুরোধের সংখ্যা। ফাঁকা বা 0 দিলে ডিফল্ট (8)। বেশি হলে বেশি "
 "মেমোরি লাগে।"
 
-#: settingsbrowser.lua:280
+#: settingsbrowser.lua:281
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
 "Cloudflare চ্যালেঞ্জ সমাধান করে, যেমন localhost:8191। বন্ধ করতে ফাঁকা রাখুন।"
 
-#: settingsbrowser.lua:282
+#: settingsbrowser.lua:283
 msgid "host:port"
 msgstr "host:port"
 
-#: settingsbrowser.lua:308
+#: settingsbrowser.lua:309
 msgid "Long-press a cookies.txt to import it"
 msgstr "আমদানি করতে cookies.txt-এ চেপে ধরুন"
 
-#: settingsbrowser.lua:318
+#: settingsbrowser.lua:319
 msgid ""
 "Import failed:\n"
 "%1"
@@ -646,19 +654,19 @@ msgstr ""
 "আমদানি ব্যর্থ হয়েছে:\n"
 "%1"
 
-#: settingsbrowser.lua:328
+#: settingsbrowser.lua:329
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr "সব সোর্সের কুকি মুছবেন? এটি ফেরানো যাবে না।"
 
-#: settingsbrowser.lua:329
+#: settingsbrowser.lua:330
 msgid "Clear"
 msgstr "মুছুন"
 
-#: settingsbrowser.lua:334
+#: settingsbrowser.lua:335
 msgid "Cookies cleared."
 msgstr "কুকি মুছে ফেলা হয়েছে।"
 
-#: settingsbrowser.lua:336
+#: settingsbrowser.lua:337
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -666,23 +674,25 @@ msgstr ""
 "কুকি মুছা যায়নি:\n"
 "%1"
 
-#: settingsbrowser.lua:402
+#: settingsbrowser.lua:405
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 নেই বা সেখানে লেখা যায় না।"
 
-#: settingsbrowser.lua:407
-msgid "The Ephemeral storage path can't be the normal downloads folder."
+#: settingsbrowser.lua:411
+msgid ""
+"The Ephemeral storage path can't be, contain, or be inside the normal "
+"downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:415
+#: settingsbrowser.lua:419
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "অস্থায়ী মোডে অধ্যায় কোথায় সংরক্ষিত হবে।"
 
-#: settingsbrowser.lua:493
+#: settingsbrowser.lua:497
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "অস্থায়ী মোডে আগে থেকে নামানো 1টি অধ্যায়ে সীমিত।"
 
-#: settingsbrowser.lua:503
+#: settingsbrowser.lua:507
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "অস্থায়ী মোডে স্টোরেজ সীমা বন্ধ।"
 
@@ -718,11 +728,11 @@ msgstr ""
 "সেটিংস লোড করা যায়নি:\n"
 "%1"
 
-#: sourcesettingsbrowser.lua:122
+#: sourcesettingsbrowser.lua:121
 msgid "This source has no configurable settings."
 msgstr "এই সোর্সের কোনো কনফিগারযোগ্য সেটিংস নেই।"
 
-#: sourcesettingsbrowser.lua:132
+#: sourcesettingsbrowser.lua:131
 msgid ""
 "Could not save setting:\n"
 "%1"
@@ -730,6 +740,17 @@ msgstr ""
 "সেটিং সংরক্ষণ করা যায়নি:\n"
 "%1"
 
-#: subprocess.lua:144
+#: subprocess.lua:147
+#, fuzzy
+msgid "command failed"
+msgstr ""
+"ডাউনলোড ব্যর্থ হয়েছে:\n"
+"%1"
+
+#: subprocess.lua:153
 msgid "command produced no output"
 msgstr "কমান্ড কোনো আউটপুট দেয়নি"
+
+#: subprocess.lua:167
+msgid "Invalid response from aidoku-run"
+msgstr ""

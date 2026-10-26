@@ -220,7 +220,7 @@ function Store:isBookmarked(source_key, manga_key)
 end
 
 function Store:addBookmark(source_key, source_path, manga_key, title, cover)
-    pstep(nil, function()
+    return pstep(false, function()
         local stmt = self.db:prepare([[
             INSERT INTO library (source_key, manga_key, source_path, title, cover, added_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -231,15 +231,17 @@ function Store:addBookmark(source_key, source_path, manga_key, title, cover)
         stmt:bind(source_key, manga_key, source_path, title, cover, os.time())
         stmt:step()
         stmt:close()
+        return true
     end)
 end
 
 function Store:removeBookmark(source_key, manga_key)
-    pstep(nil, function()
+    return pstep(false, function()
         local stmt = self.db:prepare("DELETE FROM library WHERE source_key=? AND manga_key=?")
         stmt:bind(source_key, manga_key)
         stmt:step()
         stmt:close()
+        return true
     end)
 end
 
@@ -299,7 +301,7 @@ function Store:lastReadAt(source_key, manga_key)
 end
 
 function Store:markLastRead(source_key, manga_key)
-    pstep(nil, function()
+    return pstep(false, function()
         local stmt = self.db:prepare([[
             INSERT INTO last_read (source_key, manga_key, last_read_at) VALUES (?, ?, ?)
             ON CONFLICT (source_key, manga_key) DO UPDATE SET last_read_at=excluded.last_read_at
@@ -307,6 +309,7 @@ function Store:markLastRead(source_key, manga_key)
         stmt:bind(source_key, manga_key, os.time())
         stmt:step()
         stmt:close()
+        return true
     end)
 end
 
@@ -329,22 +332,24 @@ function Store:isChapterRead(source_key, manga_key, chapter_key)
 end
 
 function Store:markChapterRead(source_key, manga_key, chapter_key)
-    pstep(nil, function()
+    return pstep(false, function()
         local stmt = self.db:prepare(
             "INSERT OR IGNORE INTO read_chapters (source_key, manga_key, chapter_key) VALUES (?, ?, ?)")
         stmt:bind(source_key, manga_key, chapter_key)
         stmt:step()
         stmt:close()
+        return true
     end)
 end
 
 function Store:markChapterUnread(source_key, manga_key, chapter_key)
-    pstep(nil, function()
+    return pstep(false, function()
         local stmt = self.db:prepare(
             "DELETE FROM read_chapters WHERE source_key=? AND manga_key=? AND chapter_key=?")
         stmt:bind(source_key, manga_key, chapter_key)
         stmt:step()
         stmt:close()
+        return true
     end)
 end
 
@@ -352,11 +357,12 @@ end
 -- last_read alone -- that's "when was this manga last opened" for the
 -- Library sort, not "how far along am I".
 function Store:resetReadChapters(source_key, manga_key)
-    pstep(nil, function()
+    return pstep(false, function()
         local stmt = self.db:prepare("DELETE FROM read_chapters WHERE source_key=? AND manga_key=?")
         stmt:bind(source_key, manga_key)
         stmt:step()
         stmt:close()
+        return true
     end)
 end
 
