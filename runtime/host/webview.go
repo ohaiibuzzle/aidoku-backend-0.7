@@ -44,6 +44,11 @@ type WebView struct {
 	SourceKey             string
 	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
 
+	// OnCookiesDeleted, if set, is told the names webview_delete_cookie
+	// removed from the jar for a page on host, so a durable store can drop
+	// them too. A non-empty domain limits the delete to that domain.
+	OnCookiesDeleted func(host, domain string, names []string)
+
 	// RateLimit, when set (Net.RateLimit), throttles webview_load's
 	// top-level document fetch together with net.* requests.
 	RateLimit *RateLimit
@@ -276,6 +281,53 @@ func LinkWebView(builder wazero.HostModuleBuilder, w *WebView) wazero.HostModule
 		}).
 		Export("webview_add_user_script")
 
+	builder = builder.NewFunctionBuilder().
+		WithFunc(func(ctx context.Context, descriptor int32) int32 {
+			wv, ok := w.Store.Fetch(descriptor).(*webviewContext)
+			if !ok {
+				return int32(jsInvalidHandler)
+			}
+			return w.Store.Store(wv.encodeCookies())
+		}).
+		Export("webview_get_cookies")
+
+	builder = builder.NewFunctionBuilder().
+		WithFunc(func(
+			ctx context.Context, m api.Module,
+			descriptor, namePtr, nameLen, valuePtr, valueLen, domainPtr, domainLen int32,
+		) int32 {
+			wv, ok := w.Store.Fetch(descriptor).(*webviewContext)
+			if !ok {
+				return int32(jsInvalidHandler)
+			}
+			// Like upstream, an empty or absent field is a wildcard, and
+			// nameLen == -1 means delete everything visible.
+			read := func(ptr, n int32) string {
+				if ptr < 0 || n <= 0 {
+					return ""
+				}
+				str, _ := readMemString(m, ptr, n)
+				return str
+			}
+			f := cookieFilter{
+				name:   read(namePtr, nameLen),
+				value:  read(valuePtr, valueLen),
+				domain: strings.TrimPrefix(read(domainPtr, domainLen), "."),
+			}
+			if f.name == "" && nameLen != -1 {
+				return int32(jsMissingCookie)
+			}
+			names := wv.deleteCookies(f)
+			if len(names) == 0 {
+				return int32(jsMissingCookie)
+			}
+			if w.OnCookiesDeleted != nil {
+				w.OnCookiesDeleted(wv.pageURL.Hostname(), f.domain, names)
+			}
+			return int32(jsSuccess)
+		}).
+		Export("webview_delete_cookie")
+
 	return builder
 }
 
@@ -321,7 +373,7 @@ func (wv *webviewContext) loadHTML(htmlStr string, pageURL *url.URL) {
 					}
 					wv.runScript(vm, string(body))
 				} else if text, ok := dataOf(scriptNode); ok {
-					// dataOf, not nodeText: nodeText deliberately skips
+					// dataOf, not domText: domText deliberately skips
 					// descending into <script>/<style> content when called
 					// on some *other* element that merely contains one,
 					// which would make this always see an empty string

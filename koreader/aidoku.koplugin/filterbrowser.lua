@@ -5,9 +5,10 @@ are skipped). Values live in self.values, keyed by filter ID, shaped for
 aidoku-run's `search` filters.json argument -- engine.lua's Engine:search
 builds that file from self.values.
 
-CAUTION: the "check" filter value convention (1/-1/0 = include/exclude/
-unset) is UNVERIFIED against a real compiled source; verify before relying
-on it.
+A "check" value is 0 off / 1 on / 2 exclude (Aidoku's CheckFilterView and
+aidoku-rs's FilterValue::Check). No entry in self.values means the guest
+applies the filter's default, so a non-default state is always stored
+explicitly (including 0 for a default-on filter).
 ]]
 
 local Menu = require("ui/widget/menu")
@@ -92,12 +93,21 @@ local function multiselectSummary(filter, value)
     return T(_("%1: %2 included, %3 excluded"), filterLabel(filter), n_in, n_ex)
 end
 
+-- upstream: default true -> 1, false -> 2, absent -> 0. CheckDefaultValue may
+-- be KOReader json's null sentinel, hence the type check.
+local function checkDefault(filter)
+    local d = filter.CheckDefaultValue
+    if type(d) ~= "boolean" then return 0 end
+    return d and 1 or 2
+end
+
 local function checkSummary(filter, value)
     local label = (type(filter.CheckName) == "string" and filter.CheckName ~= "") and filter.CheckName or filterLabel(filter)
-    if not value or value.checkValue == 0 then
+    local v = value and value.checkValue or checkDefault(filter)
+    if v == 0 then
         return T(_("%1: %2"), label, _("unset"))
     end
-    return T(_("%1: %2"), label, value.checkValue > 0 and _("yes") or _("no"))
+    return T(_("%1: %2"), label, v == 1 and _("yes") or _("no"))
 end
 
 function FilterBrowser:summary(filter)
@@ -273,16 +283,17 @@ function FilterBrowser:pickMultiselect(filter)
 end
 
 function FilterBrowser:cycleCheck(filter)
+    local default = checkDefault(filter)
     local current = self.values[filter.ID]
-    local value = current and current.checkValue or 0
+    local value = current and current.checkValue or default
     if value == 0 then
         value = 1
-    elseif value > 0 and filter.CheckCanExclude then
-        value = -1
+    elseif value == 1 and filter.CheckCanExclude then
+        value = 2
     else
         value = 0
     end
-    if value == 0 then
+    if value == default then
         self.values[filter.ID] = nil
     else
         self.values[filter.ID] = { type = "check", id = filter.ID, checkValue = value }

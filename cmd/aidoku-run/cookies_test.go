@@ -99,3 +99,71 @@ func TestMergeCookiesKeepsCorruptFile(t *testing.T) {
 		t.Fatalf("merge result: %+v %v", got, corrupt)
 	}
 }
+
+func TestRemoveCookieEntries(t *testing.T) {
+	file := func() cookieFile {
+		return cookieFile{
+			"www.example.com": {{Name: "host", Path: "/"}, {Name: "keep", Path: "/"}, {Name: "deep", Path: "/a"}},
+			"example.com":     {{Name: "sub", IncludeSubdomains: true}, {Name: "hostonly"}},
+			"other.test":      {{Name: "host"}},
+		}
+	}
+	names := func(f cookieFile, domain string) string {
+		var out []string
+		for _, e := range f[domain] {
+			out = append(out, e.Name)
+		}
+		return strings.Join(out, ",")
+	}
+	const host = "www.example.com"
+
+	f := file()
+	if removeCookieEntries(f, host, "", []string{"missing"}) {
+		t.Error("nothing matched, but reported a change (would rewrite cookies.json for nothing)")
+	}
+	f = file()
+	if !removeCookieEntries(f, host, "", []string{"host", "deep", "sub", "hostonly"}) {
+		t.Fatal("expected a change")
+	}
+	if got := names(f, host); got != "keep,deep" {
+		t.Errorf("page host entries = %q (a non-/ path can't be expired in the jar)", got)
+	}
+	if got := names(f, "example.com"); got != "hostonly" {
+		t.Errorf("parent entries = %q (a parent's host-only cookie isn't visible)", got)
+	}
+	if got := names(f, "other.test"); got != "host" {
+		t.Errorf("another site's entry was touched: %q", got)
+	}
+
+	f = file()
+	removeCookieEntries(f, host, "example.com", []string{"host"})
+	if got := names(f, host); !strings.Contains(got, "host") {
+		t.Errorf("a domain-limited delete removed a row on another domain: %q", got)
+	}
+	f = cookieFile{host: {{Name: "only", Path: "/"}}}
+	removeCookieEntries(f, host, "", []string{"only"})
+	if _, ok := f[host]; ok {
+		t.Error("an emptied domain should be dropped")
+	}
+}
+
+func TestForgetCookiesRewritesOnlyWhenNeeded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cookies.json")
+	if err := writeCookieFile(path, cookieFile{"example.com": {{Name: "a", Path: "/"}}}); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.Stat(path)
+	if err := forgetCookies(path, "example.com", "", []string{"zzz"}); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.Stat(path)
+	if !os.SameFile(before, after) {
+		t.Error("cookies.json was replaced though nothing was removed")
+	}
+	if err := forgetCookies(path, "example.com", "", []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := readCookieFile(path); len(f) != 0 {
+		t.Errorf("cookie survived: %v", f)
+	}
+}

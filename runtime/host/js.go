@@ -34,6 +34,7 @@ const (
 	jsInvalidHandler  jsResult = -4
 	jsInvalidRequest  jsResult = -5
 	jsInvalidRuleList jsResult = -6
+	jsMissingCookie   jsResult = -8
 )
 
 // JS implements the `js` namespace's context_* functions (Imports/JavaScript.swift)

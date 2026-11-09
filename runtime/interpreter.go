@@ -49,6 +49,11 @@ type Config struct {
 	// store on disk) across process restarts.
 	OnFlareSolverrCookies func(u *url.URL, cookies []*http.Cookie)
 
+	// OnCookiesDeleted, if set, is called after a source's webview deletes
+	// cookies, so a durable store can drop them too (see
+	// host.WebView.OnCookiesDeleted).
+	OnCookiesDeleted func(host, domain string, names []string)
+
 	// NetworkConcurrency bounds how many requests a guest's net.send_all
 	// call runs at once (see host.Net.MaxConcurrency). <= 0 (the default)
 	// falls back to the host package's own default.
@@ -196,6 +201,7 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 		SourceKey:             sourceKey,
 		FlareSolverr:          flareSolverr,
 		OnFlareSolverrCookies: config.OnFlareSolverrCookies,
+		OnCookiesDeleted:      config.OnCookiesDeleted,
 		RateLimit:             i.net.RateLimit(),
 	}
 	jsBuilder := host.LinkJS(rt.NewHostModuleBuilder("js"), js)

@@ -217,7 +217,22 @@ func strPtrEqual(a, b *string) bool {
 	return *a == *b
 }
 
-func (i *Interpreter) ProcessPageImage(ctx context.Context, response models.Response, context *models.PageContext) (int32, error) {
+// storePageContext stores pc for a guest call; nil is the guest's None (-1,
+// which RemoveValue ignores).
+func (i *Interpreter) storePageContext(pc models.PageContext) int32 {
+	if pc == nil {
+		return -1
+	}
+	w := postcard.NewWriter()
+	w.WriteLen(len(pc))
+	for k, v := range pc {
+		w.WriteString(k)
+		w.WriteString(v)
+	}
+	return i.storeBytes(w.Bytes())
+}
+
+func (i *Interpreter) ProcessPageImage(ctx context.Context, response models.Response, pageContext models.PageContext) (int32, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -226,17 +241,8 @@ func (i *Interpreter) ProcessPageImage(ctx context.Context, response models.Resp
 	responsePtr := i.storeBytes(rw.Bytes())
 	defer i.RemoveValue(responsePtr)
 
-	contextPtr := int32(-1)
-	if context != nil {
-		cw := postcard.NewWriter()
-		cw.WriteLen(len(*context))
-		for k, v := range *context {
-			cw.WriteString(k)
-			cw.WriteString(v)
-		}
-		contextPtr = i.storeBytes(cw.Bytes())
-		defer i.RemoveValue(contextPtr)
-	}
+	contextPtr := i.storePageContext(pageContext)
+	defer i.RemoveValue(contextPtr)
 
 	data, err := i.call(ctx, "process_page_image", api.EncodeI32(responsePtr), api.EncodeI32(contextPtr))
 	if err != nil {
@@ -318,24 +324,15 @@ func (i *Interpreter) GetListings(ctx context.Context) ([]models.Listing, error)
 // descriptor, plain-postcard-encoded, as its result — not the request
 // itself. We fetch the already-built *host.NetRequest from the Store using
 // that descriptor.
-func (i *Interpreter) GetImageRequest(ctx context.Context, url string, pageContext *models.PageContext) (*host.NetRequest, error) {
+func (i *Interpreter) GetImageRequest(ctx context.Context, url string, pageContext models.PageContext) (*host.NetRequest, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	urlPtr := i.storeEncodedString(url)
 	defer i.RemoveValue(urlPtr)
 
-	contextPtr := int32(-1)
-	if pageContext != nil {
-		cw := postcard.NewWriter()
-		cw.WriteLen(len(*pageContext))
-		for k, v := range *pageContext {
-			cw.WriteString(k)
-			cw.WriteString(v)
-		}
-		contextPtr = i.storeBytes(cw.Bytes())
-		defer i.RemoveValue(contextPtr)
-	}
+	contextPtr := i.storePageContext(pageContext)
+	defer i.RemoveValue(contextPtr)
 
 	data, err := i.call(ctx, "get_image_request", api.EncodeI32(urlPtr), api.EncodeI32(contextPtr))
 	if err != nil {

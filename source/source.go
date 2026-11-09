@@ -426,17 +426,6 @@ func (s *Source) GetHome(ctx context.Context, onPartial func(models.Home)) (*mod
 	return result, nil
 }
 
-func (s *Source) ProcessPageImage(ctx context.Context, response models.Response, pageContext *models.PageContext) (*int32, error) {
-	if !s.Runner.Features.ProcessesPages {
-		return nil, nil
-	}
-	ref, err := s.Runner.ProcessPageImage(ctx, response, pageContext)
-	if err != nil {
-		return nil, err
-	}
-	return &ref, nil
-}
-
 // Restart recovers this source's runtime after a WASM trap (e.g. a guest
 // panic) by re-instantiating the loaded main.wasm bytes fresh, without
 // reloading the .aix from disk. See runtime.Interpreter.Restart for what
@@ -490,7 +479,7 @@ func (s *Source) GetSettings(ctx context.Context) ([]models.Setting, error) {
 	return append(append([]models.Setting{}, s.StaticSettings...), dynamic...), nil
 }
 
-func (s *Source) GetImageRequest(ctx context.Context, url string, pageContext *models.PageContext) (*host.NetRequest, error) {
+func (s *Source) GetImageRequest(ctx context.Context, url string, pageContext models.PageContext) (*host.NetRequest, error) {
 	if !s.Runner.Features.ProvidesImageRequests {
 		return nil, models.ErrUnimplemented()
 	}

@@ -6,11 +6,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"image"
 	"image/png"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,23 +20,18 @@ import (
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime/host"
 )
 
-// defaultPageUserAgent is sent on page image requests when a page's
-// Context doesn't already specify one. Plenty of image CDNs treat Go's
-// default "Go-http-client" UA as a bot signal; Context (set by the source
-// itself, e.g. for Referer/UA-sensitive hosts) always takes precedence
-// since it's applied after this default.
-const defaultPageUserAgent = "Mozilla/5.0 (iPad; CPU iPad OS 26_5_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/605.1.15"
-
 // downloadPage resolves a single Page's content to its raw image bytes,
-// handling all three PageContent kinds: URL (HTTP GET, with Context
-// applied as request headers), Image (a host.Store descriptor holding a
+// handling all three PageContent kinds: URL (HTTP GET, fetched via the
+// source's get_image_request and then run through process_page_image if the
+// source has one), Image (a host.Store descriptor holding a
 // previously-decoded image.Image or raw bytes), and ZipFile (a zip
 // downloaded from URL, with the page being one entry inside it, cached in
-// zipCache across a chapter's pages).
+// zipCache across a chapter's pages). Like upstream, only URL pages are
+// processed.
 func (s *Source) downloadPage(ctx context.Context, page models.Page, zipCache map[string][]byte) ([]byte, error) {
 	switch page.Content.Kind {
 	case models.PageContentKindURL:
-		return s.downloadURL(ctx, page.Content.URL, page.Content.Context)
+		return s.downloadURLPage(ctx, page.Content.URL, page.Content.Context)
 	case models.PageContentKindImage:
 		return s.resolveImageRef(page.Content.ImageRef)
 	case models.PageContentKindZipFile:
@@ -46,69 +39,6 @@ func (s *Source) downloadPage(ctx context.Context, page models.Page, zipCache ma
 	default:
 		return nil, fmt.Errorf("source: page content kind %d has no downloadable image", page.Content.Kind)
 	}
-}
-
-func (s *Source) downloadURL(ctx context.Context, rawURL string, headers models.PageContext) ([]byte, error) {
-	if rawURL == "" {
-		return nil, fmt.Errorf("source: page has empty URL")
-	}
-	req, err := s.buildImageRequest(ctx, rawURL, headers)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := host.SharedHTTPClient().Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("source: fetching %s: %w", rawURL, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("source: fetching %s: unexpected status %s", rawURL, resp.Status)
-	}
-
-	data, err := host.ReadAllLimited(resp.Body, host.MaxResponseBytes)
-	if err != nil {
-		return nil, fmt.Errorf("source: reading %s: %w", rawURL, err)
-	}
-	return data, nil
-}
-
-// buildImageRequest builds the outgoing HTTP request for a page-content URL
-// (a single image, or a ZipFile page's containing zip -- downloadZipEntry
-// reaches here via downloadURL too, since it's the same class of fetch).
-func (s *Source) buildImageRequest(ctx context.Context, rawURL string, headers models.PageContext) (*http.Request, error) {
-	netReq, err := s.GetImageRequest(ctx, rawURL, &headers)
-	if err == nil {
-		req, err := netReq.ToHTTPRequest(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("source: building guest-supplied request for %s: %w", rawURL, err)
-		}
-		// ToHTTPRequest returns (nil, nil) when the guest's NetRequest never
-		// had its URL set (same sentinel net.go's send() already checks for)
-		// -- fall through to the default rawURL-based request below instead
-		// of dereferencing a nil *http.Request.
-		if req != nil {
-			if req.Header.Get("User-Agent") == "" {
-				req.Header.Set("User-Agent", defaultPageUserAgent)
-			}
-			return req, nil
-		}
-	} else {
-		var srcErr *models.SourceError
-		if !errors.As(err, &srcErr) || srcErr.Kind != models.SourceErrorUnimplemented {
-			return nil, fmt.Errorf("source: getting image request for %s: %w", rawURL, err)
-		}
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("source: building request for %s: %w", rawURL, err)
-	}
-	req.Header.Set("User-Agent", defaultPageUserAgent)
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	return req, nil
 }
 
 func (s *Source) resolveImageRef(ref models.ImageRef) ([]byte, error) {
@@ -136,7 +66,7 @@ func (s *Source) downloadZipEntry(ctx context.Context, zipURL, filePath string, 
 	data, ok := cache[zipURL]
 	if !ok {
 		var err error
-		data, err = s.downloadURL(ctx, zipURL, nil)
+		data, err = s.downloadURL(ctx, zipURL)
 		if err != nil {
 			return nil, fmt.Errorf("source: downloading zip %s: %w", zipURL, err)
 		}

@@ -27,7 +27,7 @@ import (
 // them calls back into one of the small, fixed RegisterHostFunc/RegisterFunc
 // dispatchers below. It reuses the same *nethtml.Node tree and engine-
 // agnostic helpers html.go/htmlnode.go already have (attrOf/setAttr/
-// nodeText/elementChildren/...) — no duplicated HTML logic.
+// elementChildren/...) — no duplicated HTML logic.
 //
 // Node identity is preserved: nodeRegistry hands each *nethtml.Node a stable
 // handle, and Element.wrap (below) caches one JS wrapper per handle — so two
@@ -440,9 +440,9 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		}
 		switch arg(args, 1) {
 		case "textContent":
-			return nodeText(n, false), nil
+			return domText(n, false), nil
 		case "innerText":
-			return nodeText(n, true), nil
+			return domText(n, true), nil
 		case "innerHTML":
 			s, _ := innerHTML(n)
 			return s, nil
@@ -568,8 +568,8 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		// A real DOM raises HierarchyRequestError when the node being
 		// inserted is the target itself or one of its ancestors; net/html's
 		// AppendChild has no such check. Accepting it leaves a cycle in the
-		// child graph, and every host traversal of that graph (nodeText/
-		// renderNode in htmlnode.go, queryNodes below) recurses without a
+		// child graph, and every host traversal of that graph (domText and
+		// queryNodes below, renderNode in htmlnode.go) recurses without a
 		// bound, so the cycle aborts the whole process with an
 		// unrecoverable "fatal error: stack overflow" -- reachable from any
 		// page script through webview_load. Checked before the detach below
@@ -664,7 +664,7 @@ func (d *domBinder) registerDOM(vm *quickjs.VM) error {
 		if len(matches) == 0 {
 			return "", nil
 		}
-		return nodeText(matches[0], true), nil
+		return domText(matches[0], true), nil
 	})); err != nil {
 		return err
 	}
@@ -928,4 +928,29 @@ func newBareElement(tag string) *nethtml.Node {
 type cookieAccessor interface {
 	Get() string
 	Set(setCookieHeader string)
+}
+
+// domText is the webview's textContent: descendant text nodes concatenated,
+// excluding <script>/<style>, optionally with whitespace collapsed. The html.*
+// imports use elementText, which follows SwiftSoup's spacing rules instead.
+func domText(n *nethtml.Node, trim bool) string {
+	var sb strings.Builder
+	var walk func(*nethtml.Node)
+	walk = func(node *nethtml.Node) {
+		if node == nil || isTextLikeContainer(node) {
+			return
+		}
+		if node.Type == nethtml.TextNode {
+			sb.WriteString(node.Data)
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	s := sb.String()
+	if !trim {
+		return s
+	}
+	return strings.Join(strings.Fields(s), " ")
 }

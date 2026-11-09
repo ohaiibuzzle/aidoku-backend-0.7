@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -10,6 +12,22 @@ import (
 	"testing"
 	"time"
 )
+
+// fakeAix builds a minimal .aix (zip with Payload/source.json) for id.
+func fakeAix(t *testing.T, id string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("Payload/source.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	json.NewEncoder(w).Encode(map[string]any{"info": map[string]any{"id": id, "name": id, "version": 1}})
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
 
 // TestFetchIndexResolvesRelativeURLs exercises the common real-world shape:
 // an index.min.json whose iconURL/downloadURL are relative to the index
@@ -63,7 +81,7 @@ func TestFetchIndexResolvesRelativeURLs(t *testing.T) {
 // downloaded .aix using the "<id>-v<version>.aix" convention regardless of
 // what the downloadURL itself is named.
 func TestInstallDownloadsAndNamesByIDAndVersion(t *testing.T) {
-	const payload = "fake aix contents"
+	payload := string(fakeAix(t, "en.example"))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/index.min.json", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(Index{
@@ -111,7 +129,7 @@ func TestInstallReplacesOlderVersion(t *testing.T) {
 		})
 	})
 	mux.HandleFunc("/new.bin", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("v7 contents"))
+		w.Write(fakeAix(t, "en.example"))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -209,7 +227,7 @@ func TestInstallLeavesNoTempFileOnSuccess(t *testing.T) {
 		})
 	})
 	mux.HandleFunc("/payload.bin", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("payload"))
+		w.Write(fakeAix(t, "en.example"))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -255,7 +273,7 @@ func TestInstallDoesNotTouchFinalPathUntilComplete(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
 		<-release
-		w.Write([]byte("payload"))
+		w.Write(fakeAix(t, "en.example"))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -307,5 +325,41 @@ func TestRemoveOtherVersionsSparesIDsSharingAPrefix(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, n)); (err == nil) != want {
 			t.Errorf("%s exists=%v, want %v", n, err == nil, want)
 		}
+	}
+}
+
+// TestInstallRejectsInvalidDownload: a 200 that is not a zip (captive
+// portal) or carries another source's manifest must leave the old version
+// in place and no temp file behind.
+func TestInstallRejectsInvalidDownload(t *testing.T) {
+	bodies := map[string][]byte{
+		"not-zip":  []byte("<html>please log in</html>"),
+		"wrong-id": fakeAix(t, "en.other"),
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/index.min.json", func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(Index{
+					Sources: []Source{{ID: "en.example", Version: 7, DownloadURL: "new.bin"}},
+				})
+			})
+			mux.HandleFunc("/new.bin", func(w http.ResponseWriter, r *http.Request) { w.Write(body) })
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
+
+			destDir := t.TempDir()
+			oldPath := filepath.Join(destDir, "en.example-v6.aix")
+			if err := os.WriteFile(oldPath, []byte("v6 contents"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Install(context.Background(), srv.URL+"/index.min.json", "en.example", destDir); err == nil {
+				t.Fatal("Install: expected error")
+			}
+			entries, _ := os.ReadDir(destDir)
+			if data, err := os.ReadFile(oldPath); err != nil || string(data) != "v6 contents" || len(entries) != 1 {
+				t.Fatalf("old version disturbed: data=%q err=%v entries=%v", data, err, entries)
+			}
+		})
 	}
 }

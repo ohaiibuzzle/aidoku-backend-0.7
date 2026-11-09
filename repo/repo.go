@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/internal/fsutil"
+	"github.com/ohaiibuzzle/aidokurunner-go/source"
 )
 
 // httpClient bounds how long a stalled server can hold a request before it
@@ -116,9 +117,10 @@ func resolve(base *url.URL, ref string) string {
 
 // Install fetches the repository index at indexURL, downloads the .aix for
 // sourceID, and saves it into destDir as "<id>-v<version>.aix" (the naming
-// convention Aidoku's own build tooling uses). Any other "<id>-v*.aix"
-// already in destDir (an older version of the same source) is removed
-// afterward, so updating a source replaces it in place instead of
+// convention Aidoku's own build tooling uses). The download must be a valid
+// .aix whose manifest id is sourceID, checked before anything is replaced.
+// Any other "<id>-v*.aix" already in destDir (an older version of the same
+// source) is removed afterward, so updating a source replaces it in place instead of
 // accumulating both versions side by side -- which would otherwise leave
 // two installed entries for what the user thinks of as one source, and
 // silently strand anything (library bookmarks, downloaded chapters) still
@@ -145,12 +147,28 @@ func Install(ctx context.Context, indexURL, sourceID, destDir string) (string, e
 		return "", fmt.Errorf("repo: source %q has an invalid id %q", sourceID, src.ID)
 	}
 	name := fmt.Sprintf("%s-v%d.aix", src.ID, src.Version)
-	path, err := download(ctx, src.DownloadURL, destDir, name)
+	tmpPath, err := download(ctx, src.DownloadURL, destDir)
 	if err != nil {
 		return "", err
 	}
+	defer os.Remove(tmpPath) // a no-op once renamed
+
+	// A captive-portal page served as 200 must not replace a working source.
+	m, err := source.ReadManifest(tmpPath)
+	if err == nil && m.Key != src.ID {
+		err = fmt.Errorf("manifest id %q, want %q", m.Key, src.ID)
+	}
+	if err != nil {
+		return "", fmt.Errorf("repo: %s is not a valid source package: %w", src.DownloadURL, err)
+	}
+
+	dest := filepath.Join(destDir, name)
+	if err := os.Rename(tmpPath, dest); err != nil {
+		return "", fmt.Errorf("repo: renaming into %s: %w", dest, err)
+	}
+	_ = fsutil.SyncDir(destDir) // best-effort, see cbz.Writer.Close
 	removeOtherVersions(destDir, src.ID, name)
-	return path, nil
+	return dest, nil
 }
 
 // isValidSourceID reports whether id is safe to use as a filename
@@ -211,10 +229,9 @@ func isDigits(s string) bool {
 	return true
 }
 
-// download streams the body of url into destDir/name, returning the
-// resulting path. The destination directory is created if needed, and a
-// partial file is removed if the copy fails partway through.
-func download(ctx context.Context, url, destDir, name string) (string, error) {
+// download streams the body of url into a synced temp file in destDir, created
+// if needed, and returns its path. Nothing is left behind on failure.
+func download(ctx context.Context, url, destDir string) (path string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("repo: building request: %w", err)
@@ -231,19 +248,22 @@ func download(ctx context.Context, url, destDir, name string) (string, error) {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", fmt.Errorf("repo: creating %s: %w", destDir, err)
 	}
-	dest := filepath.Join(destDir, name)
-
-	// Download to a temp file and rename into place on success (same
-	// pattern as settingsstore.save()/cbz.Writer.Close()), so a kill or
-	// crash mid-copy never leaves a truncated .aix sitting at the final
-	// name -- source.LoadPath would then fail to open it, and
-	// removeOtherVersions above already ran, so there'd be no older
-	// version left to fall back to either.
+	// A temp file renamed into place by Install (same pattern as
+	// settingsstore.save()/cbz.Writer.Close()), so a kill or crash mid-copy
+	// never leaves a truncated .aix at the final name -- source.LoadPath would
+	// then fail to open it, and the old version is removed right after, so
+	// there'd be nothing left to fall back to either.
 	tmp, err := os.CreateTemp(destDir, ".aix-*.tmp")
 	if err != nil {
 		return "", fmt.Errorf("repo: creating temp file in %s: %w", destDir, err)
 	}
 	tmpPath := tmp.Name()
+	defer func() {
+		if err != nil {
+			tmp.Close()
+			os.Remove(tmpPath)
+		}
+	}()
 	// os.CreateTemp always creates with 0600, not the 0644 os.Create used
 	// previously (0666 minus the typical 022 umask); chmod explicitly so
 	// the rename doesn't silently tighten the installed .aix's permissions
@@ -257,25 +277,15 @@ func download(ctx context.Context, url, destDir, name string) (string, error) {
 		err = fmt.Errorf("larger than %d bytes", maxAixBytes)
 	}
 	if err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return "", fmt.Errorf("repo: writing %s: %w", dest, err)
+		return "", fmt.Errorf("repo: writing %s: %w", tmpPath, err)
 	}
 	// fsync before rename: removeOtherVersions deletes the old .aix next, so
 	// a power loss must not leave an empty file as the only copy.
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return "", fmt.Errorf("repo: syncing %s: %w", dest, err)
+		return "", fmt.Errorf("repo: syncing %s: %w", tmpPath, err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return "", fmt.Errorf("repo: closing %s: %w", dest, err)
+		return "", fmt.Errorf("repo: closing %s: %w", tmpPath, err)
 	}
-	if err := os.Rename(tmpPath, dest); err != nil {
-		os.Remove(tmpPath)
-		return "", fmt.Errorf("repo: renaming into %s: %w", dest, err)
-	}
-	_ = fsutil.SyncDir(filepath.Dir(dest)) // best-effort, see cbz.Writer.Close
-	return dest, nil
+	return tmpPath, nil
 }

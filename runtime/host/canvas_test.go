@@ -138,7 +138,7 @@ func TestDecodeImageBoundedRejectsHugeDeclaredSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	data := buf.Bytes()
-	if _, err := decodeImageBounded(data); err != nil {
+	if _, err := DecodeImageBounded(data); err != nil {
 		t.Fatalf("1x1 PNG rejected: %v", err)
 	}
 	// Patch IHDR width/height (bytes 16..23) to 20000x20000 and fix up its
@@ -148,7 +148,28 @@ func TestDecodeImageBoundedRejectsHugeDeclaredSize(t *testing.T) {
 		huge[16+i] = v
 	}
 	binary.BigEndian.PutUint32(huge[29:], crc32.ChecksumIEEE(huge[12:29]))
-	if _, err := decodeImageBounded(huge); err == nil || !strings.Contains(err.Error(), "out of range") {
+	if _, err := DecodeImageBounded(huge); err == nil || !strings.Contains(err.Error(), "out of range") {
 		t.Fatalf("20000x20000 PNG: err = %v, want out-of-range", err)
+	}
+}
+
+func TestCgCropRect(t *testing.T) {
+	b := image.Rect(0, 0, 10, 10)
+	for _, c := range []struct {
+		x, y, w, h float32
+		want       image.Rectangle
+	}{
+		{2, 2, 4, 4, image.Rect(2, 2, 6, 6)},
+		{-3, -3, 6, 6, image.Rect(0, 0, 3, 3)},         // overhang clamps
+		{8, 8, 5, 5, image.Rect(8, 8, 10, 10)},         // overhang clamps
+		{1.5, 1.5, 2, 2, image.Rect(1, 1, 4, 4)},       // rounds outward
+		{5, 5, -3, -3, image.Rect(2, 2, 5, 5)},         // standardized
+		{10, 0, 5, 5, image.Rectangle{}},               // touching edge: empty
+		{20, 20, 5, 5, image.Rectangle{}},              // disjoint
+		{-1e30, 0, 2e30, 10, image.Rect(0, 0, 10, 10)}, // no int overflow
+	} {
+		if got := cgCropRect(b, c.x, c.y, c.w, c.h); got != c.want && !(got.Empty() && c.want.Empty()) {
+			t.Errorf("cgCropRect(%v,%v,%v,%v) = %v, want %v", c.x, c.y, c.w, c.h, got, c.want)
+		}
 	}
 }

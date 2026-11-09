@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -198,6 +199,11 @@ func run(dir, command string, args []string) (err error) {
 		// too (in addition to the in-memory jar), same as `cookie load`.
 		OnFlareSolverrCookies: func(u *url.URL, cookies []*http.Cookie) {
 			_ = persistCookies(cookiePath, cookies) // best-effort: the in-memory jar already has them
+		},
+		// Without this, injectCookies would bring a deleted cookie back on the
+		// next invocation.
+		OnCookiesDeleted: func(host, domain string, names []string) {
+			_ = forgetCookies(cookiePath, host, domain, names) // best-effort, as above
 		},
 		NetworkConcurrency: host.NetworkConcurrencyFromEnv(),
 	}
@@ -671,6 +677,46 @@ func mergeCookies(path string, cookies []*http.Cookie) error {
 		f[domain] = append(merged, incoming...)
 	}
 	return writeCookieFile(path, f)
+}
+
+// forgetCookies removes what a source's webview deleted for host from the
+// cookie store at path, rewriting it only if a row actually went away.
+func forgetCookies(path, host, domain string, names []string) error {
+	return settingsstore.Locked(path, func() error {
+		f, corrupt := readCookieFile(path)
+		if corrupt || !removeCookieEntries(f, host, domain, names) {
+			return nil
+		}
+		return writeCookieFile(path, f)
+	})
+}
+
+// removeCookieEntries drops the entries of f that host could see, that names
+// lists and, if domain is set, that belong to domain, reporting whether any
+// went. Only path "/" entries qualify, matching what the webview can expire
+// in the jar.
+func removeCookieEntries(f cookieFile, host, domain string, names []string) bool {
+	changed := false
+	for key, entries := range f {
+		if domain != "" && key != domain {
+			continue
+		}
+		kept := make([]cookieEntry, 0, len(entries))
+		for _, e := range entries {
+			visible := key == host || (e.IncludeSubdomains && strings.HasSuffix(host, "."+key))
+			if visible && (e.Path == "" || e.Path == "/") && slices.Contains(names, e.Name) {
+				changed = true
+				continue
+			}
+			kept = append(kept, e)
+		}
+		if len(kept) == 0 {
+			delete(f, key)
+		} else {
+			f[key] = kept
+		}
+	}
+	return changed
 }
 
 func cookieEntriesContainName(entries []cookieEntry, name string) bool {

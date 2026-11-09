@@ -65,7 +65,7 @@ func (c *Canvas) client() *http.Client {
 // DecodeImage implements the callback Net expects for its `get_image`
 // binding.
 func (c *Canvas) DecodeImage(data []byte) (int32, bool) {
-	img, err := decodeImageBounded(data)
+	img, err := DecodeImageBounded(data)
 	if err != nil {
 		return 0, false
 	}
@@ -77,7 +77,7 @@ func (c *Canvas) fetchImage(descriptor int32) image.Image {
 	case image.Image:
 		return v
 	case []byte:
-		img, err := decodeImageBounded(v)
+		img, err := DecodeImageBounded(v)
 		if err != nil {
 			return nil
 		}
@@ -95,7 +95,8 @@ func (c *Canvas) fetchImage(descriptor int32) image.Image {
 // because webtoon strips are very tall.
 const maxDecodePixels = 16 << 20
 
-func decodeImageBounded(data []byte) (image.Image, error) {
+// DecodeImageBounded decodes data after checking its declared size.
+func DecodeImageBounded(data []byte) (image.Image, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -194,8 +195,11 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			if img == nil {
 				return int32(canvasInvalidImagePtr)
 			}
-			srcRect := image.Rect(int(srcX), int(srcY), int(srcX+srcWidth), int(srcY+srcHeight))
-			if !finite(srcX, srcY, srcWidth, srcHeight, dstX, dstY, dstWidth, dstHeight) || !srcRect.In(img.Bounds()) {
+			if !finite(srcX, srcY, srcWidth, srcHeight, dstX, dstY, dstWidth, dstHeight) {
+				return int32(canvasInvalidSrcRect)
+			}
+			srcRect := cgCropRect(img.Bounds(), srcX, srcY, srcWidth, srcHeight)
+			if srcRect.Empty() {
 				return int32(canvasInvalidSrcRect)
 			}
 			if int64(srcRect.Dx())*int64(srcRect.Dy()) > maxDecodePixels {
@@ -347,7 +351,7 @@ func LinkCanvas(builder wazero.HostModuleBuilder, c *Canvas) wazero.HostModuleBu
 			if !ok {
 				return int32(canvasInvalidData)
 			}
-			img, err := decodeImageBounded(data)
+			img, err := DecodeImageBounded(data)
 			if err != nil {
 				return int32(canvasInvalidImage)
 			}
@@ -436,6 +440,19 @@ func (c *Canvas) loadBytes(ctx context.Context, location string) ([]byte, error)
 	}
 	defer resp.Body.Close()
 	return ReadAllLimited(resp.Body, 16<<20)
+}
+
+// cgCropRect mirrors CGImage.cropping(to:): the rect is standardized, rounded
+// outward to integral bounds, and clamped to b (empty if they don't overlap).
+// Clamping happens in float64 first so huge guest values can't overflow int.
+func cgCropRect(b image.Rectangle, x, y, w, h float32) image.Rectangle {
+	x0, x1 := min(float64(x), float64(x)+float64(w)), max(float64(x), float64(x)+float64(w))
+	y0, y1 := min(float64(y), float64(y)+float64(h)), max(float64(y), float64(y)+float64(h))
+	clamp := func(v float64, lo, hi int) int { return int(min(max(v, float64(lo)), float64(hi))) }
+	return image.Rect(
+		clamp(math.Floor(x0), b.Min.X, b.Max.X), clamp(math.Floor(y0), b.Min.Y, b.Max.Y),
+		clamp(math.Ceil(x1), b.Min.X, b.Max.X), clamp(math.Ceil(y1), b.Min.Y, b.Max.Y),
+	)
 }
 
 func drawScaled(gc *gg.Context, img image.Image, dstX, dstY, dstWidth, dstHeight float64) {

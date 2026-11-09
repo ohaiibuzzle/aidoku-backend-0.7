@@ -3,12 +3,15 @@ package host
 import (
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 
 	"modernc.org/quickjs"
+
+	"github.com/ohaiibuzzle/aidokurunner-go/postcard"
 )
 
 // These port AidokuRunnerTests.swift's testJavascript scenarios: sync/async
@@ -656,5 +659,51 @@ func TestWebViewFetchPostHeadersBody(t *testing.T) {
 	}
 	if gotMethod != "POST" || gotHeader != "hello" || gotBody != "payload" {
 		t.Fatalf("unexpected request: method=%q header=%q body=%q", gotMethod, gotHeader, gotBody)
+	}
+}
+
+func TestWebViewCookies(t *testing.T) {
+	wv := newTestWebView(t)
+	jar, _ := cookiejar.New(nil)
+	wv.client = &http.Client{Jar: jar}
+	page, _ := url.Parse("https://www.example.com/x")
+	other, _ := url.Parse("https://other.test/")
+	wv.pageURL = page
+	jar.SetCookies(page, []*http.Cookie{{Name: "a", Value: "1"}, {Name: "b", Value: "2", Domain: "example.com"}})
+	jar.SetCookies(other, []*http.Cookie{{Name: "a", Value: "1"}})
+
+	r := postcard.NewReader(wv.encodeCookies())
+	if n, err := r.ReadLen(); err != nil || n != 2 {
+		t.Fatalf("cookie count = %d, %v; want 2", n, err)
+	}
+	if s, _ := r.ReadString(); s != "a" {
+		t.Fatalf("first name = %q", s)
+	}
+
+	if got := wv.deleteCookies(cookieFilter{name: "zzz"}); len(got) != 0 {
+		t.Fatalf("deleting a missing cookie removed %v", got)
+	}
+	if got := wv.deleteCookies(cookieFilter{domain: "unrelated.org"}); len(got) != 0 {
+		t.Fatalf("domain outside the page host removed %v", got)
+	}
+	got := wv.deleteCookies(cookieFilter{name: "b", domain: "example.com"})
+	if len(got) != 1 || got[0] != "b" {
+		t.Fatalf("domain cookie delete reported %v", got)
+	}
+	if got := wv.deleteCookies(cookieFilter{name: "a", domain: "example.com"}); len(got) != 0 {
+		t.Fatalf("a parent-domain delete hit a host-only cookie: %v", got)
+	}
+	jar.SetCookies(page, []*http.Cookie{{Name: "c", Value: "3", Domain: "example.com"}})
+	if got := wv.deleteCookies(cookieFilter{name: "c"}); len(got) != 1 || len(jar.Cookies(page)) != 1 {
+		t.Fatalf("no-domain delete left a parent-domain cookie: %v, jar %v", got, jar.Cookies(page))
+	}
+	if got := jar.Cookies(page); len(got) != 1 || got[0].Name != "a" {
+		t.Fatalf("after delete b: %v", got)
+	}
+	if got := wv.deleteCookies(cookieFilter{}); len(got) != 1 || len(jar.Cookies(page)) != 0 {
+		t.Fatalf("delete all reported %v", got)
+	}
+	if len(jar.Cookies(other)) != 1 {
+		t.Fatal("another site's cookie was touched")
 	}
 }

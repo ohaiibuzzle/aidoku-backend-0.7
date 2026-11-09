@@ -2,6 +2,7 @@ package host
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	nethtml "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -50,43 +51,124 @@ func isTextLikeContainer(n *nethtml.Node) bool {
 	return n != nil && n.Type == nethtml.ElementNode && (n.DataAtom == atom.Script || n.DataAtom == atom.Style)
 }
 
-// nodeText mirrors SwiftSoup's Element.text()/untrimmed text: the
-// concatenation of descendant text nodes, excluding <script>/<style>
-// contents, optionally whitespace-trimmed/collapsed.
-func nodeText(n *nethtml.Node, trim bool) string {
-	var sb strings.Builder
+// jsoup block tags (SwiftSoup Tag.blockTags). Unknown tags are inline.
+var blockTags = map[string]bool{}
+
+func init() {
+	for _, t := range strings.Fields(`html head body frameset script noscript style meta link title frame
+		noframes noembed section nav aside hgroup header footer p h1 h2 h3 h4 h5 h6 ul ol pre listing div
+		blockquote hr address figure figcaption form fieldset center dir applet marquee ins del s dl dt dd
+		li table caption thead tfoot tbody colgroup col tr th td video audio canvas details menu plaintext
+		template article main svg math`) {
+		blockTags[t] = true
+	}
+}
+
+// preservesWhitespace checks n and one level up, like Element.preserveWhitespace.
+func preservesWhitespace(n *nethtml.Node) bool {
+	for i := 0; i < 2 && n != nil && n.Type == nethtml.ElementNode; i++ {
+		switch n.Data {
+		case "pre", "plaintext", "title", "textarea":
+			return true
+		}
+		n = n.Parent
+	}
+	return false
+}
+
+// SwiftSoup's whitespace, narrower than Go's: U+3000 and friends are text.
+const (
+	collapsedSpace = " \t\n\f\r\u00a0" // appendNormalisedWhitespace; NBSP included
+	trimmedSpace   = " \t\n\v\f\r"     // trim(); ASCII only
+)
+
+// appendNormalised mirrors SwiftSoup's appendNormalisedWhitespace: collapse
+// whitespace runs to one space, dropping a space after one already written
+// (and, when stripLeading, at the start of buf).
+func appendNormalised(buf []byte, s string, stripLeading bool) []byte {
+	for _, r := range s {
+		if strings.ContainsRune(collapsedSpace, r) {
+			if len(buf) == 0 && stripLeading || len(buf) > 0 && buf[len(buf)-1] == ' ' {
+				continue
+			}
+			buf = append(buf, ' ')
+		} else {
+			buf = utf8.AppendRune(buf, r)
+		}
+	}
+	return buf
+}
+
+// appendTextNode appends a text node, normalised unless asked not to or its
+// parent preserves whitespace.
+func appendTextNode(buf []byte, n *nethtml.Node, normalise bool) []byte {
+	if !normalise || preservesWhitespace(n.Parent) {
+		return append(buf, n.Data...)
+	}
+	return appendNormalised(buf, n.Data, true)
+}
+
+// separate appends the single space SwiftSoup puts at <br> and block
+// boundaries, unless buf is empty or already ends in one.
+func separate(buf []byte) []byte {
+	if len(buf) > 0 && buf[len(buf)-1] != ' ' {
+		return append(buf, ' ')
+	}
+	return buf
+}
+
+// elementText mirrors SwiftSoup Element.text(trimAndNormaliseWhitespace:).
+func elementText(n *nethtml.Node, trim bool) string {
+	var buf []byte
 	var walk func(*nethtml.Node)
 	walk = func(node *nethtml.Node) {
-		if node == nil || isTextLikeContainer(node) {
+		if isTextLikeContainer(node) { // script/style are DataNodes upstream
 			return
 		}
-		if node.Type == nethtml.TextNode {
-			sb.WriteString(node.Data)
+		switch node.Type {
+		case nethtml.TextNode:
+			buf = appendTextNode(buf, node, trim)
+			return
+		case nethtml.ElementNode:
+			if blockTags[node.Data] || node.DataAtom == atom.Br {
+				buf = separate(buf)
+			}
 		}
 		for c := node.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
 		}
 	}
 	walk(n)
-	s := sb.String()
 	if !trim {
-		return s
+		return string(buf)
 	}
-	fields := strings.Fields(s)
-	return strings.Join(fields, " ")
+	// Upstream's paths differ: leading whitespace or a lone text child trims
+	// both ends; otherwise only a trailing space does, so a preserved "\n"
+	// after several child nodes survives.
+	s := strings.TrimLeft(string(buf), trimmedSpace)
+	loneText := n.FirstChild != nil && n.FirstChild == n.LastChild && n.FirstChild.Type == nethtml.TextNode
+	if len(s) != len(buf) || loneText || strings.HasSuffix(s, " ") {
+		s = strings.TrimRight(s, trimmedSpace)
+	}
+	return s
 }
 
-// ownText mirrors Element.ownText(): direct text-node children only, not
-// descending into child elements.
+// ownText mirrors Element.ownText(): direct text children, with a space at
+// <br>, not descending into child elements.
 func ownText(n *nethtml.Node) string {
-	var sb strings.Builder
+	if isTextLikeContainer(n) {
+		return ""
+	}
+	var buf []byte
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == nethtml.TextNode {
-			sb.WriteString(c.Data)
+		switch {
+		case c.Type == nethtml.TextNode:
+			buf = appendTextNode(buf, c, true)
+		case c.Type == nethtml.ElementNode && c.DataAtom == atom.Br:
+			buf = separate(buf)
 		}
 	}
-	fields := strings.Fields(sb.String())
-	return strings.Join(fields, " ")
+	return strings.Trim(string(buf), trimmedSpace)
 }
 
 func attrOf(n *nethtml.Node, key string) (string, bool) {
@@ -189,7 +271,7 @@ func removeAllChildren(n *nethtml.Node) {
 // resulting sibling nodes, suitable for use as new children/insertions.
 func parseFragmentNodes(htmlStr string) ([]*nethtml.Node, error) {
 	context := &nethtml.Node{Type: nethtml.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := nethtml.ParseFragment(strings.NewReader(htmlStr), context)
+	nodes, err := nethtml.ParseFragmentWithOptions(strings.NewReader(htmlStr), context, nethtml.ParseOptionEnableScripting(false))
 	if err != nil {
 		return nil, err
 	}

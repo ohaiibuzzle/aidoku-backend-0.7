@@ -4,6 +4,8 @@ import (
 	"context"
 	stdhtml "html"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/andybalholm/cascadia"
@@ -53,7 +55,7 @@ func NewHtml(store *Store) *Html {
 // ParseHTML implements the callback Net expects for its `html` binding
 // (net.html(): parse a fetched response body as a document).
 func (h *Html) ParseHTML(data []byte, baseURL string) (int32, error) {
-	root, err := nethtml.Parse(strings.NewReader(string(data)))
+	root, err := nethtml.ParseWithOptions(strings.NewReader(string(data)), nethtml.ParseOptionEnableScripting(false))
 	if err != nil {
 		return 0, err
 	}
@@ -96,7 +98,7 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 			if !ok {
 				return int32(htmlInvalidString)
 			}
-			root, err := nethtml.Parse(strings.NewReader(htmlStr))
+			root, err := nethtml.ParseWithOptions(strings.NewReader(htmlStr), nethtml.ParseOptionEnableScripting(false))
 			if err != nil {
 				return int32(htmlInvalidHTML)
 			}
@@ -537,65 +539,37 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 			if !ok {
 				return int32(htmlInvalidString)
 			}
-			switch v := item.(type) {
-			case elementList:
-				for _, n := range v {
-					if val, ok := resolveAbsAttr(h, n, key); ok {
-						return h.Store.Store(val)
-					}
-				}
-				return int32(htmlNoResult)
-			case *nethtml.Node:
-				if val, ok := resolveAbsAttr(h, v, key); ok {
-					return h.Store.Store(val)
-				}
-				return int32(htmlNoResult)
-			default:
+			nodes, ok := nodesOf(item)
+			if !ok {
 				return int32(htmlInvalidDescriptor)
 			}
+			// Elements.attr: first element that has the attribute, else "".
+			for _, n := range nodes {
+				val := resolveAbsAttr(h, n, key)
+				if _, has := attrOf(n, key); has || val != "" {
+					return h.Store.Store(val)
+				}
+			}
+			return h.Store.Store("")
 		}).
 		Export("attr")
 
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, descriptor int32) int32 {
-			item := h.Store.Fetch(descriptor)
-			switch v := item.(type) {
-			case elementList:
-				if len(v) == 0 {
-					return int32(htmlNoResult)
-				}
-				s, err := renderNode(v[0])
-				if err != nil {
-					return int32(htmlNoResult)
-				}
-				return h.Store.Store(s)
-			case *nethtml.Node:
-				s, err := renderNode(v)
-				if err != nil {
-					return int32(htmlNoResult)
-				}
-				return h.Store.Store(s)
-			default:
-				return int32(htmlInvalidDescriptor)
-			}
+			return h.storeHTML(descriptor, renderNode)
 		}).
 		Export("outer_html")
 
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, descriptor int32) int32 {
-			item := h.Store.Fetch(descriptor)
-			switch v := item.(type) {
-			case elementList:
-				for _, n := range v {
-					removeNode(n)
-				}
-				return int32(htmlSuccess)
-			case *nethtml.Node:
-				removeNode(v)
-				return int32(htmlSuccess)
-			default:
+			nodes, ok := nodesOf(h.Store.Fetch(descriptor))
+			if !ok {
 				return int32(htmlInvalidDescriptor)
 			}
+			for _, n := range nodes {
+				removeNode(n)
+			}
+			return int32(htmlSuccess)
 		}).
 		Export("remove")
 
@@ -634,26 +608,7 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, descriptor int32) int32 {
-			item := h.Store.Fetch(descriptor)
-			switch v := item.(type) {
-			case elementList:
-				if len(v) == 0 {
-					return int32(htmlNoResult)
-				}
-				s, err := innerHTML(v[0])
-				if err != nil {
-					return int32(htmlNoResult)
-				}
-				return h.Store.Store(s)
-			case *nethtml.Node:
-				s, err := innerHTML(v)
-				if err != nil {
-					return int32(htmlNoResult)
-				}
-				return h.Store.Store(s)
-			default:
-				return int32(htmlInvalidDescriptor)
-			}
+			return h.storeHTML(descriptor, innerHTML)
 		}).
 		Export("html")
 
@@ -666,50 +621,127 @@ func (h *Html) selectImpl(m api.Module, descriptor, queryOff, queryLen int32) in
 	if !ok {
 		return int32(htmlInvalidString)
 	}
-	sel, err := cascadia.ParseGroup(query)
+	roots, ok := nodesOf(item)
+	if !ok {
+		return int32(htmlInvalidDescriptor)
+	}
+	out, err := selectFrom(roots, query)
 	if err != nil {
 		return int32(htmlInvalidQuery)
 	}
+	return h.Store.Store(out)
+}
 
-	var roots []*nethtml.Node
-	switch v := item.(type) {
-	case elementList:
-		roots = v
-	case *nethtml.Node:
-		roots = []*nethtml.Node{v}
-	default:
-		return int32(htmlInvalidDescriptor)
+// selectFrom matches like jsoup's Element.select: each root is itself a
+// candidate, which cascadia.QueryAll alone would skip.
+func selectFrom(roots []*nethtml.Node, query string) (elementList, error) {
+	sel, err := cascadia.ParseGroup(rewriteIndexPseudos(query))
+	if err != nil {
+		return nil, err
 	}
-
 	var out elementList
 	seen := make(map[*nethtml.Node]bool)
-	for _, root := range roots {
-		for _, n := range cascadia.QueryAll(root, sel) {
-			if !seen[n] {
-				seen[n] = true
-				out = append(out, n)
-			}
+	add := func(n *nethtml.Node) {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
 		}
 	}
-	return h.Store.Store(out)
+	for _, root := range roots {
+		if root.Type == nethtml.ElementNode && sel.Match(root) {
+			add(root)
+		}
+		for _, n := range cascadia.QueryAll(root, sel) {
+			add(n)
+		}
+	}
+	return out, nil
+}
+
+var indexPseudo = regexp.MustCompile(`:(eq|lt|gt)\(\s*(\d+)\s*\)`)
+
+// rewriteIndexPseudos maps jsoup's 0-based :eq/:lt/:gt onto :nth-child, which
+// counts the same element siblings; cascadia rejects the jsoup forms.
+// shortcut: also rewrites the text inside a quoted attribute value, upgrade to
+// a tokenizer if a real selector ever needs that literal.
+func rewriteIndexPseudos(query string) string {
+	return indexPseudo.ReplaceAllStringFunc(query, func(m string) string {
+		p := indexPseudo.FindStringSubmatch(m)
+		n, err := strconv.Atoi(p[2])
+		if err != nil {
+			return m
+		}
+		switch p[1] {
+		case "eq":
+			return ":nth-child(" + strconv.Itoa(n+1) + ")"
+		case "lt":
+			return ":nth-child(-n+" + strconv.Itoa(n) + ")"
+		default:
+			return ":nth-child(n+" + strconv.Itoa(n+2) + ")"
+		}
+	})
+}
+
+// nodesOf returns a stored node or node list as a list; a lone node behaves
+// as a list of one everywhere SwiftSoup's Node and Elements methods agree.
+func nodesOf(item any) (elementList, bool) {
+	switch v := item.(type) {
+	case elementList:
+		return v, true
+	case *nethtml.Node:
+		return elementList{v}, true
+	}
+	return nil, false
+}
+
+// joinNodes renders each node, with sep between results once anything has
+// accumulated (Elements.text/html/outerHtml).
+func joinNodes(nodes elementList, sep string, render func(*nethtml.Node) (string, error)) (string, error) {
+	var sb strings.Builder
+	for _, n := range nodes {
+		s, err := render(n)
+		if err != nil {
+			return "", err
+		}
+		if sb.Len() > 0 {
+			sb.WriteString(sep)
+		}
+		sb.WriteString(s)
+	}
+	return sb.String(), nil
+}
+
+// storeHTML implements html/outer_html for a node or list.
+func (h *Html) storeHTML(descriptor int32, render func(*nethtml.Node) (string, error)) int32 {
+	nodes, ok := nodesOf(h.Store.Fetch(descriptor))
+	if !ok {
+		return int32(htmlInvalidDescriptor)
+	}
+	s, err := joinNodes(nodes, "\n", render)
+	if err != nil {
+		return int32(htmlNoResult)
+	}
+	return h.Store.Store(s)
 }
 
 func (h *Html) textImpl(descriptor int32, trim bool) int32 {
 	item := h.Store.Fetch(descriptor)
 	switch v := item.(type) {
 	case elementList:
-		if len(v) == 0 {
-			return int32(htmlNoResult)
-		}
-		return h.Store.Store(nodeText(v[0], trim))
+		s, _ := joinNodes(v, " ", func(n *nethtml.Node) (string, error) { return elementText(n, trim), nil })
+		return h.Store.Store(s)
 	case *nethtml.Node:
-		if v.Type == nethtml.TextNode {
+		switch v.Type {
+		case nethtml.TextNode:
+			// TextNode.text() collapses whitespace but does not trim.
 			if trim {
-				return h.Store.Store(strings.TrimSpace(v.Data))
+				return h.Store.Store(string(appendNormalised(nil, v.Data, false)))
 			}
 			return h.Store.Store(v.Data)
+		case nethtml.ElementNode, nethtml.DocumentNode:
+			return h.Store.Store(elementText(v, trim))
 		}
-		return h.Store.Store(nodeText(v, trim))
+		return int32(htmlNoResult)
 	default:
 		return int32(htmlInvalidDescriptor)
 	}
@@ -752,30 +784,31 @@ func elementOf(store *Store, descriptor int32) (*nethtml.Node, bool) {
 // document's base URL — used heavily by sources for absolute URLs.
 const absAttrPrefix = "abs:"
 
-// resolveAbsAttr reads node's attribute. For a key prefixed with "abs:" it
-// strips the prefix, reads the underlying attribute, and resolves it against
-// the node's parsed base URL (recorded by ParseHTML bases.set) — nil/false
-// when there's no base or the value isn't a resolvable URL.
-func resolveAbsAttr(h *Html, n *nethtml.Node, key string) (string, bool) {
-	if !strings.HasPrefix(key, absAttrPrefix) {
-		return attrOf(n, key)
+// resolveAbsAttr mirrors SwiftSoup's Node.attr: the attribute value, or ""
+// when missing. An "abs:" key resolves the underlying attribute against the
+// node's base URL; without a usable base only an already-absolute value
+// survives (StringUtil.resolve).
+func resolveAbsAttr(h *Html, n *nethtml.Node, key string) string {
+	if v, ok := attrOf(n, key); ok && v != "" {
+		return v
 	}
-	realKey := key[len(absAttrPrefix):]
-	v, ok := attrOf(n, realKey)
-	if !ok || v == "" {
-		return "", false
+	if len(key) < len(absAttrPrefix) || !strings.EqualFold(key[:len(absAttrPrefix)], absAttrPrefix) {
+		return ""
 	}
-	base := h.bases.get(n)
-	if base == "" {
-		return "", false
-	}
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		return "", false
+	v, ok := attrOf(n, key[len(absAttrPrefix):])
+	if !ok {
+		return ""
 	}
 	refURL, err := url.Parse(v)
 	if err != nil {
-		return "", false
+		return ""
 	}
-	return baseURL.ResolveReference(refURL).String(), true
+	baseURL, err := url.Parse(h.bases.get(n))
+	if err != nil || baseURL.Scheme == "" {
+		if refURL.Scheme != "" {
+			return refURL.String()
+		}
+		return ""
+	}
+	return baseURL.ResolveReference(refURL).String()
 }
